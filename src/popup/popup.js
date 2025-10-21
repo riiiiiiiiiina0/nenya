@@ -513,12 +513,12 @@ async function refreshProjectList() {
 
   if (refreshProjectsButton) {
     refreshProjectsButton.disabled = true;
+    refreshProjectsButton.textContent = 'Loading...';
   }
 
-  const loader = document.createElement('div');
-  loader.className = 'text-sm text-base-content/70';
-  loader.textContent = 'Loading...';
-  projectsContainer.replaceChildren(loader);
+  // Apply loading state to projects container
+  projectsContainer.style.opacity = '0.5';
+  projectsContainer.style.pointerEvents = 'none';
 
   try {
     const response = await sendRuntimeMessage({ type: 'mirror:listProjects' });
@@ -527,8 +527,13 @@ async function refreshProjectList() {
     const message = error instanceof Error ? error.message : String(error);
     renderProjectsError(message);
   } finally {
+    // Reset loading state
+    projectsContainer.style.opacity = '';
+    projectsContainer.style.pointerEvents = '';
+    
     if (refreshProjectsButton) {
       refreshProjectsButton.disabled = false;
+      refreshProjectsButton.textContent = '🔄️';
     }
   }
 }
@@ -622,13 +627,20 @@ function renderProjectRow(project) {
   row.type = 'button';
   row.className = 'btn btn-outline btn-sm w-full justify-between gap-2';
   row.setAttribute('role', 'listitem');
-  row.textContent = title;
 
+  // Create title element with truncation
+  const titleElement = document.createElement('span');
+  titleElement.className = 'text-left truncate flex-1 min-w-0';
+  titleElement.textContent = title;
+  titleElement.title = title; // Show full title on hover
+
+  // Create count badge
   const countBadge = document.createElement('span');
-  countBadge.className = 'badge badge-neutral';
+  countBadge.className = 'badge badge-neutral flex-shrink-0';
   countBadge.textContent =
     Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
+  row.appendChild(titleElement);
   row.appendChild(countBadge);
 
   if (url) {
@@ -899,6 +911,8 @@ function handleSaveProjectResponse(response) {
 
   if (response.ok) {
     setStatus(message, 'success');
+    // Auto-refresh the projects list after successful save
+    void refreshProjectList();
     return;
   }
 
