@@ -84,6 +84,12 @@ const rootFolderNameInput = /** @type {HTMLInputElement | null} */ (
 const rootFolderSaveButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('rootFolderSaveButton')
 );
+const resetMirrorButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('resetMirrorButton')
+);
+const pullMirrorButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('pullMirrorButton')
+);
 
 const STATUS_BASE_CLASS = 'text-sm font-medium min-h-6';
 const TOAST_BACKGROUND_BY_VARIANT = {
@@ -220,6 +226,66 @@ function showToast(message, variant = 'info') {
 }
 
 /**
+ * Send a runtime message to the background script.
+ * @template T
+ * @param {any} payload
+ * @returns {Promise<T>}
+ */
+function sendRuntimeMessage(payload) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(payload, (response) => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        reject(new Error(error.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+/**
+ * Format a compact summary of mirror stats.
+ * @param {{ bookmarksCreated?: number, bookmarksUpdated?: number, bookmarksMoved?: number, bookmarksDeleted?: number, foldersCreated?: number, foldersRemoved?: number, foldersMoved?: number } | undefined} stats
+ * @returns {string}
+ */
+function formatMirrorStats(stats) {
+  if (!stats) {
+    return 'No changes detected.';
+  }
+
+  /** @type {string[]} */
+  const parts = [];
+  if (stats.bookmarksCreated) {
+    parts.push(stats.bookmarksCreated + ' bookmark(s) created');
+  }
+  if (stats.bookmarksUpdated) {
+    parts.push(stats.bookmarksUpdated + ' bookmark(s) updated');
+  }
+  if (stats.bookmarksMoved) {
+    parts.push(stats.bookmarksMoved + ' bookmark(s) moved');
+  }
+  if (stats.bookmarksDeleted) {
+    parts.push(stats.bookmarksDeleted + ' bookmark(s) removed');
+  }
+  if (stats.foldersCreated) {
+    parts.push(stats.foldersCreated + ' folder(s) added');
+  }
+  if (stats.foldersRemoved) {
+    parts.push(stats.foldersRemoved + ' folder(s) removed');
+  }
+  if (stats.foldersMoved) {
+    parts.push('Folder order adjusted');
+  }
+
+  if (parts.length === 0) {
+    return 'No changes detected.';
+  }
+
+  return parts.join(', ');
+}
+
+/**
  * Ensure root folder settings exist for the given provider.
  * @param {ProviderDefinition} provider
  * @returns {{ settings: RootFolderSettings, didMutate: boolean }}
@@ -342,12 +408,48 @@ function getBookmarkChildren(parentId) {
 }
 
 /**
+ * Search for bookmarks matching the provided query.
+ * @param {{ url?: string, title?: string, query?: string }} query
+ * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>}
+ */
+function bookmarksSearch(query) {
+  try {
+    /** @type {unknown} */
+    const maybePromise = chrome.bookmarks.search(query);
+    if (
+      maybePromise &&
+      typeof maybePromise === 'object' &&
+      'then' in maybePromise &&
+      typeof maybePromise.then === 'function'
+    ) {
+      return /** @type {Promise<chrome.bookmarks.BookmarkTreeNode[]>} */ (
+        maybePromise
+      );
+    }
+  } catch (error) {
+    // Fall back to callback pattern.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.bookmarks.search(query, (nodes) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(lastError);
+        return;
+      }
+      resolve(nodes);
+    });
+  });
+}
+
+/**
  * Move a bookmark node to a new destination.
  * @param {string} nodeId
  * @param {chrome.bookmarks.Destination} destination
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 function moveBookmark(nodeId, destination) {
+  console.log('moveBookmark:', nodeId, destination);
   try {
     /** @type {unknown} */
     const maybePromise = chrome.bookmarks.move(nodeId, destination);
@@ -427,12 +529,29 @@ async function findRootFolderId(parentId, folderName) {
 
   try {
     const children = await getBookmarkChildren(parentId);
+    console.log('children:', children);
     for (const child of children) {
-      if (Array.isArray(child.children)) {
+      if (!child.url) {
         const title = (child.title ?? '').trim();
         if (title === trimmedName) {
           return child.id;
         }
+      }
+    }
+  } catch (error) {
+    // Ignore and fall back to global search.
+  }
+
+  try {
+    const matches = await bookmarksSearch({ title: trimmedName });
+    for (const node of matches) {
+      if (Array.isArray(node.children) && node.parentId === parentId) {
+        return node.id;
+      }
+    }
+    for (const node of matches) {
+      if (Array.isArray(node.children)) {
+        return node.id;
       }
     }
   } catch (error) {
@@ -463,6 +582,7 @@ async function applyRootFolderSettingsChange(previous, next) {
     previous.parentFolderId,
     previousName,
   );
+  console.log('existingFolderId:', existingFolderId, previous);
   if (!existingFolderId) {
     return;
   }
@@ -471,7 +591,7 @@ async function applyRootFolderSettingsChange(previous, next) {
     await moveBookmark(existingFolderId, { parentId: next.parentFolderId });
   }
 
-  if (nameChanged) {
+  if (nameChanged || parentChanged) {
     await updateBookmark(existingFolderId, { title: nextName });
   }
 }
@@ -565,7 +685,7 @@ function populateRootFolderParentOptions(options, settings) {
   /** @type {BookmarkFolderOption[]} */
   const selectable = [];
   options.forEach((option) => {
-    if (option.path === rootPath) {
+    if (option.path === rootPath || option.path.startsWith(rootPath + '/')) {
       return;
     }
 
@@ -839,6 +959,82 @@ async function handleRootFolderSaveClick() {
 }
 
 /**
+ * Reset mirror state and trigger a fresh pull.
+ * @returns {Promise<void>}
+ */
+async function runMirrorAction(actionType, pendingMessage) {
+  if (!currentProvider) {
+    return;
+  }
+
+  const storedTokens = tokenCache[currentProvider.id];
+  if (!storedTokens) {
+    showToast('Connect to the provider before running sync.', 'error');
+    return;
+  }
+
+  const buttons = [resetMirrorButton, pullMirrorButton];
+  buttons.forEach((button) => {
+    if (button) {
+      button.disabled = true;
+    }
+  });
+
+  showToast(pendingMessage, 'info');
+
+  try {
+    const response = await sendRuntimeMessage({ type: actionType });
+    if (response && response.ok) {
+      const summary = formatMirrorStats(response.stats);
+      const prefix =
+        actionType === 'mirror:resetPull'
+          ? 'Mirror refreshed. '
+          : 'Mirror pulled. ';
+      showToast(prefix + summary, 'success');
+      bookmarkFolderOptions = [];
+      const tokens = tokenCache[currentProvider.id];
+      if (tokens) {
+        await updateRootFolderSection(tokens);
+      }
+    } else {
+      const message =
+        response && typeof response.error === 'string'
+          ? response.error
+          : 'Action failed. Please try again.';
+      showToast(message, 'error');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showToast(message, 'error');
+  } finally {
+    buttons.forEach((button) => {
+      if (button) {
+        button.disabled = false;
+      }
+    });
+  }
+}
+
+/**
+ * Trigger the regular pull without resetting state.
+ * @returns {Promise<void>}
+ */
+async function handlePullMirrorClick() {
+  await runMirrorAction('mirror:pull', 'Pulling latest Raindrop data...');
+}
+
+/**
+ * Reset mirror state and trigger a fresh pull.
+ * @returns {Promise<void>}
+ */
+async function handleResetMirrorClick() {
+  await runMirrorAction(
+    'mirror:resetPull',
+    'Resetting mirror and pulling fresh data...',
+  );
+}
+
+/**
  * Derive the status string for the current provider.
  * @param {StoredProviderTokens | undefined} storedTokens
  * @returns {{ message: string, statusClass: string }}
@@ -904,6 +1100,16 @@ function renderProviderState() {
   connectButton.hidden = !hasSelection;
   disconnectButton.hidden = !hasSelection || !storedTokens;
   connectButton.textContent = storedTokens ? 'Reconnect' : 'Connect';
+  if (resetMirrorButton) {
+    const shouldShow = hasSelection && Boolean(storedTokens);
+    resetMirrorButton.hidden = !shouldShow;
+    resetMirrorButton.disabled = !shouldShow;
+  }
+  if (pullMirrorButton) {
+    const shouldShow = hasSelection && Boolean(storedTokens);
+    pullMirrorButton.hidden = !shouldShow;
+    pullMirrorButton.disabled = !shouldShow;
+  }
 
   void updateRootFolderSection(storedTokens);
 }
@@ -1018,6 +1224,16 @@ async function init() {
   if (rootFolderNameInput) {
     rootFolderNameInput.addEventListener('change', () => {
       void handleRootFolderNameChange();
+    });
+  }
+  if (resetMirrorButton) {
+    resetMirrorButton.addEventListener('click', () => {
+      void handleResetMirrorClick();
+    });
+  }
+  if (pullMirrorButton) {
+    pullMirrorButton.addEventListener('click', () => {
+      void handlePullMirrorClick();
     });
   }
   if (rootFolderSaveButton) {

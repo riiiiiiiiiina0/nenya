@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
 <head>
   <meta charset="utf-8">
   <title>Nenya - Options</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <link rel="stylesheet" href="../libs/daisyui@5.css">
   <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
   <link rel="stylesheet" href="../libs/toastify.min.css">
@@ -54,17 +55,27 @@
             </button>
           </div>
         </div>
-        <div class="card-actions justify-end gap-3">
-          <button id="connectButton" class="btn btn-primary" type="button" hidden>
-            Connect
-          </button>
-          <button id="disconnectButton" class="btn btn-outline" type="button" hidden>
-            Logout
-          </button>
+          <div class="card-actions justify-between items-center gap-3 flex-wrap">
+            <div class="flex gap-3">
+              <button id="connectButton" class="btn btn-primary" type="button" hidden>
+                Connect
+              </button>
+              <button id="disconnectButton" class="btn btn-outline" type="button" hidden>
+                Logout
+              </button>
+            </div>
+            <div class="flex gap-3">
+              <button id="pullMirrorButton" class="btn btn-accent" type="button" hidden>
+                Pull now
+              </button>
+              <button id="resetMirrorButton" class="btn btn-secondary" type="button" hidden>
+                Reset &amp; Re-pull
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
   <script src="./options.js" type="module"></script>
 </body>
 
