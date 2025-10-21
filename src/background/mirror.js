@@ -51,6 +51,19 @@
  */
 
 /**
+ * @typedef {Object} NotificationBookmarkSettings
+ * @property {boolean} enabled
+ * @property {boolean} pullFinished
+ * @property {boolean} unsortedSaved
+ */
+
+/**
+ * @typedef {Object} NotificationPreferences
+ * @property {boolean} enabled
+ * @property {NotificationBookmarkSettings} bookmark
+ */
+
+/**
  * @typedef {Object} SaveUnsortedEntry
  * @property {string} url
  * @property {string} [title]
@@ -97,6 +110,7 @@ const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
 const RAINDROP_UNSORTED_URL = 'https://app.raindrop.io/my/-1';
 const BOOKMARK_MANAGER_URL_BASE = 'chrome://bookmarks/?id=';
 const NOTIFICATION_ICON_PATH = 'assets/icons/icon-128x128.png';
+const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const FETCH_PAGE_SIZE = 100;
 const DEFAULT_BADGE_ANIMATION_DELAY = 300;
 
@@ -107,6 +121,11 @@ let badgeAnimationSequence = 0;
 let lastStartedBadgeToken = 0;
 /** @type {Map<string, string>} */
 const notificationLinks = new Map();
+/** @type {NotificationPreferences} */
+let notificationPreferencesCache = createDefaultNotificationPreferences();
+let notificationPreferencesLoaded = false;
+/** @type {Promise<NotificationPreferences> | null} */
+let notificationPreferencesPromise = null;
 
 if (chrome && chrome.notifications) {
   chrome.notifications.onClicked.addListener((notificationId) => {
@@ -267,6 +286,134 @@ function concludeActionBadge(handle, finalEmoji) {
     }
     setActionBadgeText('');
   }, 2000);
+}
+
+/**
+ * Create the default notification preferences object.
+ * @returns {NotificationPreferences}
+ */
+function createDefaultNotificationPreferences() {
+  return {
+    enabled: true,
+    bookmark: {
+      enabled: true,
+      pullFinished: true,
+      unsortedSaved: true
+    }
+  };
+}
+
+/**
+ * Clone notification preferences to avoid shared references.
+ * @param {NotificationPreferences} value
+ * @returns {NotificationPreferences}
+ */
+function cloneNotificationPreferences(value) {
+  return {
+    enabled: Boolean(value.enabled),
+    bookmark: {
+      enabled: Boolean(value.bookmark.enabled),
+      pullFinished: Boolean(value.bookmark.pullFinished),
+      unsortedSaved: Boolean(value.bookmark.unsortedSaved)
+    }
+  };
+}
+
+/**
+ * Normalize stored notification preferences.
+ * @param {unknown} value
+ * @returns {NotificationPreferences}
+ */
+function normalizeNotificationPreferences(value) {
+  const fallback = createDefaultNotificationPreferences();
+  if (!value || typeof value !== 'object') {
+    return fallback;
+  }
+
+  const raw = /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings> }} */ (value);
+  const bookmark = raw.bookmark ?? {};
+
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
+    bookmark: {
+      enabled: typeof bookmark.enabled === 'boolean' ? bookmark.enabled : fallback.bookmark.enabled,
+      pullFinished: typeof bookmark.pullFinished === 'boolean'
+        ? bookmark.pullFinished
+        : fallback.bookmark.pullFinished,
+      unsortedSaved: typeof bookmark.unsortedSaved === 'boolean'
+        ? bookmark.unsortedSaved
+        : fallback.bookmark.unsortedSaved
+    }
+  };
+}
+
+/**
+ * Load notification preferences from storage.
+ * @returns {Promise<NotificationPreferences>}
+ */
+async function loadNotificationPreferences() {
+  if (!chrome?.storage?.sync) {
+    const defaults = createDefaultNotificationPreferences();
+    updateNotificationPreferencesCache(defaults);
+    return defaults;
+  }
+
+  try {
+    const result = await chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY);
+    const stored = result?.[NOTIFICATION_PREFERENCES_KEY];
+    const normalized = normalizeNotificationPreferences(stored);
+    updateNotificationPreferencesCache(normalized);
+  } catch (error) {
+    console.warn('[notifications] Failed to load preferences; using defaults.', error);
+    const defaults = createDefaultNotificationPreferences();
+    updateNotificationPreferencesCache(defaults);
+  }
+
+  return notificationPreferencesCache;
+}
+
+/**
+ * Retrieve cached notification preferences, loading them if needed.
+ * @returns {Promise<NotificationPreferences>}
+ */
+async function getNotificationPreferences() {
+  if (notificationPreferencesLoaded) {
+    return notificationPreferencesCache;
+  }
+
+  if (!notificationPreferencesPromise) {
+    notificationPreferencesPromise = loadNotificationPreferences().finally(() => {
+      notificationPreferencesPromise = null;
+    });
+  }
+
+  return notificationPreferencesPromise;
+}
+
+/**
+ * Respond to updates from chrome.storage for notification preferences.
+ * @param {NotificationPreferences} value
+ * @returns {void}
+ */
+function updateNotificationPreferencesCache(value) {
+  notificationPreferencesCache = cloneNotificationPreferences(value);
+  notificationPreferencesLoaded = true;
+}
+
+if (chrome?.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'sync') {
+      return;
+    }
+
+    const detail = changes[NOTIFICATION_PREFERENCES_KEY];
+    if (!detail) {
+      return;
+    }
+
+    const next = normalizeNotificationPreferences(detail.newValue);
+    updateNotificationPreferencesCache(next);
+  });
 }
 
 /**
@@ -442,6 +589,11 @@ async function notifyUnsortedSaveOutcome(summary) {
     return;
   }
 
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.bookmark.enabled || !preferences.bookmark.unsortedSaved) {
+    return;
+  }
+
   if (summary.ok) {
     const createdCount = Number(summary.created || 0);
     const updatedCount = Number(summary.updated || 0);
@@ -488,6 +640,11 @@ async function notifyMirrorPullSuccess(stats, rootFolderId, trigger) {
     return;
   }
 
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.bookmark.enabled || !preferences.bookmark.pullFinished) {
+    return;
+  }
+
   const title = 'Raindrop Sync Complete';
   const message = summary.total === 1
     ? 'Pulled 1 change from Raindrop.'
@@ -508,6 +665,11 @@ async function notifyMirrorPullSuccess(stats, rootFolderId, trigger) {
  * @returns {Promise<void>}
  */
 async function notifyMirrorPullFailure(message) {
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.bookmark.enabled || !preferences.bookmark.pullFinished) {
+    return;
+  }
+
   await pushNotification(
     'mirror-failure',
     'Raindrop Sync Failed',

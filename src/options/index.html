@@ -18,66 +18,113 @@
     <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
   </div>
   <main class="min-h-screen flex items-center justify-center p-6">
-    <section class="card w-full max-w-xl bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
-      <div class="card-body gap-6">
-        <header class="space-y-2">
-          <h1 id="mirror-heading" class="card-title text-3xl">🔖 Mirror Cloud Bookmarks</h1>
-          <p class="text-base-content/70">Select a cloud bookmarks provider to connect your account.</p>
-        </header>
-        <div class="space-y-6">
-          <label class="form-control w-full">
-            <span class="label">
-              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Provider</span>
-            </span>
-            <select id="providerSelect" class="select select-bordered w-full"></select>
-          </label>
-          <p id="providerDescription" class="text-sm text-base-content/70 min-h-6"></p>
-          <div id="statusMessage" class="text-sm font-medium min-h-6 text-base-content/70" role="status"
-            aria-live="polite"></div>
+    <div class="w-full max-w-4xl flex flex-col items-center gap-6">
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
+        <div class="card-body gap-6">
+          <header class="space-y-2">
+            <h1 id="mirror-heading" class="card-title text-3xl">🔖 Mirror Cloud Bookmarks</h1>
+            <p class="text-base-content/70">Select a cloud bookmarks provider to connect your account.</p>
+          </header>
+          <div class="space-y-6">
+            <label class="form-control w-full">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Provider</span>
+              </span>
+              <select id="providerSelect" class="select select-bordered w-full"></select>
+            </label>
+            <p id="providerDescription" class="text-sm text-base-content/70 min-h-6"></p>
+            <div id="statusMessage" class="text-sm font-medium min-h-6 text-base-content/70" role="status"
+              aria-live="polite"></div>
+          </div>
+          <div id="rootFolderSection" class="space-y-4 border-t border-base-200 pt-6" hidden>
+            <div class="space-y-1">
+              <h2 class="text-xl font-semibold">Root bookmark folder</h2>
+              <p class="text-sm text-base-content/70">Choose where the mirror folder lives and what it is called.</p>
+            </div>
+            <label class="form-control w-full">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Parent folder</span>
+              </span>
+              <select id="rootFolderParentSelect" class="select select-bordered w-full"></select>
+            </label>
+            <label class="form-control w-full">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Folder name</span>
+              </span>
+              <input id="rootFolderNameInput" class="input input-bordered w-full" type="text" autocomplete="off"
+                required>
+            </label>
+            <div class="flex justify-end mt-4">
+              <button id="rootFolderSaveButton" class="btn btn-secondary" type="button" disabled>
+                Save changes
+              </button>
+            </div>
+          </div>
+          <div class="card-actions justify-between items-center gap-3 flex-wrap">
+            <div class="flex gap-3">
+              <button id="connectButton" class="btn btn-primary" type="button" hidden>
+                Connect
+              </button>
+              <button id="disconnectButton" class="btn btn-outline" type="button" hidden>
+                Logout
+              </button>
+            </div>
+            <div class="flex gap-3">
+              <button id="pullMirrorButton" class="btn btn-accent" type="button" hidden>
+                Pull now
+              </button>
+              <button id="resetMirrorButton" class="btn btn-secondary" type="button" hidden>
+                Reset &amp; Re-pull
+              </button>
+            </div>
+          </div>
         </div>
-        <div id="rootFolderSection" class="space-y-4 border-t border-base-200 pt-6" hidden>
+      </section>
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="notifications-heading">
+        <div class="card-body gap-6">
           <div class="space-y-1">
-            <h2 class="text-xl font-semibold">Root bookmark folder</h2>
-            <p class="text-sm text-base-content/70">Choose where the mirror folder lives and what it is called.</p>
+            <h2 id="notifications-heading" class="card-title text-3xl">🔔 Notifications</h2>
+            <p class="text-base-content/70">Decide which alerts the extension should show.</p>
           </div>
-          <label class="form-control w-full">
-            <span class="label">
-              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Parent folder</span>
-            </span>
-            <select id="rootFolderParentSelect" class="select select-bordered w-full"></select>
-          </label>
-          <label class="form-control w-full">
-            <span class="label">
-              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Folder name</span>
-            </span>
-            <input id="rootFolderNameInput" class="input input-bordered w-full" type="text" autocomplete="off" required>
-          </label>
-          <div class="flex justify-end mt-4">
-            <button id="rootFolderSaveButton" class="btn btn-secondary" type="button" disabled>
-              Save changes
-            </button>
+          <div class="space-y-4">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4"
+              aria-labelledby="notifications-global-heading">
+              <h3 id="notifications-global-heading" class="text-lg font-semibold">Global</h3>
+              <label
+                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+                <span class="text-base-content font-medium">Enable all notifications</span>
+                <input id="notificationGlobalToggle" class="toggle toggle-primary ml-auto" type="checkbox">
+              </label>
+            </section>
+            <section class="rounded-lg border border-base-300 p-4 space-y-4"
+              aria-labelledby="notifications-bookmark-heading">
+              <div class="space-y-1">
+                <h3 id="notifications-bookmark-heading" class="text-lg font-semibold">Bookmark management</h3>
+                <p class="text-sm text-base-content/70">Control sync and save notifications.</p>
+              </div>
+              <label
+                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+                <span class="text-base-content font-medium">Enable bookmark notifications</span>
+                <input id="notificationBookmarkToggle" class="toggle toggle-primary ml-auto" type="checkbox">
+              </label>
+              <div id="notificationBookmarkGroup" class="space-y-3">
+                <label
+                  class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+                  <span class="text-base-content">Pull finished</span>
+                  <input id="notificationBookmarkPullToggle" class="toggle toggle-secondary ml-auto" type="checkbox">
+                </label>
+                <label
+                  class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+                  <span class="text-base-content">Saved to Unsorted</span>
+                  <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-secondary ml-auto"
+                    type="checkbox">
+                </label>
+              </div>
+            </section>
           </div>
         </div>
-        <div class="card-actions justify-between items-center gap-3 flex-wrap">
-          <div class="flex gap-3">
-            <button id="connectButton" class="btn btn-primary" type="button" hidden>
-              Connect
-            </button>
-            <button id="disconnectButton" class="btn btn-outline" type="button" hidden>
-              Logout
-            </button>
-          </div>
-          <div class="flex gap-3">
-            <button id="pullMirrorButton" class="btn btn-accent" type="button" hidden>
-              Pull now
-            </button>
-            <button id="resetMirrorButton" class="btn btn-secondary" type="button" hidden>
-              Reset &amp; Re-pull
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>
   <script src="./options.js" type="module"></script>
 </body>
