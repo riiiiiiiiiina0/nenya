@@ -773,7 +773,7 @@ export async function runMirrorPull(trigger) {
   }
 
   syncInProgress = true;
-  const badgeAnimation = animateActionBadge(['⬇️', '🔽']);
+  const badgeAnimation = animateActionBadge(['🔽', '⏬']);
   let finalBadge = '❌';
   try {
     const pullResult = await performMirrorPull(trigger);
@@ -804,7 +804,7 @@ export async function resetAndPull() {
   }
 
   syncInProgress = true;
-  const badgeAnimation = animateActionBadge(['⬇️', '🔽']);
+  const badgeAnimation = animateActionBadge(['🔽', '⏬']);
   let finalBadge = '❌';
   try {
     const settingsData = await loadRootFolderSettings();
