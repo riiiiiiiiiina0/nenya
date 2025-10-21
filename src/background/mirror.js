@@ -37,7 +37,7 @@
  * @property {string} title
  * @property {string} url
  * @property {string[]} pathSegments
-*/
+ */
 
 /**
  * @typedef {Object} MirrorStats
@@ -201,11 +201,17 @@ if (chrome && chrome.notifications) {
       const maybePromise = chrome.tabs.create({ url: targetUrl });
       if (isPromiseLike(maybePromise)) {
         void maybePromise.catch((error) => {
-          console.warn('[notifications] Failed to open tab for notification click:', error);
+          console.warn(
+            '[notifications] Failed to open tab for notification click:',
+            error,
+          );
         });
       }
     } catch (error) {
-      console.warn('[notifications] Failed to open tab for notification click:', error);
+      console.warn(
+        '[notifications] Failed to open tab for notification click:',
+        error,
+      );
     }
   });
 
@@ -244,7 +250,10 @@ function setActionBadgeText(text) {
  * @param {number} [delayMs=DEFAULT_BADGE_ANIMATION_DELAY]
  * @returns {BadgeAnimationHandle}
  */
-export function animateActionBadge(emojis, delayMs = DEFAULT_BADGE_ANIMATION_DELAY) {
+export function animateActionBadge(
+  emojis,
+  delayMs = DEFAULT_BADGE_ANIMATION_DELAY,
+) {
   badgeAnimationSequence += 1;
   const token = badgeAnimationSequence;
 
@@ -266,33 +275,39 @@ export function animateActionBadge(emojis, delayMs = DEFAULT_BADGE_ANIMATION_DEL
         clearInterval(intervalId);
         intervalId = null;
       }
-      if (currentBadgeAnimationHandle && currentBadgeAnimationHandle.token === token) {
+      if (
+        currentBadgeAnimationHandle &&
+        currentBadgeAnimationHandle.token === token
+      ) {
         currentBadgeAnimationHandle = null;
       }
       setActionBadgeText('');
-    }
+    },
   };
 
   if (!chrome?.action || !Array.isArray(emojis)) {
     return handle;
   }
 
-  const frames = emojis.map((emoji) => {
-    if (typeof emoji !== 'string') {
-      return '';
-    }
-    const trimmed = emoji.trim();
-    return trimmed;
-  }).filter((emoji) => emoji.length > 0);
+  const frames = emojis
+    .map((emoji) => {
+      if (typeof emoji !== 'string') {
+        return '';
+      }
+      const trimmed = emoji.trim();
+      return trimmed;
+    })
+    .filter((emoji) => emoji.length > 0);
 
   if (frames.length === 0) {
     return handle;
   }
 
   const computedDelay = Number(delayMs);
-  const frameDelay = Number.isFinite(computedDelay) && computedDelay > 0
-    ? computedDelay
-    : DEFAULT_BADGE_ANIMATION_DELAY;
+  const frameDelay =
+    Number.isFinite(computedDelay) && computedDelay > 0
+      ? computedDelay
+      : DEFAULT_BADGE_ANIMATION_DELAY;
 
   let frameIndex = 0;
 
@@ -325,7 +340,7 @@ function concludeActionBadge(handle, finalEmoji) {
 
   const isCurrent = Boolean(
     currentBadgeAnimationHandle &&
-    currentBadgeAnimationHandle.token === handle.token
+      currentBadgeAnimationHandle.token === handle.token,
   );
   const isLatestStart = handle.token === lastStartedBadgeToken;
   if (isCurrent) {
@@ -355,8 +370,8 @@ function createDefaultNotificationPreferences() {
     bookmark: {
       enabled: true,
       pullFinished: true,
-      unsortedSaved: true
-    }
+      unsortedSaved: true,
+    },
   };
 }
 
@@ -371,8 +386,8 @@ function cloneNotificationPreferences(value) {
     bookmark: {
       enabled: Boolean(value.bookmark.enabled),
       pullFinished: Boolean(value.bookmark.pullFinished),
-      unsortedSaved: Boolean(value.bookmark.unsortedSaved)
-    }
+      unsortedSaved: Boolean(value.bookmark.unsortedSaved),
+    },
   };
 }
 
@@ -387,20 +402,28 @@ function normalizeNotificationPreferences(value) {
     return fallback;
   }
 
-  const raw = /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings> }} */ (value);
+  const raw =
+    /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings> }} */ (
+      value
+    );
   const bookmark = raw.bookmark ?? {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
     bookmark: {
-      enabled: typeof bookmark.enabled === 'boolean' ? bookmark.enabled : fallback.bookmark.enabled,
-      pullFinished: typeof bookmark.pullFinished === 'boolean'
-        ? bookmark.pullFinished
-        : fallback.bookmark.pullFinished,
-      unsortedSaved: typeof bookmark.unsortedSaved === 'boolean'
-        ? bookmark.unsortedSaved
-        : fallback.bookmark.unsortedSaved
-    }
+      enabled:
+        typeof bookmark.enabled === 'boolean'
+          ? bookmark.enabled
+          : fallback.bookmark.enabled,
+      pullFinished:
+        typeof bookmark.pullFinished === 'boolean'
+          ? bookmark.pullFinished
+          : fallback.bookmark.pullFinished,
+      unsortedSaved:
+        typeof bookmark.unsortedSaved === 'boolean'
+          ? bookmark.unsortedSaved
+          : fallback.bookmark.unsortedSaved,
+    },
   };
 }
 
@@ -421,7 +444,10 @@ async function loadNotificationPreferences() {
     const normalized = normalizeNotificationPreferences(stored);
     updateNotificationPreferencesCache(normalized);
   } catch (error) {
-    console.warn('[notifications] Failed to load preferences; using defaults.', error);
+    console.warn(
+      '[notifications] Failed to load preferences; using defaults.',
+      error,
+    );
     const defaults = createDefaultNotificationPreferences();
     updateNotificationPreferencesCache(defaults);
   }
@@ -439,9 +465,11 @@ async function getNotificationPreferences() {
   }
 
   if (!notificationPreferencesPromise) {
-    notificationPreferencesPromise = loadNotificationPreferences().finally(() => {
-      notificationPreferencesPromise = null;
-    });
+    notificationPreferencesPromise = loadNotificationPreferences().finally(
+      () => {
+        notificationPreferencesPromise = null;
+      },
+    );
   }
 
   return notificationPreferencesPromise;
@@ -479,9 +507,10 @@ if (chrome?.storage?.onChanged) {
  * @returns {string}
  */
 function createNotificationId(prefix) {
-  const base = typeof prefix === 'string' && prefix.trim().length > 0
-    ? prefix.trim()
-    : 'nenya';
+  const base =
+    typeof prefix === 'string' && prefix.trim().length > 0
+      ? prefix.trim()
+      : 'nenya';
   const random = Math.random().toString(36).slice(2, 10);
   return base + '-' + Date.now().toString(36) + '-' + random;
 }
@@ -491,7 +520,11 @@ function createNotificationId(prefix) {
  * @returns {string}
  */
 function getNotificationIconUrl() {
-  if (!chrome || !chrome.runtime || typeof chrome.runtime.getURL !== 'function') {
+  if (
+    !chrome ||
+    !chrome.runtime ||
+    typeof chrome.runtime.getURL !== 'function'
+  ) {
     return NOTIFICATION_ICON_PATH;
   }
 
@@ -512,30 +545,38 @@ function getNotificationIconUrl() {
  * @param {string} [contextMessage]
  * @returns {Promise<void>}
  */
-async function pushNotification(prefix, title, message, targetUrl, contextMessage) {
+async function pushNotification(
+  prefix,
+  title,
+  message,
+  targetUrl,
+  contextMessage,
+) {
   if (!chrome || !chrome.notifications) {
     return;
   }
 
-  const safeTitle = typeof title === 'string' && title.trim().length > 0
-    ? title.trim()
-    : 'Nenya';
-  const safeMessage = typeof message === 'string' && message.trim().length > 0
-    ? message.trim()
-    : '';
+  const safeTitle =
+    typeof title === 'string' && title.trim().length > 0
+      ? title.trim()
+      : 'Nenya';
+  const safeMessage =
+    typeof message === 'string' && message.trim().length > 0
+      ? message.trim()
+      : '';
 
   if (safeMessage.length === 0) {
     return;
   }
 
   const notificationId = createNotificationId(prefix);
-  /** @type {chrome.notifications.NotificationOptions} */
+  /** @type {chrome.notifications.NotificationCreateOptions} */
   const options = {
     type: 'basic',
     iconUrl: getNotificationIconUrl(),
     title: safeTitle,
     message: safeMessage,
-    priority: 0
+    priority: 0,
   };
 
   if (typeof contextMessage === 'string' && contextMessage.trim().length > 0) {
@@ -549,7 +590,10 @@ async function pushNotification(prefix, title, message, targetUrl, contextMessag
       chrome.notifications.create(notificationId, options, () => {
         const lastError = chrome.runtime.lastError;
         if (lastError) {
-          console.warn('[notifications] Failed to create notification:', lastError.message);
+          console.warn(
+            '[notifications] Failed to create notification:',
+            lastError.message,
+          );
           resolve(false);
           return;
         }
@@ -607,7 +651,7 @@ const MIRROR_STAT_LABELS = {
   bookmarksCreated: ['bookmark created', 'bookmarks created'],
   bookmarksUpdated: ['bookmark updated', 'bookmarks updated'],
   bookmarksMoved: ['bookmark moved', 'bookmarks moved'],
-  bookmarksDeleted: ['bookmark deleted', 'bookmarks deleted']
+  bookmarksDeleted: ['bookmark deleted', 'bookmarks deleted'],
 };
 
 /**
@@ -632,7 +676,7 @@ function summarizeMirrorStats(stats) {
 
   return {
     total,
-    parts
+    parts,
   };
 }
 
@@ -647,7 +691,11 @@ async function notifyUnsortedSaveOutcome(summary) {
   }
 
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.bookmark.enabled || !preferences.bookmark.unsortedSaved) {
+  if (
+    !preferences.enabled ||
+    !preferences.bookmark.enabled ||
+    !preferences.bookmark.unsortedSaved
+  ) {
     return;
   }
 
@@ -656,7 +704,12 @@ async function notifyUnsortedSaveOutcome(summary) {
     const updatedCount = Number(summary.updated || 0);
     const savedCount = createdCount + updatedCount;
     const title = 'Saved to Unsorted';
-    const message = 'Saved ' + savedCount + ' ' + (savedCount === 1 ? 'URL' : 'URLs') + ' to Raindrop Unsorted.';
+    const message =
+      'Saved ' +
+      savedCount +
+      ' ' +
+      (savedCount === 1 ? 'URL' : 'URLs') +
+      ' to Raindrop Unsorted.';
     const contextParts = [];
 
     if (savedCount === 0) {
@@ -667,16 +720,26 @@ async function notifyUnsortedSaveOutcome(summary) {
       contextParts.push(formatCountLabel(summary.skipped, 'duplicate'));
     }
 
-    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
-    await pushNotification('unsorted-success', title, message, RAINDROP_UNSORTED_URL, contextMessage);
+    const contextMessage =
+      contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    await pushNotification(
+      'unsorted-success',
+      title,
+      message,
+      RAINDROP_UNSORTED_URL,
+      contextMessage,
+    );
     return;
   }
 
-  const reason = summary.error || (Array.isArray(summary.errors) ? summary.errors[0] : '') || 'Unknown error.';
+  const reason =
+    summary.error ||
+    (Array.isArray(summary.errors) ? summary.errors[0] : '') ||
+    'Unknown error.';
   await pushNotification(
     'unsorted-failure',
     'Failed to Save URLs',
-    sanitizeNotificationMessage(reason)
+    sanitizeNotificationMessage(reason),
   );
 }
 
@@ -698,22 +761,35 @@ async function notifyMirrorPullSuccess(stats, rootFolderId, trigger) {
   }
 
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.bookmark.enabled || !preferences.bookmark.pullFinished) {
+  if (
+    !preferences.enabled ||
+    !preferences.bookmark.enabled ||
+    !preferences.bookmark.pullFinished
+  ) {
     return;
   }
 
   const title = 'Raindrop Sync Complete';
-  const message = summary.total === 1
-    ? 'Pulled 1 change from Raindrop.'
-    : 'Pulled ' + summary.total + ' changes from Raindrop.';
-  const contextMessage = summary.parts.length > 0
-    ? summary.parts.join(', ')
-    : 'No structural changes detected.';
-  const targetUrl = typeof rootFolderId === 'string' && rootFolderId
-    ? BOOKMARK_MANAGER_URL_BASE + encodeURIComponent(rootFolderId)
-    : undefined;
+  const message =
+    summary.total === 1
+      ? 'Pulled 1 change from Raindrop.'
+      : 'Pulled ' + summary.total + ' changes from Raindrop.';
+  const contextMessage =
+    summary.parts.length > 0
+      ? summary.parts.join(', ')
+      : 'No structural changes detected.';
+  const targetUrl =
+    typeof rootFolderId === 'string' && rootFolderId
+      ? BOOKMARK_MANAGER_URL_BASE + encodeURIComponent(rootFolderId)
+      : undefined;
 
-  await pushNotification('mirror-success', title, message, targetUrl, contextMessage);
+  await pushNotification(
+    'mirror-success',
+    title,
+    message,
+    targetUrl,
+    contextMessage,
+  );
 }
 
 /**
@@ -723,14 +799,18 @@ async function notifyMirrorPullSuccess(stats, rootFolderId, trigger) {
  */
 async function notifyMirrorPullFailure(message) {
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.bookmark.enabled || !preferences.bookmark.pullFinished) {
+  if (
+    !preferences.enabled ||
+    !preferences.bookmark.enabled ||
+    !preferences.bookmark.pullFinished
+  ) {
     return;
   }
 
   await pushNotification(
     'mirror-failure',
     'Raindrop Sync Failed',
-    sanitizeNotificationMessage(message)
+    sanitizeNotificationMessage(message),
   );
 }
 
@@ -768,7 +848,7 @@ export async function runMirrorPull(trigger) {
   if (syncInProgress) {
     return {
       ok: false,
-      error: 'Sync already in progress.'
+      error: 'Sync already in progress.',
     };
   }
 
@@ -778,7 +858,11 @@ export async function runMirrorPull(trigger) {
   try {
     const pullResult = await performMirrorPull(trigger);
     finalBadge = '✅';
-    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId, trigger);
+    void notifyMirrorPullSuccess(
+      pullResult.stats,
+      pullResult.rootFolderId,
+      trigger,
+    );
     return { ok: true, stats: pullResult.stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -799,7 +883,7 @@ export async function resetAndPull() {
   if (syncInProgress) {
     return {
       ok: false,
-      error: 'Sync already in progress.'
+      error: 'Sync already in progress.',
     };
   }
 
@@ -811,7 +895,11 @@ export async function resetAndPull() {
     await resetMirrorState(settingsData);
     const pullResult = await performMirrorPull('reset');
     finalBadge = '✅';
-    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId, 'reset');
+    void notifyMirrorPullSuccess(
+      pullResult.stats,
+      pullResult.rootFolderId,
+      'reset',
+    );
     return { ok: true, stats: pullResult.stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -839,7 +927,7 @@ export async function saveUrlsToUnsorted(entries) {
     skipped: 0,
     failed: 0,
     total: 0,
-    errors: []
+    errors: [],
   };
   const finalize = () => {
     void notifyUnsortedSaveOutcome(summary);
@@ -877,7 +965,7 @@ export async function saveUrlsToUnsorted(entries) {
       seenUrls.add(normalizedUrl);
       sanitized.push({
         url: normalizedUrl,
-        title: typeof entry?.title === 'string' ? entry.title.trim() : ''
+        title: typeof entry?.title === 'string' ? entry.title.trim() : '',
       });
     }
 
@@ -897,7 +985,8 @@ export async function saveUrlsToUnsorted(entries) {
     }
 
     if (!tokens) {
-      summary.error = 'No Raindrop connection found. Connect in Options to enable saving.';
+      summary.error =
+        'No Raindrop connection found. Connect in Options to enable saving.';
       return finalize();
     }
 
@@ -931,23 +1020,32 @@ export async function saveUrlsToUnsorted(entries) {
         const response = await raindropRequest('/raindrop', tokens, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             link: entry.url,
             collectionId: -1,
-            pleaseParse: {}
-          })
+            pleaseParse: {},
+          }),
         });
 
-        const itemTitle = typeof response?.item?.title === 'string' ? response.item.title : '';
-        const bookmarkTitle = normalizeBookmarkTitle(itemTitle || entry.title, entry.url);
+        const itemTitle =
+          typeof response?.item?.title === 'string' ? response.item.title : '';
+        const bookmarkTitle = normalizeBookmarkTitle(
+          itemTitle || entry.title,
+          entry.url,
+        );
 
         const existing = bookmarkByUrl.get(entry.url);
         if (existing) {
-          const currentTitle = normalizeBookmarkTitle(existing.title, entry.url);
+          const currentTitle = normalizeBookmarkTitle(
+            existing.title,
+            entry.url,
+          );
           if (currentTitle !== bookmarkTitle) {
-            const updatedNode = await bookmarksUpdate(existing.id, { title: bookmarkTitle });
+            const updatedNode = await bookmarksUpdate(existing.id, {
+              title: bookmarkTitle,
+            });
             bookmarkByUrl.set(entry.url, updatedNode);
             summary.updated += 1;
           } else {
@@ -959,13 +1057,17 @@ export async function saveUrlsToUnsorted(entries) {
         const createdNode = await bookmarksCreate({
           parentId: folders.unsortedId,
           title: bookmarkTitle,
-          url: entry.url
+          url: entry.url,
         });
         bookmarkByUrl.set(entry.url, createdNode);
         summary.created += 1;
       } catch (error) {
         summary.failed += 1;
-        summary.errors.push(entry.url + ': ' + (error instanceof Error ? error.message : String(error)));
+        summary.errors.push(
+          entry.url +
+            ': ' +
+            (error instanceof Error ? error.message : String(error)),
+        );
       }
     }
 
@@ -1003,7 +1105,7 @@ export async function saveTabsAsProject(projectName, rawTabs) {
     created: 0,
     skipped: 0,
     failed: 0,
-    errors: []
+    errors: [],
   };
 
   const finalize = () => summary;
@@ -1041,7 +1143,8 @@ export async function saveTabsAsProject(projectName, rawTabs) {
     }
 
     if (!tokens) {
-      summary.error = 'No Raindrop connection found. Connect in Options to enable saving.';
+      summary.error =
+        'No Raindrop connection found. Connect in Options to enable saving.';
       return finalize();
     }
 
@@ -1062,17 +1165,26 @@ export async function saveTabsAsProject(projectName, rawTabs) {
     const collection = await createProjectCollection(tokens, normalizedName);
     summary.projectName = collection.title;
 
-    await assignCollectionToGroup(tokens, ensureResult.groups, ensureResult.index, collection.id);
+    await assignCollectionToGroup(
+      tokens,
+      ensureResult.groups,
+      ensureResult.index,
+      collection.id,
+    );
 
     for (const tab of resolved.tabs) {
-      const itemPayload = buildProjectItemPayload(tab, groupContext, collection.id);
+      const itemPayload = buildProjectItemPayload(
+        tab,
+        groupContext,
+        collection.id,
+      );
       try {
         await raindropRequest('/raindrop', tokens, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
           },
-          body: JSON.stringify(itemPayload)
+          body: JSON.stringify(itemPayload),
         });
         summary.created += 1;
       } catch (error) {
@@ -1117,23 +1229,30 @@ export async function listSavedProjects() {
   if (!tokens) {
     return {
       ok: false,
-      error: 'No Raindrop connection found. Connect in Options to view projects.'
+      error:
+        'No Raindrop connection found. Connect in Options to view projects.',
     };
   }
 
   try {
     const userData = await raindropRequest('/user', tokens);
-    const groups = Array.isArray(userData?.user?.groups) ? userData.user.groups : [];
+    const groups = Array.isArray(userData?.user?.groups)
+      ? userData.user.groups
+      : [];
     const savedGroup = groups.find((group) => {
       const title = typeof group?.title === 'string' ? group.title : '';
-      return title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase();
+      return (
+        title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase()
+      );
     });
 
     if (!savedGroup) {
       return { ok: true, projects: [] };
     }
 
-    const rawCollectionIds = Array.isArray(savedGroup?.collections) ? savedGroup.collections : [];
+    const rawCollectionIds = Array.isArray(savedGroup?.collections)
+      ? savedGroup.collections
+      : [];
     /** @type {number[]} */
     const collectionIds = [];
     const seen = new Set();
@@ -1152,7 +1271,7 @@ export async function listSavedProjects() {
 
     const [rootResponse, childResponse] = await Promise.all([
       raindropRequest('/collections', tokens),
-      raindropRequest('/collections/childrens', tokens)
+      raindropRequest('/collections/childrens', tokens),
     ]);
 
     /** @type {Map<number, any>} */
@@ -1170,23 +1289,29 @@ export async function listSavedProjects() {
       collectionMap.set(id, collection);
     };
 
-    const rootItems = Array.isArray(rootResponse?.items) ? rootResponse.items : [];
+    const rootItems = Array.isArray(rootResponse?.items)
+      ? rootResponse.items
+      : [];
     rootItems.forEach(registerCollection);
-    const childItems = Array.isArray(childResponse?.items) ? childResponse.items : [];
+    const childItems = Array.isArray(childResponse?.items)
+      ? childResponse.items
+      : [];
     childItems.forEach(registerCollection);
 
     const missingIds = collectionIds.filter((id) => !collectionMap.has(id));
     if (missingIds.length > 0) {
-      await Promise.all(missingIds.map(async (id) => {
-        try {
-          const single = await raindropRequest('/collection/' + id, tokens);
-          if (single && typeof single === 'object' && single.item) {
-            registerCollection(single.item);
+      await Promise.all(
+        missingIds.map(async (id) => {
+          try {
+            const single = await raindropRequest('/collection/' + id, tokens);
+            if (single && typeof single === 'object' && single.item) {
+              registerCollection(single.item);
+            }
+          } catch (error) {
+            console.warn('[mirror] Failed to load collection', id, error);
           }
-        } catch (error) {
-          console.warn('[mirror] Failed to load collection', id, error);
-        }
-      }));
+        }),
+      );
     }
 
     /** @type {SavedProjectDescriptor[]} */
@@ -1198,12 +1323,13 @@ export async function listSavedProjects() {
       }
       const title = normalizeFolderTitle(collection?.title, 'Untitled project');
       const countValue = Number(collection?.count);
-      const itemCount = Number.isFinite(countValue) && countValue >= 0 ? countValue : 0;
+      const itemCount =
+        Number.isFinite(countValue) && countValue >= 0 ? countValue : 0;
       projects.push({
         id,
         title,
         itemCount,
-        url: buildRaindropCollectionUrl(id)
+        url: buildRaindropCollectionUrl(id),
       });
     });
 
@@ -1237,7 +1363,11 @@ async function filterExistingRaindropEntries(tokens, entries) {
       filtered.push(entry);
     } catch (error) {
       failed += 1;
-      errors.push(entry.url + ': ' + (error instanceof Error ? error.message : String(error)));
+      errors.push(
+        entry.url +
+          ': ' +
+          (error instanceof Error ? error.message : String(error)),
+      );
     }
   }
 
@@ -1245,7 +1375,7 @@ async function filterExistingRaindropEntries(tokens, entries) {
     entries: filtered,
     skipped,
     failed,
-    errors
+    errors,
   };
 }
 
@@ -1264,10 +1394,13 @@ async function doesRaindropItemExist(tokens, url) {
   const params = new URLSearchParams({
     perpage: '1',
     page: '0',
-    search: 'link:"' + escapeSearchValue(normalized) + '"'
+    search: 'link:"' + escapeSearchValue(normalized) + '"',
   });
 
-  const data = await raindropRequest('/raindrops/0?' + params.toString(), tokens);
+  const data = await raindropRequest(
+    '/raindrops/0?' + params.toString(),
+    tokens,
+  );
   const items = Array.isArray(data?.items) ? data.items : [];
   return items.some((item) => {
     const itemUrl = typeof item?.link === 'string' ? item.link : '';
@@ -1296,12 +1429,18 @@ async function performMirrorPull(trigger) {
 
   const tokens = await loadValidProviderTokens();
   if (!tokens) {
-    throw new Error('No Raindrop connection found. Connect in Options to enable syncing.');
+    throw new Error(
+      'No Raindrop connection found. Connect in Options to enable syncing.',
+    );
   }
 
   const remoteData = await fetchRaindropStructure(tokens);
   const settingsData = await loadRootFolderSettings();
-  const mirrorContext = await ensureMirrorStructure(remoteData, settingsData, stats);
+  const mirrorContext = await ensureMirrorStructure(
+    remoteData,
+    settingsData,
+    stats,
+  );
 
   if (settingsData.didMutate) {
     await persistRootFolderSettings(settingsData);
@@ -1313,7 +1452,7 @@ async function performMirrorPull(trigger) {
   console.info('[mirror] Raindrop pull complete with stats:', stats);
   return {
     stats,
-    rootFolderId: mirrorContext.rootFolderId
+    rootFolderId: mirrorContext.rootFolderId,
   };
 }
 
@@ -1329,7 +1468,7 @@ function createEmptyStats() {
     bookmarksCreated: 0,
     bookmarksUpdated: 0,
     bookmarksMoved: 0,
-    bookmarksDeleted: 0
+    bookmarksDeleted: 0,
   };
 }
 
@@ -1353,14 +1492,18 @@ async function fetchRaindropStructure(tokens) {
   const [userResponse, rootResponse, childResponse] = await Promise.all([
     raindropRequest('/user', tokens),
     raindropRequest('/collections', tokens),
-    raindropRequest('/collections/childrens', tokens)
+    raindropRequest('/collections/childrens', tokens),
   ]);
 
   const groups = Array.isArray(userResponse?.user?.groups)
     ? userResponse.user.groups
     : [];
-  const rootCollections = Array.isArray(rootResponse?.items) ? rootResponse.items : [];
-  const childCollections = Array.isArray(childResponse?.items) ? childResponse.items : [];
+  const rootCollections = Array.isArray(rootResponse?.items)
+    ? rootResponse.items
+    : [];
+  const childCollections = Array.isArray(childResponse?.items)
+    ? childResponse.items
+    : [];
 
   return { groups, rootCollections, childCollections };
 }
@@ -1380,11 +1523,16 @@ async function raindropRequest(path, tokens, init) {
 
   const response = await fetch(url, {
     ...init,
-    headers
+    headers,
   });
 
   if (!response.ok) {
-    throw new Error('Raindrop request failed (' + response.status + '): ' + response.statusText);
+    throw new Error(
+      'Raindrop request failed (' +
+        response.status +
+        '): ' +
+        response.statusText,
+    );
   }
 
   const data = await response.json();
@@ -1405,7 +1553,10 @@ async function raindropRequest(path, tokens, init) {
 async function ensureMirrorStructure(remoteData, settingsData, stats) {
   const settings = settingsData.settings;
   const parentId = await ensureParentFolderAvailable(settingsData);
-  const rootTitle = normalizeFolderTitle(settings.rootFolderName, DEFAULT_ROOT_FOLDER_NAME);
+  const rootTitle = normalizeFolderTitle(
+    settings.rootFolderName,
+    DEFAULT_ROOT_FOLDER_NAME,
+  );
 
   if (rootTitle !== settings.rootFolderName) {
     settings.rootFolderName = rootTitle;
@@ -1419,14 +1570,14 @@ async function ensureMirrorStructure(remoteData, settingsData, stats) {
     remoteData,
     rootNode.id,
     index,
-    stats
+    stats,
   );
 
   return {
     rootFolderId: rootNode.id,
     unsortedFolderId,
     collectionFolderMap,
-    index
+    index,
   };
 }
 
@@ -1462,7 +1613,7 @@ async function ensureRootFolder(parentId, title, stats) {
 
   const created = await bookmarksCreate({
     parentId,
-    title
+    title,
   });
 
   stats.foldersCreated += 1;
@@ -1477,9 +1628,9 @@ async function ensureRootFolder(parentId, title, stats) {
 function isPromiseLike(value) {
   return Boolean(
     value &&
-    typeof value === 'object' &&
-    'then' in value &&
-    typeof value.then === 'function'
+      typeof value === 'object' &&
+      'then' in value &&
+      typeof value.then === 'function',
   );
 }
 
@@ -1503,29 +1654,61 @@ async function bookmarkNodeExists(nodeId) {
 
 /**
  * Retrieve bookmark nodes by id.
- * @param {string[]} ids
+ * @param {string | string[]} ids
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode[]>}
  */
 async function bookmarksGet(ids) {
-  try {
-    const maybe = chrome.bookmarks.get(ids);
-    if (isPromiseLike(maybe)) {
-      return await maybe;
-    }
-  } catch (error) {
-    // Fall back to callback form.
+  if (!ids || (Array.isArray(ids) && ids.length === 0)) {
+    return [];
   }
-
-  return new Promise((resolve, reject) => {
-    chrome.bookmarks.get(ids, (nodes) => {
-      const lastError = chrome.runtime.lastError;
-      if (lastError) {
-        reject(new Error(lastError.message));
-        return;
+  
+  // Handle single string case
+  if (typeof ids === 'string') {
+    try {
+      const maybe = chrome.bookmarks.get(ids);
+      if (isPromiseLike(maybe)) {
+        return await /** @type {Promise<chrome.bookmarks.BookmarkTreeNode[]>} */ (maybe);
       }
-      resolve(nodes);
+    } catch (error) {
+      // Fall back to callback form.
+    }
+
+    return new Promise((resolve, reject) => {
+      chrome.bookmarks.get(ids, (nodes) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message));
+          return;
+        }
+        resolve(nodes);
+      });
     });
-  });
+  }
+  
+  // Handle array case - ensure it has at least one element
+  if (Array.isArray(ids) && ids.length > 0) {
+    try {
+      const maybe = chrome.bookmarks.get(/** @type {[string, ...string[]]} */ (ids));
+      if (isPromiseLike(maybe)) {
+        return await /** @type {Promise<chrome.bookmarks.BookmarkTreeNode[]>} */ (maybe);
+      }
+    } catch (error) {
+      // Fall back to callback form.
+    }
+
+    return new Promise((resolve, reject) => {
+      chrome.bookmarks.get(/** @type {[string, ...string[]]} */ (ids), (nodes) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          reject(new Error(lastError.message));
+          return;
+        }
+        resolve(nodes);
+      });
+    });
+  }
+  
+  return [];
 }
 
 /**
@@ -1584,7 +1767,7 @@ async function bookmarksGetSubTree(nodeId) {
 
 /**
  * Create a bookmark node.
- * @param {chrome.bookmarks.BookmarkCreateArg} details
+ * @param {chrome.bookmarks.CreateDetails} details
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 async function bookmarksCreate(details) {
@@ -1612,7 +1795,7 @@ async function bookmarksCreate(details) {
 /**
  * Move a bookmark node.
  * @param {string} nodeId
- * @param {chrome.bookmarks.Destination} destination
+ * @param {chrome.bookmarks.MoveDestination} destination
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 async function bookmarksMove(nodeId, destination) {
@@ -1640,7 +1823,7 @@ async function bookmarksMove(nodeId, destination) {
 /**
  * Update a bookmark node.
  * @param {string} nodeId
- * @param {chrome.bookmarks.BookmarkChangesArg} changes
+ * @param {any} changes
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 async function bookmarksUpdate(nodeId, changes) {
@@ -1742,14 +1925,16 @@ async function buildBookmarkIndex(rootId) {
       parentId,
       title: normalizeFolderTitle(node.title, ''),
       pathSegments,
-      depth: pathSegments.length
+      depth: pathSegments.length,
     };
     folders.set(node.id, info);
     if (!childrenByParent.has(parentId)) {
       childrenByParent.set(parentId, []);
     }
     const siblings = childrenByParent.get(parentId);
-    siblings.push(info);
+    if (siblings) {
+      siblings.push(info);
+    }
   }
 
   /**
@@ -1766,13 +1951,16 @@ async function buildBookmarkIndex(rootId) {
       parentId: node.parentId ?? '',
       title: node.title ?? '',
       url: node.url,
-      pathSegments
+      pathSegments,
     };
     bookmarks.set(node.id, entry);
     if (!bookmarksByUrl.has(entry.url)) {
       bookmarksByUrl.set(entry.url, []);
     }
-    bookmarksByUrl.get(entry.url).push(entry);
+    const urlList = bookmarksByUrl.get(entry.url);
+    if (urlList) {
+      urlList.push(entry);
+    }
   }
 
   /**
@@ -1789,7 +1977,9 @@ async function buildBookmarkIndex(rootId) {
         registerFolder(node, []);
         nextSegments = [];
       } else {
-        const currentSegments = ancestorSegments.concat([normalizeFolderTitle(node.title, '')]);
+        const currentSegments = ancestorSegments.concat([
+          normalizeFolderTitle(node.title, ''),
+        ]);
         registerFolder(node, currentSegments);
         nextSegments = currentSegments;
       }
@@ -1810,7 +2000,7 @@ async function buildBookmarkIndex(rootId) {
     folders,
     childrenByParent,
     bookmarks,
-    bookmarksByUrl
+    bookmarksByUrl,
   };
 }
 
@@ -1827,7 +2017,7 @@ function buildCollectionNodeMap(rootCollections, childCollections) {
   /**
    * Ensure a node exists in the map.
    * @param {any} collection
-   * @returns {CollectionNode}
+   * @returns {CollectionNode | undefined}
    */
   function ensureNode(collection) {
     const id = Number(collection?._id);
@@ -1842,7 +2032,7 @@ function buildCollectionNodeMap(rootCollections, childCollections) {
         title: normalizeFolderTitle(collection?.title, 'Untitled'),
         sort: Number(collection?.sort) || 0,
         parentId: null,
-        children: []
+        children: [],
       };
       map.set(id, node);
     } else {
@@ -1925,7 +2115,9 @@ function buildGroupPlan(remoteData, collectionMap) {
   const groups = Array.isArray(remoteData.groups) ? remoteData.groups : [];
   groups.forEach((group) => {
     const groupTitle = normalizeFolderTitle(group?.title, 'Group');
-    const collectionIds = Array.isArray(group?.collections) ? group.collections : [];
+    const collectionIds = Array.isArray(group?.collections)
+      ? group.collections
+      : [];
     /** @type {CollectionNode[]} */
     const nodes = [];
     collectionIds.forEach((idValue) => {
@@ -1943,7 +2135,9 @@ function buildGroupPlan(remoteData, collectionMap) {
   });
 
   const unassigned = [];
-  const roots = Array.isArray(remoteData.rootCollections) ? remoteData.rootCollections : [];
+  const roots = Array.isArray(remoteData.rootCollections)
+    ? remoteData.rootCollections
+    : [];
   roots.forEach((collection) => {
     const id = Number(collection?._id);
     if (!Number.isFinite(id)) {
@@ -1961,7 +2155,7 @@ function buildGroupPlan(remoteData, collectionMap) {
   if (unassigned.length > 0) {
     plan.push({
       title: 'Ungrouped',
-      collections: unassigned
+      collections: unassigned,
     });
   }
 
@@ -1977,7 +2171,10 @@ function buildGroupPlan(remoteData, collectionMap) {
  * @returns {Promise<{ collectionFolderMap: Map<number, string>, unsortedFolderId: string }>}
  */
 async function synchronizeFolderTree(remoteData, rootId, index, stats) {
-  const collectionMap = buildCollectionNodeMap(remoteData.rootCollections, remoteData.childCollections);
+  const collectionMap = buildCollectionNodeMap(
+    remoteData.rootCollections,
+    remoteData.childCollections,
+  );
   const groupPlan = buildGroupPlan(remoteData, collectionMap);
 
   /** @type {Set<string>} */
@@ -1997,7 +2194,7 @@ async function synchronizeFolderTree(remoteData, rootId, index, stats) {
       groupSegments,
       index,
       usedFolders,
-      stats
+      stats,
     );
     addOrderEntry(orderByParent, rootId, groupFolder.id);
 
@@ -2010,7 +2207,7 @@ async function synchronizeFolderTree(remoteData, rootId, index, stats) {
         usedFolders,
         orderByParent,
         collectionFolderMap,
-        stats
+        stats,
       );
     }
   }
@@ -2023,7 +2220,7 @@ async function synchronizeFolderTree(remoteData, rootId, index, stats) {
     unsortedSegments,
     index,
     usedFolders,
-    stats
+    stats,
   );
   addOrderEntry(orderByParent, rootId, unsortedFolder.id);
 
@@ -2032,7 +2229,7 @@ async function synchronizeFolderTree(remoteData, rootId, index, stats) {
 
   return {
     collectionFolderMap,
-    unsortedFolderId: unsortedFolder.id
+    unsortedFolderId: unsortedFolder.id,
   };
 }
 
@@ -2046,14 +2243,21 @@ async function synchronizeFolderTree(remoteData, rootId, index, stats) {
  * @param {MirrorStats} stats
  * @returns {Promise<BookmarkFolderInfo>}
  */
-async function ensureFolder(parentId, title, pathSegments, index, usedFolders, stats) {
+async function ensureFolder(
+  parentId,
+  title,
+  pathSegments,
+  index,
+  usedFolders,
+  stats,
+) {
   const siblings = index.childrenByParent.get(parentId) ?? [];
   let folderInfo = siblings.find((info) => info.title === title);
 
   if (!folderInfo) {
     const created = await bookmarksCreate({
       parentId,
-      title
+      title,
     });
     stats.foldersCreated += 1;
 
@@ -2062,7 +2266,7 @@ async function ensureFolder(parentId, title, pathSegments, index, usedFolders, s
       parentId,
       title,
       pathSegments,
-      depth: pathSegments.length
+      depth: pathSegments.length,
     };
 
     index.folders.set(folderInfo.id, folderInfo);
@@ -2070,7 +2274,10 @@ async function ensureFolder(parentId, title, pathSegments, index, usedFolders, s
     if (!index.childrenByParent.has(parentId)) {
       index.childrenByParent.set(parentId, []);
     }
-    index.childrenByParent.get(parentId).push(folderInfo);
+    const siblings = index.childrenByParent.get(parentId);
+    if (siblings) {
+      siblings.push(folderInfo);
+    }
   } else {
     if (folderInfo.title !== title) {
       await bookmarksUpdate(folderInfo.id, { title });
@@ -2100,7 +2307,7 @@ function addOrderEntry(orderByParent, parentId, childId) {
     orderByParent.set(parentId, []);
   }
   const list = orderByParent.get(parentId);
-  if (!list.includes(childId)) {
+  if (list && !list.includes(childId)) {
     list.push(childId);
   }
 }
@@ -2125,7 +2332,7 @@ async function ensureCollectionHierarchy(
   usedFolders,
   orderByParent,
   collectionFolderMap,
-  stats
+  stats,
 ) {
   const title = normalizeFolderTitle(node.title, 'Collection ' + node.id);
   const currentSegments = parentSegments.concat([title]);
@@ -2136,7 +2343,7 @@ async function ensureCollectionHierarchy(
     currentSegments,
     index,
     usedFolders,
-    stats
+    stats,
   );
 
   collectionFolderMap.set(node.id, folder.id);
@@ -2152,7 +2359,7 @@ async function ensureCollectionHierarchy(
       usedFolders,
       orderByParent,
       collectionFolderMap,
-      stats
+      stats,
     );
   }
 }
@@ -2190,7 +2397,7 @@ async function removeUnusedFolders(rootId, index, usedFolders, stats) {
     if (siblings) {
       index.childrenByParent.set(
         info.parentId,
-        siblings.filter((child) => child.id !== info.id)
+        siblings.filter((child) => child.id !== info.id),
       );
     }
 
@@ -2203,9 +2410,10 @@ async function removeUnusedFolders(rootId, index, usedFolders, stats) {
         if (list) {
           index.bookmarksByUrl.set(
             entry.url,
-            list.filter((candidate) => candidate.id !== bookmarkId)
+            list.filter((candidate) => candidate.id !== bookmarkId),
           );
-          if (index.bookmarksByUrl.get(entry.url).length === 0) {
+          const updatedList = index.bookmarksByUrl.get(entry.url);
+          if (updatedList && updatedList.length === 0) {
             index.bookmarksByUrl.delete(entry.url);
           }
         }
@@ -2262,7 +2470,7 @@ async function enforceFolderOrder(orderByParent, index, stats) {
 
     const updatedChildren = orderedIds
       .map((id) => index.folders.get(id))
-      .filter((entry) => entry);
+      .filter((entry) => entry !== undefined);
     index.childrenByParent.set(parentId, updatedChildren);
   }
 }
@@ -2287,7 +2495,9 @@ async function processDeletedItems(tokens, context, stats) {
     }
 
     for (const item of items) {
-      const lastUpdate = parseRaindropTimestamp(item?.lastUpdate ?? item?.created);
+      const lastUpdate = parseRaindropTimestamp(
+        item?.lastUpdate ?? item?.created,
+      );
       if (threshold > 0 && lastUpdate > 0 && lastUpdate <= threshold) {
         shouldContinue = false;
         break;
@@ -2337,7 +2547,9 @@ async function processUpdatedItems(tokens, context, stats) {
     }
 
     for (const item of items) {
-      const lastUpdate = parseRaindropTimestamp(item?.lastUpdate ?? item?.created);
+      const lastUpdate = parseRaindropTimestamp(
+        item?.lastUpdate ?? item?.created,
+      );
       if (threshold > 0 && lastUpdate > 0 && lastUpdate <= threshold) {
         shouldContinue = false;
         break;
@@ -2417,9 +2629,12 @@ async function fetchRaindropItems(tokens, collectionId, page) {
   const params = new URLSearchParams({
     perpage: String(FETCH_PAGE_SIZE),
     page: String(page),
-    sort: '-lastUpdate'
+    sort: '-lastUpdate',
   });
-  const data = await raindropRequest('/raindrops/' + collectionId + '?' + params.toString(), tokens);
+  const data = await raindropRequest(
+    '/raindrops/' + collectionId + '?' + params.toString(),
+    tokens,
+  );
   return Array.isArray(data?.items) ? data.items : [];
 }
 
@@ -2555,12 +2770,16 @@ function sanitizeProjectTabDescriptors(rawTabs) {
 
     tabs.push({
       id,
-      windowId: Number.isFinite(entry?.windowId) ? Number(entry.windowId) : defaultWindowId,
+      windowId: Number.isFinite(entry?.windowId)
+        ? Number(entry.windowId)
+        : defaultWindowId,
       index: Number.isFinite(entry?.index) ? Number(entry.index) : -1,
-      groupId: Number.isFinite(entry?.groupId) ? Number(entry.groupId) : noneGroupId,
+      groupId: Number.isFinite(entry?.groupId)
+        ? Number(entry.groupId)
+        : noneGroupId,
       pinned: Boolean(entry?.pinned),
       url: normalizedUrl,
-      title: typeof entry?.title === 'string' ? entry.title : ''
+      title: typeof entry?.title === 'string' ? entry.title : '',
     });
   });
 
@@ -2591,7 +2810,7 @@ async function resolveProjectTabs(descriptors) {
         groupId: descriptor.groupId,
         pinned: descriptor.pinned,
         url: descriptor.url,
-        title: descriptor.title
+        title: descriptor.title,
       });
     });
     return { tabs: results, skipped, errors };
@@ -2606,15 +2825,22 @@ async function resolveProjectTabs(descriptors) {
         continue;
       }
 
-      const title = typeof tab?.title === 'string' ? tab.title : descriptor.title;
+      const title =
+        typeof tab?.title === 'string' ? tab.title : descriptor.title;
       results.push({
         id: descriptor.id,
-        windowId: Number.isFinite(tab?.windowId) ? Number(tab.windowId) : descriptor.windowId,
-        index: Number.isFinite(tab?.index) ? Number(tab.index) : descriptor.index,
-        groupId: Number.isFinite(tab?.groupId) ? Number(tab.groupId) : descriptor.groupId,
+        windowId: Number.isFinite(tab?.windowId)
+          ? Number(tab.windowId)
+          : descriptor.windowId,
+        index: Number.isFinite(tab?.index)
+          ? Number(tab.index)
+          : descriptor.index,
+        groupId: Number.isFinite(tab?.groupId)
+          ? Number(tab.groupId)
+          : descriptor.groupId,
         pinned: Boolean(tab?.pinned ?? descriptor.pinned),
         url: normalizedUrl,
-        title: typeof title === 'string' ? title : ''
+        title: typeof title === 'string' ? title : '',
       });
     } catch (error) {
       skipped += 1;
@@ -2635,7 +2861,7 @@ async function buildProjectGroupContext(tabs) {
   /** @type {ProjectGroupContext} */
   const context = {
     groupInfo: new Map(),
-    tabIndexById: new Map()
+    tabIndexById: new Map(),
   };
 
   if (!Array.isArray(tabs) || tabs.length === 0) {
@@ -2662,7 +2888,8 @@ async function buildProjectGroupContext(tabs) {
     try {
       const group = await tabGroupsGet(groupId);
       const groupTitle = normalizeFolderTitle(group?.title, 'Tab group');
-      const groupColor = typeof group?.color === 'string' && group.color ? group.color : 'grey';
+      const groupColor =
+        typeof group?.color === 'string' && group.color ? group.color : 'grey';
       let groupIndex = Number.POSITIVE_INFINITY;
       /** @type {chrome.tabs.Tab[]} */
       let groupTabs = [];
@@ -2691,7 +2918,10 @@ async function buildProjectGroupContext(tabs) {
       if (!Number.isFinite(groupIndex)) {
         const localFallback = tabs
           .filter((tab) => tab.groupId === groupId)
-          .reduce((min, tab) => Math.min(min, Number(tab.index)), Number.POSITIVE_INFINITY);
+          .reduce(
+            (min, tab) => Math.min(min, Number(tab.index)),
+            Number.POSITIVE_INFINITY,
+          );
         groupIndex = Number.isFinite(localFallback) ? localFallback : 0;
       }
 
@@ -2699,7 +2929,9 @@ async function buildProjectGroupContext(tabs) {
         name: groupTitle,
         color: groupColor,
         index: Number.isFinite(groupIndex) ? Number(groupIndex) : 0,
-        windowId: Number(group?.windowId ?? chrome.windows?.WINDOW_ID_NONE ?? -1)
+        windowId: Number(
+          group?.windowId ?? chrome.windows?.WINDOW_ID_NONE ?? -1,
+        ),
       });
     } catch (error) {
       // Ignore failures and fall back to basic index tracking.
@@ -2708,7 +2940,10 @@ async function buildProjectGroupContext(tabs) {
 
   tabs.forEach((tab) => {
     if (!context.tabIndexById.has(tab.id)) {
-      context.tabIndexById.set(tab.id, Number.isFinite(tab.index) ? Number(tab.index) : 0);
+      context.tabIndexById.set(
+        tab.id,
+        Number.isFinite(tab.index) ? Number(tab.index) : 0,
+      );
     }
   });
 
@@ -2722,11 +2957,15 @@ async function buildProjectGroupContext(tabs) {
  */
 async function ensureSavedProjectsGroup(tokens) {
   const userData = await raindropRequest('/user', tokens);
-  const groups = Array.isArray(userData?.user?.groups) ? [...userData.user.groups] : [];
+  const groups = Array.isArray(userData?.user?.groups)
+    ? [...userData.user.groups]
+    : [];
 
   const matchIndex = groups.findIndex((group) => {
     const title = typeof group?.title === 'string' ? group.title : '';
-    return title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase();
+    return (
+      title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase()
+    );
   });
 
   if (matchIndex >= 0) {
@@ -2745,7 +2984,7 @@ async function ensureSavedProjectsGroup(tokens) {
     title: SAVED_PROJECTS_GROUP_TITLE,
     hidden: false,
     sort: maxSort + 1,
-    collections: []
+    collections: [],
   };
 
   groups.push(newGroup);
@@ -2753,12 +2992,14 @@ async function ensureSavedProjectsGroup(tokens) {
 
   const updatedIndex = updatedGroups.findIndex((group) => {
     const title = typeof group?.title === 'string' ? group.title : '';
-    return title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase();
+    return (
+      title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase()
+    );
   });
 
   return {
     groups: updatedGroups,
-    index: updatedIndex >= 0 ? updatedIndex : updatedGroups.length - 1
+    index: updatedIndex >= 0 ? updatedIndex : updatedGroups.length - 1,
   };
 }
 
@@ -2773,15 +3014,15 @@ async function createProjectCollection(tokens, projectName) {
     title: projectName,
     view: 'list',
     public: false,
-    sort: Date.now()
+    sort: Date.now(),
   };
 
   const response = await raindropRequest('/collection', tokens, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 
   const item = response?.item;
@@ -2793,7 +3034,7 @@ async function createProjectCollection(tokens, projectName) {
   const title = normalizeFolderTitle(item?.title, projectName);
   return {
     id,
-    title
+    title,
   };
 }
 
@@ -2831,14 +3072,20 @@ async function assignCollectionToGroup(tokens, groups, index, collectionId) {
     }
 
     const clone = { ...group };
-    const collections = Array.isArray(group?.collections) ? [...group.collections] : [];
-    const filtered = collections.filter((value) => Number(value) !== normalizedId);
+    const collections = Array.isArray(group?.collections)
+      ? [...group.collections]
+      : [];
+    const filtered = collections.filter(
+      (value) => Number(value) !== normalizedId,
+    );
     filtered.unshift(normalizedId);
     clone.collections = filtered;
     return clone;
   });
 
-  const originalCollections = Array.isArray(groups[index]?.collections) ? groups[index].collections : [];
+  const originalCollections = Array.isArray(groups[index]?.collections)
+    ? groups[index].collections
+    : [];
   if (
     originalCollections.length > 0 &&
     Number(originalCollections[0]) === normalizedId &&
@@ -2859,12 +3106,14 @@ async function assignCollectionToGroup(tokens, groups, index, collectionId) {
  */
 function buildProjectItemPayload(tab, context, collectionId) {
   const relativeIndex = context.tabIndexById.get(tab.id);
-  const tabIndex = Number.isFinite(relativeIndex) ? Number(relativeIndex) : Number(tab.index);
+  const tabIndex = Number.isFinite(relativeIndex)
+    ? Number(relativeIndex)
+    : Number(tab.index);
   const metadata = {
     tab: {
       index: Number.isFinite(tabIndex) ? tabIndex : 0,
-      pinned: Boolean(tab.pinned)
-    }
+      pinned: Boolean(tab.pinned),
+    },
   };
 
   const groupInfo = context.groupInfo.get(tab.groupId);
@@ -2872,7 +3121,7 @@ function buildProjectItemPayload(tab, context, collectionId) {
     metadata.group = {
       name: groupInfo.name,
       color: groupInfo.color,
-      index: groupInfo.index
+      index: groupInfo.index,
     };
   }
 
@@ -2881,7 +3130,7 @@ function buildProjectItemPayload(tab, context, collectionId) {
     title: normalizeBookmarkTitle(tab.title, tab.url),
     collectionId,
     pleaseParse: {},
-    excerpt: JSON.stringify(metadata)
+    excerpt: JSON.stringify(metadata),
   };
 }
 
@@ -2895,9 +3144,9 @@ async function updateUserGroups(tokens, groups) {
   const response = await raindropRequest('/user', tokens, {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ groups })
+    body: JSON.stringify({ groups }),
   });
   return Array.isArray(response?.user?.groups) ? response.user.groups : groups;
 }
@@ -3003,7 +3252,9 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
   }
 
   const existingEntries = context.index.bookmarksByUrl.get(url) ?? [];
-  let bookmarkEntry = existingEntries.find((entry) => entry.parentId === targetFolderId);
+  let bookmarkEntry = existingEntries.find(
+    (entry) => entry.parentId === targetFolderId,
+  );
 
   if (!bookmarkEntry && existingEntries.length > 0) {
     bookmarkEntry = existingEntries[0];
@@ -3033,7 +3284,7 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
   const created = await bookmarksCreate({
     parentId: targetFolderId,
     title,
-    url
+    url,
   });
 
   stats.bookmarksCreated += 1;
@@ -3043,14 +3294,17 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
     parentId: targetFolderId,
     title,
     url,
-    pathSegments: [...folderInfo.pathSegments]
+    pathSegments: [...folderInfo.pathSegments],
   };
 
   context.index.bookmarks.set(newEntry.id, newEntry);
   if (!context.index.bookmarksByUrl.has(url)) {
     context.index.bookmarksByUrl.set(url, []);
   }
-  context.index.bookmarksByUrl.get(url).push(newEntry);
+  const urlList = context.index.bookmarksByUrl.get(url);
+  if (urlList) {
+    urlList.push(newEntry);
+  }
 }
 
 /**
@@ -3081,11 +3335,6 @@ async function bookmarksRemove(nodeId) {
   });
 }
 
-
-
-
-
-
 /**
  * Load the stored tokens for the Raindrop provider and ensure they are valid.
  * @returns {Promise<StoredProviderTokens | undefined>}
@@ -3105,13 +3354,15 @@ async function loadValidProviderTokens() {
 
   const expiresAt = Number(record.expiresAt);
   if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    throw new Error('Raindrop credentials expired. Reconnect in Options to continue syncing.');
+    throw new Error(
+      'Raindrop credentials expired. Reconnect in Options to continue syncing.',
+    );
   }
 
   return {
     accessToken: record.accessToken,
     refreshToken: record.refreshToken,
-    expiresAt
+    expiresAt,
   };
 }
 
@@ -3131,7 +3382,7 @@ async function loadRootFolderSettings() {
   if (!settings) {
     settings = {
       parentFolderId: DEFAULT_PARENT_FOLDER_ID,
-      rootFolderName: DEFAULT_ROOT_FOLDER_NAME
+      rootFolderName: DEFAULT_ROOT_FOLDER_NAME,
     };
     map[PROVIDER_ID] = settings;
     didMutate = true;
@@ -3157,7 +3408,7 @@ async function loadRootFolderSettings() {
 async function persistRootFolderSettings(data) {
   data.map[PROVIDER_ID] = data.settings;
   await chrome.storage.sync.set({
-    [ROOT_FOLDER_SETTINGS_KEY]: data.map
+    [ROOT_FOLDER_SETTINGS_KEY]: data.map,
   });
 }
 
@@ -3170,7 +3421,7 @@ async function ensureUnsortedBookmarkFolder() {
   const parentId = await ensureParentFolderAvailable(settingsData);
   const normalizedRootTitle = normalizeFolderTitle(
     settingsData.settings.rootFolderName,
-    DEFAULT_ROOT_FOLDER_NAME
+    DEFAULT_ROOT_FOLDER_NAME,
   );
 
   if (normalizedRootTitle !== settingsData.settings.rootFolderName) {
@@ -3182,15 +3433,18 @@ async function ensureUnsortedBookmarkFolder() {
   if (!rootFolder) {
     rootFolder = await bookmarksCreate({
       parentId,
-      title: normalizedRootTitle
+      title: normalizedRootTitle,
     });
   }
 
-  let unsortedFolder = await findChildFolderByTitle(rootFolder.id, UNSORTED_TITLE);
+  let unsortedFolder = await findChildFolderByTitle(
+    rootFolder.id,
+    UNSORTED_TITLE,
+  );
   if (!unsortedFolder) {
     unsortedFolder = await bookmarksCreate({
       parentId: rootFolder.id,
-      title: UNSORTED_TITLE
+      title: UNSORTED_TITLE,
     });
   }
 
@@ -3200,7 +3454,7 @@ async function ensureUnsortedBookmarkFolder() {
 
   return {
     rootId: rootFolder.id,
-    unsortedId: unsortedFolder.id
+    unsortedId: unsortedFolder.id,
   };
 }
 
@@ -3210,12 +3464,15 @@ async function ensureUnsortedBookmarkFolder() {
  * @returns {Promise<void>}
  */
 async function resetMirrorState(settingsData) {
-  await chrome.storage.local.remove([LOCAL_KEY_OLDEST_ITEM, LOCAL_KEY_OLDEST_DELETED]);
+  await chrome.storage.local.remove([
+    LOCAL_KEY_OLDEST_ITEM,
+    LOCAL_KEY_OLDEST_DELETED,
+  ]);
 
   const parentId = await ensureParentFolderAvailable(settingsData);
   const normalizedTitle = normalizeFolderTitle(
     settingsData.settings.rootFolderName,
-    DEFAULT_ROOT_FOLDER_NAME
+    DEFAULT_ROOT_FOLDER_NAME,
   );
   if (normalizedTitle !== settingsData.settings.rootFolderName) {
     settingsData.settings.rootFolderName = normalizedTitle;
@@ -3224,7 +3481,10 @@ async function resetMirrorState(settingsData) {
 
   const parentExists = await bookmarkNodeExists(parentId);
   if (parentExists) {
-    const existingRoot = await findChildFolderByTitle(parentId, normalizedTitle);
+    const existingRoot = await findChildFolderByTitle(
+      parentId,
+      normalizedTitle,
+    );
     if (existingRoot) {
       await bookmarksRemoveTree(existingRoot.id);
     }

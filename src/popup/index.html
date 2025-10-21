@@ -23,30 +23,36 @@
     </div>
   </div>
   <main class="w-80 p-5 space-y-4">
-    <header class="space-y-1">
-      <h1 class="text-xl font-semibold text-base-content">Mirror Cloud Bookmarks</h1>
-      <p class="text-sm text-base-content/70">Pull the latest Raindrop collections and items into the mirror folder.</p>
-    </header>
-    <div id="statusMessage" class="text-sm text-base-content/80 min-h-5" role="status" aria-live="polite">Ready to sync.
-    </div>
-    <button id="pullButton" class="btn btn-primary w-full" type="button">
-      Pull now
-    </button>
-    <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
-      Save to Unsorted
-    </button>
-    <button id="saveProjectButton" class="btn btn-accent w-full" type="button">
-      Save current tab as project
-    </button>
-    <section class="space-y-2">
-      <header class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-base-content">Saved projects</h2>
-        <button id="refreshProjectsButton" class="btn btn-ghost btn-xs" type="button" aria-label="Refresh projects">
-          🔄️
+    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
+      <div class="card-body gap-2">
+        <header class="space-y-1">
+          <h1 class="text-xl font-semibold text-base-content">Mirror Cloud Bookmarks</h1>
+          <p class="text-sm text-base-content/70">Pull the latest Raindrop collections and items into the mirror folder.
+          </p>
+        </header>
+        <div id="statusMessage" class="text-sm text-base-content/80 min-h-5" role="status" aria-live="polite">Ready to
+          sync.
+        </div>
+        <button id="pullButton" class="btn btn-primary w-full" type="button">
+          Pull now
         </button>
-      </header>
-      <div id="projectsContainer" class="space-y-2" role="list"></div>
-    </section>
+        <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
+          Save to Unsorted
+        </button>
+        <button id="saveProjectButton" class="btn btn-accent w-full" type="button">
+          Save current tab as project
+        </button>
+        <section class="space-y-2 mt-2">
+          <header class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-base-content">Saved projects</h2>
+            <button id="refreshProjectsButton" class="btn btn-ghost btn-xs" type="button" aria-label="Refresh projects">
+              🔄️
+            </button>
+          </header>
+          <div id="projectsContainer" class="space-y-2" role="list"></div>
+        </section>
+      </div>
+    </article>
   </main>
   <script src="./popup.js" type="module"></script>
 </body>

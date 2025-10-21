@@ -1,4 +1,28 @@
-/* global chrome, Toastify */
+/* global chrome */
+
+/**
+ * @typedef {Object} ToastifyOptions
+ * @property {string} text
+ * @property {number} duration
+ * @property {string} gravity
+ * @property {string} position
+ * @property {boolean} close
+ * @property {Object} style
+ */
+
+/**
+ * @typedef {Object} ToastifyInstance
+ * @property {() => void} showToast
+ */
+
+/**
+ * @typedef {function(ToastifyOptions): ToastifyInstance} ToastifyFunction
+ */
+
+/**
+ * @typedef {Object} WindowWithToastify
+ * @property {ToastifyFunction} Toastify
+ */
 
 /**
  * @typedef {Object} ProviderDefinition
@@ -206,14 +230,16 @@ function cloneRootFolderSettings(settings) {
  * @returns {void}
  */
 function showToast(message, variant = 'info') {
-  if (typeof Toastify !== 'function') {
+  /** @type {WindowWithToastify} */
+  const windowWithToastify = /** @type {any} */ (window);
+  if (typeof windowWithToastify.Toastify !== 'function') {
     return;
   }
 
   const background =
     TOAST_BACKGROUND_BY_VARIANT[variant] ?? TOAST_BACKGROUND_BY_VARIANT.info;
 
-  Toastify({
+  windowWithToastify.Toastify({
     text: message,
     duration: 4000,
     gravity: 'top',
@@ -445,7 +471,7 @@ function bookmarksSearch(query) {
 /**
  * Move a bookmark node to a new destination.
  * @param {string} nodeId
- * @param {chrome.bookmarks.Destination} destination
+ * @param {chrome.bookmarks.MoveDestination} destination
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 function moveBookmark(nodeId, destination) {
@@ -482,7 +508,7 @@ function moveBookmark(nodeId, destination) {
 /**
  * Update properties on the bookmark node.
  * @param {string} nodeId
- * @param {chrome.bookmarks.BookmarkChangesArg} changes
+ * @param {any} changes
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 function updateBookmark(nodeId, changes) {

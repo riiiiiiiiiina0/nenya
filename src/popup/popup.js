@@ -2,13 +2,62 @@
 
 import '../options/theme.js';
 
-const pullButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('pullButton'));
-const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('saveUnsortedButton'));
-const saveProjectButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('saveProjectButton'));
-const openOptionsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('openOptionsButton'));
-const statusMessage = /** @type {HTMLDivElement | null} */ (document.getElementById('statusMessage'));
-const projectsContainer = /** @type {HTMLDivElement | null} */ (document.getElementById('projectsContainer'));
-const refreshProjectsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('refreshProjectsButton'));
+/**
+ * Check if user is logged in to any cloud bookmark provider.
+ * @returns {Promise<boolean>}
+ */
+async function isUserLoggedIn() {
+  try {
+    const result = await chrome.storage.sync.get('cloudAuthTokens');
+    const tokens = result.cloudAuthTokens;
+    if (!tokens || typeof tokens !== 'object') {
+      return false;
+    }
+
+    // Check if any provider has valid tokens
+    const now = Date.now();
+    for (const providerId in tokens) {
+      const providerTokens = tokens[providerId];
+      if (
+        providerTokens &&
+        typeof providerTokens === 'object' &&
+        providerTokens.expiresAt &&
+        providerTokens.expiresAt > now
+      ) {
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('[popup] Error checking login status:', error);
+    return false;
+  }
+}
+
+const pullButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('pullButton')
+);
+const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('saveUnsortedButton')
+);
+const saveProjectButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('saveProjectButton')
+);
+const openOptionsButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('openOptionsButton')
+);
+const statusMessage = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('statusMessage')
+);
+const projectsContainer = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('projectsContainer')
+);
+const refreshProjectsButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('refreshProjectsButton')
+);
+const mirrorSection = /** @type {HTMLElement | null} */ (
+  document.querySelector('article[aria-labelledby="mirror-heading"]')
+);
 
 const STATUS_CLASS_SUCCESS = 'text-success';
 const STATUS_CLASS_ERROR = 'text-error';
@@ -50,13 +99,73 @@ function setStatus(text, tone) {
     return;
   }
   statusMessage.textContent = text;
-  statusMessage.classList.remove(STATUS_CLASS_SUCCESS, STATUS_CLASS_ERROR, STATUS_CLASS_INFO);
+  statusMessage.classList.remove(
+    STATUS_CLASS_SUCCESS,
+    STATUS_CLASS_ERROR,
+    STATUS_CLASS_INFO,
+  );
   if (tone === 'success') {
     statusMessage.classList.add(STATUS_CLASS_SUCCESS);
   } else if (tone === 'error') {
     statusMessage.classList.add(STATUS_CLASS_ERROR);
   } else {
     statusMessage.classList.add(STATUS_CLASS_INFO);
+  }
+}
+
+/**
+ * Show or hide the Mirror Cloud Bookmarks section based on login status.
+ * @param {boolean} isLoggedIn
+ * @returns {void}
+ */
+function toggleMirrorSection(isLoggedIn) {
+  if (!mirrorSection) {
+    return;
+  }
+
+  if (isLoggedIn) {
+    mirrorSection.style.display = 'block';
+  } else {
+    mirrorSection.style.display = 'none';
+  }
+}
+
+/**
+ * Show a message directing users to login via options page.
+ * @returns {void}
+ */
+function showLoginMessage() {
+  if (!statusMessage) {
+    return;
+  }
+
+  const loginMessage = document.createElement('div');
+  loginMessage.className = 'card w-full bg-base-100 shadow-xl';
+  loginMessage.innerHTML = `
+    <div class="card-body gap-4">
+      <div class="text-center space-y-2">
+        <h2 class="text-xl font-semibold text-base-content">🔖 Mirror Cloud Bookmarks</h2>
+        <p class="text-sm text-base-content/70">Connect to a cloud bookmark provider to sync your bookmarks.</p>
+        <button id="goToOptionsButton" class="btn btn-primary w-full" type="button">
+          Go to Options to Connect
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Replace the main content with login message
+  const main = document.querySelector('main');
+  if (main) {
+    main.innerHTML = '';
+    main.appendChild(loginMessage);
+
+    // Add event listener for the options button
+    const goToOptionsButton = document.getElementById('goToOptionsButton');
+    if (goToOptionsButton && openOptionsButton) {
+      goToOptionsButton.addEventListener('click', () => {
+        openOptionsButton.click();
+      });
+    }
   }
 }
 
@@ -102,22 +211,26 @@ if (pullButton) {
     pullButton.disabled = true;
     setStatus('Syncing bookmarks...', 'info');
 
-    sendRuntimeMessage({ type: 'mirror:pull' }).then((response) => {
-      if (response && response.ok) {
-        const summary = formatStats(response.stats);
-        setStatus('Sync complete. ' + summary, 'success');
-      } else {
-        const message = response && typeof response.error === 'string'
-          ? response.error
-          : 'Sync failed. Please try again.';
+    sendRuntimeMessage({ type: 'mirror:pull' })
+      .then((response) => {
+        if (response && response.ok) {
+          const summary = formatStats(response.stats);
+          setStatus('Sync complete. ' + summary, 'success');
+        } else {
+          const message =
+            response && typeof response.error === 'string'
+              ? response.error
+              : 'Sync failed. Please try again.';
+          setStatus(message, 'error');
+        }
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
         setStatus(message, 'error');
-      }
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message, 'error');
-    }).finally(() => {
-      pullButton.disabled = false;
-    });
+      })
+      .finally(() => {
+        pullButton.disabled = false;
+      });
   });
 } else {
   console.error('[popup] Sync button not found.');
@@ -206,7 +319,7 @@ async function handleSaveToUnsorted() {
 
     const response = await sendRuntimeMessage({
       type: 'mirror:saveToUnsorted',
-      entries
+      entries,
     });
 
     handleSaveResponse(response);
@@ -239,7 +352,7 @@ function buildSaveEntriesFromTabs(tabs) {
     seen.add(normalizedUrl);
     entries.push({
       url: normalizedUrl,
-      title: typeof tab.title === 'string' ? tab.title : ''
+      title: typeof tab.title === 'string' ? tab.title : '',
     });
   });
 
@@ -253,13 +366,18 @@ function buildSaveEntriesFromTabs(tabs) {
 async function collectSavableTabs() {
   const highlighted = await queryTabs({
     currentWindow: true,
-    highlighted: true
+    highlighted: true,
   });
-  const candidates = highlighted.length > 0 ? highlighted : await queryTabs({
-    currentWindow: true,
-    active: true
-  });
-  return candidates.filter((tab) => Boolean(tab.url) && Boolean(normalizeUrlForSave(tab.url)));
+  const candidates =
+    highlighted.length > 0
+      ? highlighted
+      : await queryTabs({
+          currentWindow: true,
+          active: true,
+        });
+  return candidates.filter(
+    (tab) => Boolean(tab.url) && Boolean(normalizeUrlForSave(tab.url)),
+  );
 }
 
 /**
@@ -274,7 +392,7 @@ async function updateSaveProjectButtonLabel() {
   try {
     const highlighted = await queryTabs({
       currentWindow: true,
-      highlighted: true
+      highlighted: true,
     });
 
     let validCount = 0;
@@ -319,10 +437,13 @@ function queryTabs(queryInfo) {
 
 /**
  * Normalize a URL string for saving, ensuring supported protocols.
- * @param {string} url
+ * @param {string | undefined} url
  * @returns {string | undefined}
  */
 function normalizeUrlForSave(url) {
+  if (!url) {
+    return undefined;
+  }
   try {
     const parsed = new URL(url);
     const protocol = parsed.protocol.toLowerCase();
@@ -368,7 +489,8 @@ function handleSaveResponse(response) {
     return;
   }
 
-  const errorText = typeof response.error === 'string' ? response.error : message;
+  const errorText =
+    typeof response.error === 'string' ? response.error : message;
   setStatus(errorText, 'error');
 }
 
@@ -427,9 +549,10 @@ function renderProjectsResponse(response) {
   }
 
   if (!response.ok) {
-    const errorText = typeof response.error === 'string'
-      ? response.error
-      : 'Unable to load projects.';
+    const errorText =
+      typeof response.error === 'string'
+        ? response.error
+        : 'Unable to load projects.';
     renderProjectsError(errorText);
     return;
   }
@@ -488,9 +611,10 @@ function renderProjectRow(project) {
     return null;
   }
   const id = Number(project.id);
-  const title = typeof project.title === 'string' && project.title.trim()
-    ? project.title.trim()
-    : 'Untitled project';
+  const title =
+    typeof project.title === 'string' && project.title.trim()
+      ? project.title.trim()
+      : 'Untitled project';
   const itemCount = Number(project.itemCount);
   const url = typeof project.url === 'string' && project.url ? project.url : '';
 
@@ -502,9 +626,8 @@ function renderProjectRow(project) {
 
   const countBadge = document.createElement('span');
   countBadge.className = 'badge badge-neutral';
-  countBadge.textContent = Number.isFinite(itemCount) && itemCount >= 0
-    ? String(itemCount)
-    : '—';
+  countBadge.textContent =
+    Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
   row.appendChild(countBadge);
 
@@ -539,6 +662,35 @@ function openProjectUrl(url, id) {
 }
 
 void refreshProjectList();
+
+/**
+ * Initialize the popup based on login status.
+ * @returns {Promise<void>}
+ */
+async function initializePopup() {
+  try {
+    const loggedIn = await isUserLoggedIn();
+    if (loggedIn) {
+      toggleMirrorSection(true);
+      void refreshProjectList();
+    } else {
+      showLoginMessage();
+    }
+  } catch (error) {
+    console.error('[popup] Error initializing popup:', error);
+    showLoginMessage();
+  }
+}
+
+// Initialize the popup when the script loads
+void initializePopup();
+
+// Listen for storage changes to update popup when user logs in/out
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.cloudAuthTokens) {
+    void initializePopup();
+  }
+});
 
 /**
  * Handle the save project action from the popup.
@@ -582,7 +734,7 @@ async function handleSaveProject() {
     const response = await sendRuntimeMessage({
       type: 'mirror:saveProject',
       projectName,
-      tabs: descriptors
+      tabs: descriptors,
     });
 
     handleSaveProjectResponse(response);
@@ -628,12 +780,18 @@ function buildProjectTabDescriptors(tabs) {
 
     descriptors.push({
       id: tab.id,
-      windowId: typeof tab.windowId === 'number' ? tab.windowId : chrome.windows.WINDOW_ID_NONE,
+      windowId:
+        typeof tab.windowId === 'number'
+          ? tab.windowId
+          : chrome.windows.WINDOW_ID_NONE,
       index: typeof tab.index === 'number' ? tab.index : -1,
-      groupId: typeof tab.groupId === 'number' ? tab.groupId : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1,
+      groupId:
+        typeof tab.groupId === 'number'
+          ? tab.groupId
+          : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1,
       pinned: Boolean(tab.pinned),
       url: normalizedUrl,
-      title: typeof tab.title === 'string' ? tab.title : ''
+      title: typeof tab.title === 'string' ? tab.title : '',
     });
   });
 
@@ -646,9 +804,11 @@ function buildProjectTabDescriptors(tabs) {
  * @returns {Promise<string>}
  */
 async function deriveDefaultProjectName(tab) {
-  const fallback = typeof tab.title === 'string' && tab.title.trim()
-    ? tab.title.trim()
-    : (typeof tab.url === 'string' ? safeHostname(tab.url) : '') || 'New project';
+  const fallback =
+    typeof tab.title === 'string' && tab.title.trim()
+      ? tab.title.trim()
+      : (typeof tab.url === 'string' ? safeHostname(tab.url) : '') ||
+        'New project';
 
   if (!chrome.tabGroups || typeof chrome.tabGroups.get !== 'function') {
     return fallback;
@@ -661,7 +821,10 @@ async function deriveDefaultProjectName(tab) {
 
   try {
     const group = await getTabGroup(groupId);
-    const title = typeof group?.title === 'string' && group.title.trim() ? group.title.trim() : '';
+    const title =
+      typeof group?.title === 'string' && group.title.trim()
+        ? group.title.trim()
+        : '';
     return title || fallback;
   } catch {
     return fallback;
@@ -715,9 +878,10 @@ function handleSaveProjectResponse(response) {
     return;
   }
 
-  const projectName = typeof response.projectName === 'string' && response.projectName
-    ? response.projectName
-    : 'project';
+  const projectName =
+    typeof response.projectName === 'string' && response.projectName
+      ? response.projectName
+      : 'project';
   const created = Number(response.created) || 0;
   const skipped = Number(response.skipped) || 0;
   const failed = Number(response.failed) || 0;
@@ -738,6 +902,7 @@ function handleSaveProjectResponse(response) {
     return;
   }
 
-  const errorText = typeof response.error === 'string' ? response.error : message;
+  const errorText =
+    typeof response.error === 'string' ? response.error : message;
   setStatus(errorText, 'error');
 }
