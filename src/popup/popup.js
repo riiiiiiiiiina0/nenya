@@ -136,6 +136,19 @@ if (saveProjectButton) {
   saveProjectButton.addEventListener('click', () => {
     void handleSaveProject();
   });
+
+  const refreshSaveProjectLabel = () => {
+    void updateSaveProjectButtonLabel();
+  };
+
+  if (chrome.tabs?.onHighlighted?.addListener) {
+    chrome.tabs.onHighlighted.addListener(refreshSaveProjectLabel);
+  }
+  if (chrome.tabs?.onActivated?.addListener) {
+    chrome.tabs.onActivated.addListener(refreshSaveProjectLabel);
+  }
+
+  void updateSaveProjectButtonLabel();
 } else {
   console.error('[popup] Save project button not found.');
 }
@@ -247,6 +260,43 @@ async function collectSavableTabs() {
     active: true
   });
   return candidates.filter((tab) => Boolean(tab.url) && Boolean(normalizeUrlForSave(tab.url)));
+}
+
+/**
+ * Update the save project button label to reflect highlighted tab count.
+ * @returns {Promise<void>}
+ */
+async function updateSaveProjectButtonLabel() {
+  if (!saveProjectButton) {
+    return;
+  }
+
+  try {
+    const highlighted = await queryTabs({
+      currentWindow: true,
+      highlighted: true
+    });
+
+    let validCount = 0;
+    highlighted.forEach((tab) => {
+      if (!tab.url) {
+        return;
+      }
+      const normalizedUrl = normalizeUrlForSave(tab.url);
+      if (normalizedUrl) {
+        validCount += 1;
+      }
+    });
+
+    if (validCount > 1) {
+      saveProjectButton.textContent = 'Save ' + validCount + ' tabs as project';
+    } else {
+      saveProjectButton.textContent = 'Save current tab as project';
+    }
+  } catch (error) {
+    console.error('[popup] Unable to update save project button label.', error);
+    saveProjectButton.textContent = 'Save current tab as project';
+  }
 }
 
 /**
