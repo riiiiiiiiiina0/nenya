@@ -475,14 +475,19 @@ async function notifyUnsortedSaveOutcome(summary) {
  * Notify about a successful mirror pull.
  * @param {MirrorStats} stats
  * @param {string} rootFolderId
+ * @param {string} [trigger]
  * @returns {Promise<void>}
  */
-async function notifyMirrorPullSuccess(stats, rootFolderId) {
+async function notifyMirrorPullSuccess(stats, rootFolderId, trigger) {
   if (!stats) {
     return;
   }
 
   const summary = summarizeMirrorStats(stats);
+  if (trigger === 'alarm' && summary.total === 0) {
+    return;
+  }
+
   const title = 'Raindrop Sync Complete';
   const message = summary.total === 1
     ? 'Pulled 1 change from Raindrop.'
@@ -554,7 +559,7 @@ export async function runMirrorPull(trigger) {
   try {
     const pullResult = await performMirrorPull(trigger);
     finalBadge = '✅';
-    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId);
+    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId, trigger);
     return { ok: true, stats: pullResult.stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -587,7 +592,7 @@ export async function resetAndPull() {
     await resetMirrorState(settingsData);
     const pullResult = await performMirrorPull('reset');
     finalBadge = '✅';
-    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId);
+    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId, 'reset');
     return { ok: true, stats: pullResult.stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
