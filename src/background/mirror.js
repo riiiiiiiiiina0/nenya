@@ -94,6 +94,9 @@ const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_ROOT_FOLDER_NAME = 'Raindrop';
 const UNSORTED_TITLE = 'Unsorted';
 const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
+const RAINDROP_UNSORTED_URL = 'https://app.raindrop.io/my/-1';
+const BOOKMARK_MANAGER_URL_BASE = 'chrome://bookmarks/?id=';
+const NOTIFICATION_ICON_PATH = 'assets/icons/icon-128x128.png';
 const FETCH_PAGE_SIZE = 100;
 const DEFAULT_BADGE_ANIMATION_DELAY = 300;
 
@@ -102,6 +105,38 @@ let syncInProgress = false;
 let currentBadgeAnimationHandle = null;
 let badgeAnimationSequence = 0;
 let lastStartedBadgeToken = 0;
+/** @type {Map<string, string>} */
+const notificationLinks = new Map();
+
+if (chrome && chrome.notifications) {
+  chrome.notifications.onClicked.addListener((notificationId) => {
+    const targetUrl = notificationLinks.get(notificationId);
+    if (!targetUrl) {
+      return;
+    }
+
+    notificationLinks.delete(notificationId);
+
+    if (!chrome.tabs || typeof chrome.tabs.create !== 'function') {
+      return;
+    }
+
+    try {
+      const maybePromise = chrome.tabs.create({ url: targetUrl });
+      if (isPromiseLike(maybePromise)) {
+        void maybePromise.catch((error) => {
+          console.warn('[notifications] Failed to open tab for notification click:', error);
+        });
+      }
+    } catch (error) {
+      console.warn('[notifications] Failed to open tab for notification click:', error);
+    }
+  });
+
+  chrome.notifications.onClosed.addListener((notificationId) => {
+    notificationLinks.delete(notificationId);
+  });
+}
 
 /**
  * Update the extension action badge text.
@@ -235,6 +270,247 @@ function concludeActionBadge(handle, finalEmoji) {
 }
 
 /**
+ * Create a unique notification id.
+ * @param {string} prefix
+ * @returns {string}
+ */
+function createNotificationId(prefix) {
+  const base = typeof prefix === 'string' && prefix.trim().length > 0
+    ? prefix.trim()
+    : 'nenya';
+  const random = Math.random().toString(36).slice(2, 10);
+  return base + '-' + Date.now().toString(36) + '-' + random;
+}
+
+/**
+ * Resolve the notification icon URL.
+ * @returns {string}
+ */
+function getNotificationIconUrl() {
+  if (!chrome || !chrome.runtime || typeof chrome.runtime.getURL !== 'function') {
+    return NOTIFICATION_ICON_PATH;
+  }
+
+  try {
+    return chrome.runtime.getURL(NOTIFICATION_ICON_PATH);
+  } catch (error) {
+    console.warn('[notifications] Failed to resolve icon URL:', error);
+    return NOTIFICATION_ICON_PATH;
+  }
+}
+
+/**
+ * Create a Chrome notification.
+ * @param {string} prefix
+ * @param {string} title
+ * @param {string} message
+ * @param {string} [targetUrl]
+ * @param {string} [contextMessage]
+ * @returns {Promise<void>}
+ */
+async function pushNotification(prefix, title, message, targetUrl, contextMessage) {
+  if (!chrome || !chrome.notifications) {
+    return;
+  }
+
+  const safeTitle = typeof title === 'string' && title.trim().length > 0
+    ? title.trim()
+    : 'Nenya';
+  const safeMessage = typeof message === 'string' && message.trim().length > 0
+    ? message.trim()
+    : '';
+
+  if (safeMessage.length === 0) {
+    return;
+  }
+
+  const notificationId = createNotificationId(prefix);
+  /** @type {chrome.notifications.NotificationOptions} */
+  const options = {
+    type: 'basic',
+    iconUrl: getNotificationIconUrl(),
+    title: safeTitle,
+    message: safeMessage,
+    priority: 0
+  };
+
+  if (typeof contextMessage === 'string' && contextMessage.trim().length > 0) {
+    options.contextMessage = contextMessage.trim();
+  }
+
+  let created = false;
+
+  created = await new Promise((resolve) => {
+    try {
+      chrome.notifications.create(notificationId, options, () => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          console.warn('[notifications] Failed to create notification:', lastError.message);
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      });
+    } catch (error) {
+      console.warn('[notifications] Failed to create notification:', error);
+      resolve(false);
+    }
+  });
+
+  if (created && targetUrl) {
+    notificationLinks.set(notificationId, targetUrl);
+  }
+}
+
+/**
+ * Normalize notification message text.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function sanitizeNotificationMessage(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) {
+    return 'Unknown error.';
+  }
+  if (text.length <= 180) {
+    return text;
+  }
+  return text.slice(0, 177) + '...';
+}
+
+/**
+ * Format a count with a noun.
+ * @param {number} count
+ * @param {string} noun
+ * @returns {string}
+ */
+function formatCountLabel(count, noun) {
+  const safeCount = Number.isFinite(count) ? count : 0;
+  const baseNoun = noun.trim();
+  if (safeCount === 1) {
+    return safeCount + ' ' + baseNoun;
+  }
+  if (baseNoun.endsWith('y')) {
+    return safeCount + ' ' + baseNoun.slice(0, -1) + 'ies';
+  }
+  return safeCount + ' ' + baseNoun + 's';
+}
+
+const MIRROR_STAT_LABELS = {
+  foldersCreated: ['folder created', 'folders created'],
+  foldersRemoved: ['folder removed', 'folders removed'],
+  foldersMoved: ['folder moved', 'folders moved'],
+  bookmarksCreated: ['bookmark created', 'bookmarks created'],
+  bookmarksUpdated: ['bookmark updated', 'bookmarks updated'],
+  bookmarksMoved: ['bookmark moved', 'bookmarks moved'],
+  bookmarksDeleted: ['bookmark deleted', 'bookmarks deleted']
+};
+
+/**
+ * Summarize mirror changes for notifications.
+ * @param {MirrorStats} stats
+ * @returns {{ total: number, parts: string[] }}
+ */
+function summarizeMirrorStats(stats) {
+  let total = 0;
+  const parts = [];
+
+  for (const [key, labels] of Object.entries(MIRROR_STAT_LABELS)) {
+    const value = Number(stats?.[key]) || 0;
+    if (!Array.isArray(labels) || labels.length < 2) {
+      continue;
+    }
+    total += value;
+    if (value > 0) {
+      parts.push(value + ' ' + (value === 1 ? labels[0] : labels[1]));
+    }
+  }
+
+  return {
+    total,
+    parts
+  };
+}
+
+/**
+ * Notify about the result of saving URLs to Unsorted.
+ * @param {SaveUnsortedResult} summary
+ * @returns {Promise<void>}
+ */
+async function notifyUnsortedSaveOutcome(summary) {
+  if (!summary) {
+    return;
+  }
+
+  if (summary.ok) {
+    const createdCount = Number(summary.created || 0);
+    const updatedCount = Number(summary.updated || 0);
+    const savedCount = createdCount + updatedCount;
+    const title = 'Saved to Unsorted';
+    const message = 'Saved ' + savedCount + ' ' + (savedCount === 1 ? 'URL' : 'URLs') + ' to Raindrop Unsorted.';
+    const contextParts = [];
+
+    if (savedCount === 0) {
+      contextParts.push('All provided URLs were already saved.');
+    }
+
+    if (summary.skipped > 0) {
+      contextParts.push(formatCountLabel(summary.skipped, 'duplicate'));
+    }
+
+    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    await pushNotification('unsorted-success', title, message, RAINDROP_UNSORTED_URL, contextMessage);
+    return;
+  }
+
+  const reason = summary.error || (Array.isArray(summary.errors) ? summary.errors[0] : '') || 'Unknown error.';
+  await pushNotification(
+    'unsorted-failure',
+    'Failed to Save URLs',
+    sanitizeNotificationMessage(reason)
+  );
+}
+
+/**
+ * Notify about a successful mirror pull.
+ * @param {MirrorStats} stats
+ * @param {string} rootFolderId
+ * @returns {Promise<void>}
+ */
+async function notifyMirrorPullSuccess(stats, rootFolderId) {
+  if (!stats) {
+    return;
+  }
+
+  const summary = summarizeMirrorStats(stats);
+  const title = 'Raindrop Sync Complete';
+  const message = summary.total === 1
+    ? 'Pulled 1 change from Raindrop.'
+    : 'Pulled ' + summary.total + ' changes from Raindrop.';
+  const contextMessage = summary.parts.length > 0
+    ? summary.parts.join(', ')
+    : 'No structural changes detected.';
+  const targetUrl = typeof rootFolderId === 'string' && rootFolderId
+    ? BOOKMARK_MANAGER_URL_BASE + encodeURIComponent(rootFolderId)
+    : undefined;
+
+  await pushNotification('mirror-success', title, message, targetUrl, contextMessage);
+}
+
+/**
+ * Notify about a failed mirror pull.
+ * @param {string} message
+ * @returns {Promise<void>}
+ */
+async function notifyMirrorPullFailure(message) {
+  await pushNotification(
+    'mirror-failure',
+    'Raindrop Sync Failed',
+    sanitizeNotificationMessage(message)
+  );
+}
+
+/**
  * Read a numeric value from chrome.storage.local.
  * @param {string} key
  * @param {number} defaultValue
@@ -276,12 +552,14 @@ export async function runMirrorPull(trigger) {
   const badgeAnimation = animateActionBadge(['⬇️', '🔽']);
   let finalBadge = '❌';
   try {
-    const stats = await performMirrorPull(trigger);
+    const pullResult = await performMirrorPull(trigger);
     finalBadge = '✅';
-    return { ok: true, stats };
+    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId);
+    return { ok: true, stats: pullResult.stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     finalBadge = '❌';
+    void notifyMirrorPullFailure(message);
     return { ok: false, error: message };
   } finally {
     concludeActionBadge(badgeAnimation, finalBadge);
@@ -307,12 +585,14 @@ export async function resetAndPull() {
   try {
     const settingsData = await loadRootFolderSettings();
     await resetMirrorState(settingsData);
-    const stats = await performMirrorPull('reset');
+    const pullResult = await performMirrorPull('reset');
     finalBadge = '✅';
-    return { ok: true, stats };
+    void notifyMirrorPullSuccess(pullResult.stats, pullResult.rootFolderId);
+    return { ok: true, stats: pullResult.stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     finalBadge = '❌';
+    void notifyMirrorPullFailure(message);
     return { ok: false, error: message };
   } finally {
     concludeActionBadge(badgeAnimation, finalBadge);
@@ -337,11 +617,15 @@ export async function saveUrlsToUnsorted(entries) {
     total: 0,
     errors: []
   };
+  const finalize = () => {
+    void notifyUnsortedSaveOutcome(summary);
+    return summary;
+  };
 
   try {
     if (!Array.isArray(entries)) {
       summary.error = 'No URLs provided.';
-      return summary;
+      return finalize();
     }
 
     /** @type {SaveUnsortedEntry[]} */
@@ -377,7 +661,7 @@ export async function saveUrlsToUnsorted(entries) {
 
     if (sanitized.length === 0) {
       summary.error = 'No valid URLs to save.';
-      return summary;
+      return finalize();
     }
 
     let tokens;
@@ -385,12 +669,12 @@ export async function saveUrlsToUnsorted(entries) {
       tokens = await loadValidProviderTokens();
     } catch (error) {
       summary.error = error instanceof Error ? error.message : String(error);
-      return summary;
+      return finalize();
     }
 
     if (!tokens) {
       summary.error = 'No Raindrop connection found. Connect in Options to enable saving.';
-      return summary;
+      return finalize();
     }
 
     const dedupeResult = await filterExistingRaindropEntries(tokens, sanitized);
@@ -405,7 +689,7 @@ export async function saveUrlsToUnsorted(entries) {
       if (!summary.ok && !summary.error && summary.errors.length > 0) {
         summary.error = summary.errors[0];
       }
-      return summary;
+      return finalize();
     }
 
     const folders = await ensureUnsortedBookmarkFolder();
@@ -466,7 +750,15 @@ export async function saveUrlsToUnsorted(entries) {
       summary.error = summary.errors[0];
     }
 
-    return summary;
+    return finalize();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    if (!summary.errors.includes(message)) {
+      summary.errors.push(message);
+    }
+    finalize();
+    throw error;
   } finally {
     concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
   }
@@ -545,7 +837,7 @@ function escapeSearchValue(value) {
 /**
  * Execute the mirror pull steps.
  * @param {string} trigger
- * @returns {Promise<MirrorStats>}
+ * @returns {Promise<{ stats: MirrorStats, rootFolderId: string }>}
  */
 async function performMirrorPull(trigger) {
   console.info('[mirror] Starting Raindrop pull (trigger:', trigger + ')');
@@ -569,7 +861,10 @@ async function performMirrorPull(trigger) {
   await processUpdatedItems(tokens, mirrorContext, stats);
 
   console.info('[mirror] Raindrop pull complete with stats:', stats);
-  return stats;
+  return {
+    stats,
+    rootFolderId: mirrorContext.rootFolderId
+  };
 }
 
 /**
