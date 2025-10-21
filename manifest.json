@@ -27,6 +27,7 @@
     "bookmarks",
     "storage",
     "tabs",
+    "tabGroups",
     "notifications",
     "contextMenus",
     "alarms"

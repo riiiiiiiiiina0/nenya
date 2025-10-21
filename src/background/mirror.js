@@ -82,6 +82,53 @@
  */
 
 /**
+ * @typedef {Object} ProjectTabDescriptor
+ * @property {number} id
+ * @property {number} windowId
+ * @property {number} index
+ * @property {number} groupId
+ * @property {boolean} pinned
+ * @property {string} url
+ * @property {string} title
+ */
+
+/**
+ * @typedef {Object} ResolvedProjectTab
+ * @property {number} id
+ * @property {number} windowId
+ * @property {number} index
+ * @property {number} groupId
+ * @property {boolean} pinned
+ * @property {string} url
+ * @property {string} title
+ */
+
+/**
+ * @typedef {Object} ProjectGroupMetadata
+ * @property {string} name
+ * @property {string} color
+ * @property {number} index
+ * @property {number} windowId
+ */
+
+/**
+ * @typedef {Object} ProjectGroupContext
+ * @property {Map<number, ProjectGroupMetadata>} groupInfo
+ * @property {Map<number, number>} tabIndexById
+ */
+
+/**
+ * @typedef {Object} SaveProjectResult
+ * @property {boolean} ok
+ * @property {string} projectName
+ * @property {number} created
+ * @property {number} skipped
+ * @property {number} failed
+ * @property {string[]} errors
+ * @property {string} [error]
+ */
+
+/**
  * @typedef {Object} MirrorContext
  * @property {string} rootFolderId
  * @property {string} unsortedFolderId
@@ -106,6 +153,7 @@ const LOCAL_KEY_OLDEST_DELETED = 'OLDEST_DELETED_RAINDROP_ITEM';
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_ROOT_FOLDER_NAME = 'Raindrop';
 const UNSORTED_TITLE = 'Unsorted';
+const SAVED_PROJECTS_GROUP_TITLE = 'Saved projects';
 const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
 const RAINDROP_UNSORTED_URL = 'https://app.raindrop.io/my/-1';
 const BOOKMARK_MANAGER_URL_BASE = 'chrome://bookmarks/?id=';
@@ -909,6 +957,119 @@ export async function saveUrlsToUnsorted(entries) {
       } catch (error) {
         summary.failed += 1;
         summary.errors.push(entry.url + ': ' + (error instanceof Error ? error.message : String(error)));
+      }
+    }
+
+    summary.ok = summary.failed === 0;
+    if (!summary.ok && !summary.error && summary.errors.length > 0) {
+      summary.error = summary.errors[0];
+    }
+
+    return finalize();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    if (!summary.errors.includes(message)) {
+      summary.errors.push(message);
+    }
+    finalize();
+    throw error;
+  } finally {
+    concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
+  }
+}
+
+/**
+ * Save highlighted tabs (or the active tab) as a Raindrop project.
+ * @param {string} projectName
+ * @param {ProjectTabDescriptor[]} rawTabs
+ * @returns {Promise<SaveProjectResult>}
+ */
+export async function saveTabsAsProject(projectName, rawTabs) {
+  const badgeAnimation = animateActionBadge(['🗂️', '📁']);
+  /** @type {SaveProjectResult} */
+  const summary = {
+    ok: false,
+    projectName: normalizeProjectName(projectName) || 'project',
+    created: 0,
+    skipped: 0,
+    failed: 0,
+    errors: []
+  };
+
+  const finalize = () => summary;
+
+  try {
+    const normalizedName = normalizeProjectName(projectName);
+    if (!normalizedName) {
+      summary.error = 'Project name is required.';
+      return finalize();
+    }
+
+    summary.projectName = normalizedName;
+
+    const sanitized = sanitizeProjectTabDescriptors(rawTabs);
+    summary.skipped += sanitized.skipped;
+    if (sanitized.errors.length > 0) {
+      summary.errors.push(...sanitized.errors);
+    }
+
+    if (sanitized.tabs.length === 0) {
+      summary.error = 'No valid tabs to save.';
+      return finalize();
+    }
+
+    let tokens;
+    try {
+      tokens = await loadValidProviderTokens();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    if (!tokens) {
+      summary.error = 'No Raindrop connection found. Connect in Options to enable saving.';
+      return finalize();
+    }
+
+    const resolved = await resolveProjectTabs(sanitized.tabs);
+    summary.skipped += resolved.skipped;
+    if (resolved.errors.length > 0) {
+      summary.errors.push(...resolved.errors);
+    }
+
+    if (resolved.tabs.length === 0) {
+      summary.error = 'Selected tabs are no longer available.';
+      return finalize();
+    }
+
+    const groupContext = await buildProjectGroupContext(resolved.tabs);
+
+    const ensureResult = await ensureSavedProjectsGroup(tokens);
+    const collection = await createProjectCollection(tokens, normalizedName);
+    summary.projectName = collection.title;
+
+    await assignCollectionToGroup(tokens, ensureResult.groups, ensureResult.index, collection.id);
+
+    for (const tab of resolved.tabs) {
+      const itemPayload = buildProjectItemPayload(tab, groupContext, collection.id);
+      try {
+        await raindropRequest('/raindrop', tokens, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(itemPayload)
+        });
+        summary.created += 1;
+      } catch (error) {
+        summary.failed += 1;
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(tab.url + ': ' + message);
       }
     }
 
@@ -2209,6 +2370,490 @@ function normalizeHttpUrl(value) {
   } catch (error) {
     return undefined;
   }
+}
+
+/**
+ * Normalize a project name to a trimmed string.
+ * @param {unknown} value
+ * @returns {string}
+ */
+function normalizeProjectName(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed;
+}
+
+/**
+ * Sanitize raw project tab descriptors from the popup.
+ * @param {ProjectTabDescriptor[]} rawTabs
+ * @returns {{ tabs: ProjectTabDescriptor[], skipped: number, errors: string[] }}
+ */
+function sanitizeProjectTabDescriptors(rawTabs) {
+  const tabs = [];
+  let skipped = 0;
+  /** @type {string[]} */
+  const errors = [];
+  /** @type {Set<string>} */
+  const seenUrls = new Set();
+  const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+  const defaultWindowId = chrome.windows?.WINDOW_ID_NONE ?? -1;
+
+  if (!Array.isArray(rawTabs)) {
+    return { tabs, skipped, errors };
+  }
+
+  rawTabs.forEach((entry, index) => {
+    const id = Number(entry?.id);
+    if (!Number.isFinite(id) || id < 0) {
+      skipped += 1;
+      errors.push('Entry at index ' + index + ' is missing a valid tab id.');
+      return;
+    }
+
+    const normalizedUrl = normalizeHttpUrl(entry?.url);
+    if (!normalizedUrl) {
+      skipped += 1;
+      errors.push('Tab ' + id + ' has an unsupported URL.');
+      return;
+    }
+
+    if (seenUrls.has(normalizedUrl)) {
+      skipped += 1;
+      return;
+    }
+    seenUrls.add(normalizedUrl);
+
+    tabs.push({
+      id,
+      windowId: Number.isFinite(entry?.windowId) ? Number(entry.windowId) : defaultWindowId,
+      index: Number.isFinite(entry?.index) ? Number(entry.index) : -1,
+      groupId: Number.isFinite(entry?.groupId) ? Number(entry.groupId) : noneGroupId,
+      pinned: Boolean(entry?.pinned),
+      url: normalizedUrl,
+      title: typeof entry?.title === 'string' ? entry.title : ''
+    });
+  });
+
+  return { tabs, skipped, errors };
+}
+
+/**
+ * Resolve current tab state for project saving.
+ * @param {ProjectTabDescriptor[]} descriptors
+ * @returns {Promise<{ tabs: ResolvedProjectTab[], skipped: number, errors: string[] }>}
+ */
+async function resolveProjectTabs(descriptors) {
+  const results = [];
+  let skipped = 0;
+  /** @type {string[]} */
+  const errors = [];
+
+  if (!Array.isArray(descriptors) || descriptors.length === 0) {
+    return { tabs: results, skipped, errors };
+  }
+
+  if (!chrome.tabs || typeof chrome.tabs.get !== 'function') {
+    descriptors.forEach((descriptor) => {
+      results.push({
+        id: descriptor.id,
+        windowId: descriptor.windowId,
+        index: descriptor.index,
+        groupId: descriptor.groupId,
+        pinned: descriptor.pinned,
+        url: descriptor.url,
+        title: descriptor.title
+      });
+    });
+    return { tabs: results, skipped, errors };
+  }
+
+  for (const descriptor of descriptors) {
+    try {
+      const tab = await tabsGet(descriptor.id);
+      const normalizedUrl = normalizeHttpUrl(tab?.url ?? descriptor.url);
+      if (!normalizedUrl) {
+        skipped += 1;
+        continue;
+      }
+
+      const title = typeof tab?.title === 'string' ? tab.title : descriptor.title;
+      results.push({
+        id: descriptor.id,
+        windowId: Number.isFinite(tab?.windowId) ? Number(tab.windowId) : descriptor.windowId,
+        index: Number.isFinite(tab?.index) ? Number(tab.index) : descriptor.index,
+        groupId: Number.isFinite(tab?.groupId) ? Number(tab.groupId) : descriptor.groupId,
+        pinned: Boolean(tab?.pinned ?? descriptor.pinned),
+        url: normalizedUrl,
+        title: typeof title === 'string' ? title : ''
+      });
+    } catch (error) {
+      skipped += 1;
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push('Tab ' + descriptor.id + ': ' + message);
+    }
+  }
+
+  return { tabs: results, skipped, errors };
+}
+
+/**
+ * Build metadata context for project tabs grouped by tab group.
+ * @param {ResolvedProjectTab[]} tabs
+ * @returns {Promise<ProjectGroupContext>}
+ */
+async function buildProjectGroupContext(tabs) {
+  /** @type {ProjectGroupContext} */
+  const context = {
+    groupInfo: new Map(),
+    tabIndexById: new Map()
+  };
+
+  if (!Array.isArray(tabs) || tabs.length === 0) {
+    return context;
+  }
+
+  const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+
+  const groupIds = new Set();
+  tabs.forEach((tab) => {
+    if (typeof tab.groupId === 'number' && tab.groupId !== noneGroupId) {
+      groupIds.add(tab.groupId);
+    }
+  });
+
+  if (!chrome.tabGroups || typeof chrome.tabGroups.get !== 'function') {
+    tabs.forEach((tab) => {
+      context.tabIndexById.set(tab.id, tab.index);
+    });
+    return context;
+  }
+
+  for (const groupId of groupIds) {
+    try {
+      const group = await tabGroupsGet(groupId);
+      const groupTitle = normalizeFolderTitle(group?.title, 'Tab group');
+      const groupColor = typeof group?.color === 'string' && group.color ? group.color : 'grey';
+      let groupIndex = Number.POSITIVE_INFINITY;
+      /** @type {chrome.tabs.Tab[]} */
+      let groupTabs = [];
+
+      try {
+        groupTabs = await tabsQuery({ groupId });
+      } catch (error) {
+        groupTabs = [];
+      }
+
+      groupTabs.sort((a, b) => {
+        const indexA = Number.isFinite(a.index) ? Number(a.index) : 0;
+        const indexB = Number.isFinite(b.index) ? Number(b.index) : 0;
+        return indexA - indexB;
+      });
+
+      groupTabs.forEach((tab, idx) => {
+        if (typeof tab.id === 'number') {
+          context.tabIndexById.set(tab.id, idx);
+        }
+        if (Number.isFinite(tab.index)) {
+          groupIndex = Math.min(groupIndex, Number(tab.index));
+        }
+      });
+
+      if (!Number.isFinite(groupIndex)) {
+        const localFallback = tabs
+          .filter((tab) => tab.groupId === groupId)
+          .reduce((min, tab) => Math.min(min, Number(tab.index)), Number.POSITIVE_INFINITY);
+        groupIndex = Number.isFinite(localFallback) ? localFallback : 0;
+      }
+
+      context.groupInfo.set(groupId, {
+        name: groupTitle,
+        color: groupColor,
+        index: Number.isFinite(groupIndex) ? Number(groupIndex) : 0,
+        windowId: Number(group?.windowId ?? chrome.windows?.WINDOW_ID_NONE ?? -1)
+      });
+    } catch (error) {
+      // Ignore failures and fall back to basic index tracking.
+    }
+  }
+
+  tabs.forEach((tab) => {
+    if (!context.tabIndexById.has(tab.id)) {
+      context.tabIndexById.set(tab.id, Number.isFinite(tab.index) ? Number(tab.index) : 0);
+    }
+  });
+
+  return context;
+}
+
+/**
+ * Ensure the Saved projects group exists and return its index.
+ * @param {StoredProviderTokens} tokens
+ * @returns {Promise<{ groups: any[], index: number }>}
+ */
+async function ensureSavedProjectsGroup(tokens) {
+  const userData = await raindropRequest('/user', tokens);
+  const groups = Array.isArray(userData?.user?.groups) ? [...userData.user.groups] : [];
+
+  const matchIndex = groups.findIndex((group) => {
+    const title = typeof group?.title === 'string' ? group.title : '';
+    return title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase();
+  });
+
+  if (matchIndex >= 0) {
+    return { groups, index: matchIndex };
+  }
+
+  let maxSort = -1;
+  groups.forEach((group) => {
+    const sortValue = Number(group?.sort);
+    if (Number.isFinite(sortValue)) {
+      maxSort = Math.max(maxSort, sortValue);
+    }
+  });
+
+  const newGroup = {
+    title: SAVED_PROJECTS_GROUP_TITLE,
+    hidden: false,
+    sort: maxSort + 1,
+    collections: []
+  };
+
+  groups.push(newGroup);
+  const updatedGroups = await updateUserGroups(tokens, groups);
+
+  const updatedIndex = updatedGroups.findIndex((group) => {
+    const title = typeof group?.title === 'string' ? group.title : '';
+    return title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase();
+  });
+
+  return {
+    groups: updatedGroups,
+    index: updatedIndex >= 0 ? updatedIndex : updatedGroups.length - 1
+  };
+}
+
+/**
+ * Create a new Raindrop collection for the project.
+ * @param {StoredProviderTokens} tokens
+ * @param {string} projectName
+ * @returns {Promise<{ id: number, title: string }>}
+ */
+async function createProjectCollection(tokens, projectName) {
+  const payload = {
+    title: projectName,
+    view: 'list',
+    public: false,
+    sort: Date.now()
+  };
+
+  const response = await raindropRequest('/collection', tokens, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const item = response?.item;
+  const id = Number(item?._id ?? item?.id);
+  if (!Number.isFinite(id)) {
+    throw new Error('Failed to create Raindrop collection for project.');
+  }
+
+  const title = normalizeFolderTitle(item?.title, projectName);
+  return {
+    id,
+    title
+  };
+}
+
+/**
+ * Ensure the new collection is listed under the Saved projects group.
+ * @param {StoredProviderTokens} tokens
+ * @param {any[]} groups
+ * @param {number} index
+ * @param {number} collectionId
+ * @returns {Promise<void>}
+ */
+async function assignCollectionToGroup(tokens, groups, index, collectionId) {
+  if (!Array.isArray(groups) || groups.length === 0) {
+    return;
+  }
+  const normalizedId = Number(collectionId);
+  if (!Number.isFinite(normalizedId)) {
+    throw new Error('Invalid collection id.');
+  }
+
+  if (index < 0 || index >= groups.length) {
+    return;
+  }
+
+  const updatedGroups = groups.map((group, groupIndex) => {
+    if (groupIndex !== index) {
+      if (!group || typeof group !== 'object') {
+        return group;
+      }
+      const clone = { ...group };
+      if (Array.isArray(group?.collections)) {
+        clone.collections = [...group.collections];
+      }
+      return clone;
+    }
+
+    const clone = { ...group };
+    const collections = Array.isArray(group?.collections) ? [...group.collections] : [];
+    const filtered = collections.filter((value) => Number(value) !== normalizedId);
+    filtered.unshift(normalizedId);
+    clone.collections = filtered;
+    return clone;
+  });
+
+  const originalCollections = Array.isArray(groups[index]?.collections) ? groups[index].collections : [];
+  if (
+    originalCollections.length > 0 &&
+    Number(originalCollections[0]) === normalizedId &&
+    originalCollections.length === updatedGroups[index].collections.length
+  ) {
+    return;
+  }
+
+  await updateUserGroups(tokens, updatedGroups);
+}
+
+/**
+ * Build the Raindrop item payload for a project tab.
+ * @param {ResolvedProjectTab} tab
+ * @param {ProjectGroupContext} context
+ * @param {number} collectionId
+ * @returns {{ link: string, title: string, collectionId: number, pleaseParse: {}, excerpt: string }}
+ */
+function buildProjectItemPayload(tab, context, collectionId) {
+  const relativeIndex = context.tabIndexById.get(tab.id);
+  const tabIndex = Number.isFinite(relativeIndex) ? Number(relativeIndex) : Number(tab.index);
+  const metadata = {
+    tab: {
+      index: Number.isFinite(tabIndex) ? tabIndex : 0,
+      pinned: Boolean(tab.pinned)
+    }
+  };
+
+  const groupInfo = context.groupInfo.get(tab.groupId);
+  if (groupInfo) {
+    metadata.group = {
+      name: groupInfo.name,
+      color: groupInfo.color,
+      index: groupInfo.index
+    };
+  }
+
+  return {
+    link: tab.url,
+    title: normalizeBookmarkTitle(tab.title, tab.url),
+    collectionId,
+    pleaseParse: {},
+    excerpt: JSON.stringify(metadata)
+  };
+}
+
+/**
+ * Update the user's Raindrop groups ordering.
+ * @param {StoredProviderTokens} tokens
+ * @param {any[]} groups
+ * @returns {Promise<any[]>}
+ */
+async function updateUserGroups(tokens, groups) {
+  const response = await raindropRequest('/user', tokens, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ groups })
+  });
+  return Array.isArray(response?.user?.groups) ? response.user.groups : groups;
+}
+
+/**
+ * Promise wrapper for chrome.tabs.get.
+ * @param {number} tabId
+ * @returns {Promise<chrome.tabs.Tab>}
+ */
+async function tabsGet(tabId) {
+  try {
+    const maybe = chrome.tabs.get(tabId);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.get(tabId, (tab) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabs.query.
+ * @param {chrome.tabs.QueryInfo} queryInfo
+ * @returns {Promise<chrome.tabs.Tab[]>}
+ */
+async function tabsQuery(queryInfo) {
+  try {
+    const maybe = chrome.tabs.query(queryInfo);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.query(queryInfo, (tabs) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(tabs);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabGroups.get.
+ * @param {number} groupId
+ * @returns {Promise<chrome.tabGroups.TabGroup>}
+ */
+async function tabGroupsGet(groupId) {
+  if (!chrome.tabGroups || typeof chrome.tabGroups.get !== 'function') {
+    throw new Error('Tab groups API unavailable.');
+  }
+
+  try {
+    const maybe = chrome.tabGroups.get(groupId);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabGroups.get(groupId, (group) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(group);
+    });
+  });
 }
 
 /**

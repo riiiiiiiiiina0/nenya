@@ -4,6 +4,7 @@ import '../options/theme.js';
 
 const pullButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('pullButton'));
 const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('saveUnsortedButton'));
+const saveProjectButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('saveProjectButton'));
 const openOptionsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('openOptionsButton'));
 const statusMessage = /** @type {HTMLDivElement | null} */ (document.getElementById('statusMessage'));
 
@@ -127,6 +128,14 @@ if (saveUnsortedButton) {
   });
 } else {
   console.error('[popup] Save button not found.');
+}
+
+if (saveProjectButton) {
+  saveProjectButton.addEventListener('click', () => {
+    void handleSaveProject();
+  });
+} else {
+  console.error('[popup] Save project button not found.');
 }
 
 if (!statusMessage) {
@@ -285,6 +294,208 @@ function handleSaveResponse(response) {
   const fragments = [];
 
   fragments.push(savedCount + ' tab(s) saved');
+  if (skipped > 0) {
+    fragments.push(skipped + ' skipped');
+  }
+  if (failed > 0) {
+    fragments.push(failed + ' failed');
+  }
+
+  const message = fragments.join('. ') + '.';
+
+  if (response.ok) {
+    setStatus(message, 'success');
+    return;
+  }
+
+  const errorText = typeof response.error === 'string' ? response.error : message;
+  setStatus(errorText, 'error');
+}
+
+/**
+ * Handle the save project action from the popup.
+ * @returns {Promise<void>}
+ */
+async function handleSaveProject() {
+  if (!saveProjectButton) {
+    return;
+  }
+
+  saveProjectButton.disabled = true;
+  setStatus('Preparing project save...', 'info');
+
+  try {
+    const tabs = await collectSavableTabs();
+    if (tabs.length === 0) {
+      setStatus('No highlighted or active tabs available to save.', 'info');
+      return;
+    }
+
+    const defaultName = await deriveDefaultProjectName(tabs[0]);
+    const input = window.prompt('Project name', defaultName);
+    if (input === null) {
+      setStatus('Project save canceled.', 'info');
+      return;
+    }
+
+    const projectName = input.trim();
+    if (!projectName) {
+      setStatus('Project name is required.', 'error');
+      return;
+    }
+
+    const descriptors = buildProjectTabDescriptors(tabs);
+    if (descriptors.length === 0) {
+      setStatus('No valid tab URLs to save.', 'info');
+      return;
+    }
+
+    setStatus('Saving project...', 'info');
+    const response = await sendRuntimeMessage({
+      type: 'mirror:saveProject',
+      projectName,
+      tabs: descriptors
+    });
+
+    handleSaveProjectResponse(response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setStatus(message, 'error');
+  } finally {
+    saveProjectButton.disabled = false;
+  }
+}
+
+/**
+ * @typedef {Object} ProjectTabDescriptor
+ * @property {number} id
+ * @property {number} windowId
+ * @property {number} index
+ * @property {number} groupId
+ * @property {boolean} pinned
+ * @property {string} url
+ * @property {string} title
+ */
+
+/**
+ * Build normalized tab descriptors for project saves.
+ * @param {chrome.tabs.Tab[]} tabs
+ * @returns {ProjectTabDescriptor[]}
+ */
+function buildProjectTabDescriptors(tabs) {
+  /** @type {ProjectTabDescriptor[]} */
+  const descriptors = [];
+  const seen = new Set();
+
+  tabs.forEach((tab) => {
+    if (!tab || typeof tab.id !== 'number' || !tab.url) {
+      return;
+    }
+
+    const normalizedUrl = normalizeUrlForSave(tab.url);
+    if (!normalizedUrl || seen.has(normalizedUrl)) {
+      return;
+    }
+    seen.add(normalizedUrl);
+
+    descriptors.push({
+      id: tab.id,
+      windowId: typeof tab.windowId === 'number' ? tab.windowId : chrome.windows.WINDOW_ID_NONE,
+      index: typeof tab.index === 'number' ? tab.index : -1,
+      groupId: typeof tab.groupId === 'number' ? tab.groupId : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1,
+      pinned: Boolean(tab.pinned),
+      url: normalizedUrl,
+      title: typeof tab.title === 'string' ? tab.title : ''
+    });
+  });
+
+  return descriptors;
+}
+
+/**
+ * Compute the default project name from the first tab.
+ * @param {chrome.tabs.Tab} tab
+ * @returns {Promise<string>}
+ */
+async function deriveDefaultProjectName(tab) {
+  const fallback = typeof tab.title === 'string' && tab.title.trim()
+    ? tab.title.trim()
+    : (typeof tab.url === 'string' ? safeHostname(tab.url) : '') || 'New project';
+
+  if (!chrome.tabGroups || typeof chrome.tabGroups.get !== 'function') {
+    return fallback;
+  }
+
+  const groupId = typeof tab.groupId === 'number' ? tab.groupId : -1;
+  if (groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+    return fallback;
+  }
+
+  try {
+    const group = await getTabGroup(groupId);
+    const title = typeof group?.title === 'string' && group.title.trim() ? group.title.trim() : '';
+    return title || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Get tab group details with promise semantics.
+ * @param {number} groupId
+ * @returns {Promise<chrome.tabGroups.TabGroup>}
+ */
+function getTabGroup(groupId) {
+  return new Promise((resolve, reject) => {
+    if (!chrome.tabGroups || typeof chrome.tabGroups.get !== 'function') {
+      reject(new Error('Tab groups unavailable'));
+      return;
+    }
+
+    chrome.tabGroups.get(groupId, (group) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(group);
+    });
+  });
+}
+
+/**
+ * Extract hostname for fallback naming.
+ * @param {string} url
+ * @returns {string}
+ */
+function safeHostname(url) {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Update popup status based on a save project response.
+ * @param {any} response
+ * @returns {void}
+ */
+function handleSaveProjectResponse(response) {
+  if (!response || typeof response !== 'object') {
+    setStatus('Project save failed. Please try again.', 'error');
+    return;
+  }
+
+  const projectName = typeof response.projectName === 'string' && response.projectName
+    ? response.projectName
+    : 'project';
+  const created = Number(response.created) || 0;
+  const skipped = Number(response.skipped) || 0;
+  const failed = Number(response.failed) || 0;
+
+  const fragments = [];
+  fragments.push(created + ' tab(s) saved to ' + projectName);
   if (skipped > 0) {
     fragments.push(skipped + ' skipped');
   }
