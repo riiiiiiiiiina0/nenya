@@ -14,11 +14,14 @@
 </head>
 
 <body class="bg-base-200">
+  <div class="navbar bg-base-100 shadow-sm">
+    <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
+  </div>
   <main class="min-h-screen flex items-center justify-center p-6">
     <section class="card w-full max-w-xl bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
       <div class="card-body gap-6">
         <header class="space-y-2">
-          <h1 id="mirror-heading" class="card-title text-3xl">Mirror Cloud Bookmarks</h1>
+          <h1 id="mirror-heading" class="card-title text-3xl">🔖 Mirror Cloud Bookmarks</h1>
           <p class="text-base-content/70">Select a cloud bookmarks provider to connect your account.</p>
         </header>
         <div class="space-y-6">
@@ -55,27 +58,27 @@
             </button>
           </div>
         </div>
-          <div class="card-actions justify-between items-center gap-3 flex-wrap">
-            <div class="flex gap-3">
-              <button id="connectButton" class="btn btn-primary" type="button" hidden>
-                Connect
-              </button>
-              <button id="disconnectButton" class="btn btn-outline" type="button" hidden>
-                Logout
-              </button>
-            </div>
-            <div class="flex gap-3">
-              <button id="pullMirrorButton" class="btn btn-accent" type="button" hidden>
-                Pull now
-              </button>
-              <button id="resetMirrorButton" class="btn btn-secondary" type="button" hidden>
-                Reset &amp; Re-pull
-              </button>
-            </div>
+        <div class="card-actions justify-between items-center gap-3 flex-wrap">
+          <div class="flex gap-3">
+            <button id="connectButton" class="btn btn-primary" type="button" hidden>
+              Connect
+            </button>
+            <button id="disconnectButton" class="btn btn-outline" type="button" hidden>
+              Logout
+            </button>
+          </div>
+          <div class="flex gap-3">
+            <button id="pullMirrorButton" class="btn btn-accent" type="button" hidden>
+              Pull now
+            </button>
+            <button id="resetMirrorButton" class="btn btn-secondary" type="button" hidden>
+              Reset &amp; Re-pull
+            </button>
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+    </section>
+  </main>
   <script src="./options.js" type="module"></script>
 </body>
 
