@@ -45,8 +45,11 @@
 
 ## Save to Unsorted
 
-- Call the Raindrop API to save the URL to the Unsorted collection (collection id `-1`) with `pleaseParse = {}`.
+- Call the Raindrop API to save URL(s) to the Unsorted collection (collection id `-1`) with `pleaseParse = {}`.
 - Create the corresponding bookmark entry under `Raindrop/Unsorted`.
+- When triggered from popup page, save urls of higlighted tabs or current active tabs.
+- When triggered from context menu over a page, save the page's url.
+- When triggered from context menu over a link, save the link's url.
 
 ## Saved Projects
 

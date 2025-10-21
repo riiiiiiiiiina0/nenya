@@ -51,11 +51,35 @@
  */
 
 /**
+ * @typedef {Object} SaveUnsortedEntry
+ * @property {string} url
+ * @property {string} [title]
+ */
+
+/**
+ * @typedef {Object} SaveUnsortedResult
+ * @property {boolean} ok
+ * @property {number} created
+ * @property {number} updated
+ * @property {number} skipped
+ * @property {number} failed
+ * @property {number} total
+ * @property {string[]} errors
+ * @property {string} [error]
+ */
+
+/**
  * @typedef {Object} MirrorContext
  * @property {string} rootFolderId
  * @property {string} unsortedFolderId
  * @property {Map<number, string>} collectionFolderMap
  * @property {BookmarkNodeIndex} index
+ */
+
+/**
+ * @typedef {Object} BadgeAnimationHandle
+ * @property {() => void} stop
+ * @property {number} token
  */
 
 export const MIRROR_ALARM_NAME = 'nenya-raindrop-mirror-pull';
@@ -71,8 +95,144 @@ const DEFAULT_ROOT_FOLDER_NAME = 'Raindrop';
 const UNSORTED_TITLE = 'Unsorted';
 const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
 const FETCH_PAGE_SIZE = 100;
+const DEFAULT_BADGE_ANIMATION_DELAY = 300;
 
 let syncInProgress = false;
+/** @type {BadgeAnimationHandle | null} */
+let currentBadgeAnimationHandle = null;
+let badgeAnimationSequence = 0;
+let lastStartedBadgeToken = 0;
+
+/**
+ * Update the extension action badge text.
+ * @param {string} text
+ * @returns {void}
+ */
+function setActionBadgeText(text) {
+  if (!chrome?.action) {
+    return;
+  }
+
+  const badgeText = typeof text === 'string' ? text : '';
+
+  try {
+    const maybePromise = chrome.action.setBadgeText({ text: badgeText });
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      void maybePromise.catch((error) => {
+        console.warn('[badge] Failed to set badge text:', error);
+      });
+    }
+  } catch (error) {
+    console.warn('[badge] Failed to set badge text:', error);
+  }
+}
+
+/**
+ * Animate the extension action badge with emoji frames.
+ * @param {string[]} emojis
+ * @param {number} [delayMs=DEFAULT_BADGE_ANIMATION_DELAY]
+ * @returns {BadgeAnimationHandle}
+ */
+export function animateActionBadge(emojis, delayMs = DEFAULT_BADGE_ANIMATION_DELAY) {
+  badgeAnimationSequence += 1;
+  const token = badgeAnimationSequence;
+
+  if (currentBadgeAnimationHandle) {
+    currentBadgeAnimationHandle.stop();
+    currentBadgeAnimationHandle = null;
+  }
+
+  lastStartedBadgeToken = token;
+
+  /** @type {number | null} */
+  let intervalId = null;
+
+  /** @type {BadgeAnimationHandle} */
+  const handle = {
+    token,
+    stop: () => {
+      if (intervalId !== null) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      if (currentBadgeAnimationHandle && currentBadgeAnimationHandle.token === token) {
+        currentBadgeAnimationHandle = null;
+      }
+      setActionBadgeText('');
+    }
+  };
+
+  if (!chrome?.action || !Array.isArray(emojis)) {
+    return handle;
+  }
+
+  const frames = emojis.map((emoji) => {
+    if (typeof emoji !== 'string') {
+      return '';
+    }
+    const trimmed = emoji.trim();
+    return trimmed;
+  }).filter((emoji) => emoji.length > 0);
+
+  if (frames.length === 0) {
+    return handle;
+  }
+
+  const computedDelay = Number(delayMs);
+  const frameDelay = Number.isFinite(computedDelay) && computedDelay > 0
+    ? computedDelay
+    : DEFAULT_BADGE_ANIMATION_DELAY;
+
+  let frameIndex = 0;
+
+  const tick = () => {
+    const nextText = frames[frameIndex];
+    frameIndex = (frameIndex + 1) % frames.length;
+    setActionBadgeText(nextText);
+  };
+
+  tick();
+  intervalId = setInterval(tick, frameDelay);
+  currentBadgeAnimationHandle = handle;
+
+  return handle;
+}
+
+/**
+ * Stop a badge animation and optionally show a final emoji if this is the latest started animation.
+ * @param {BadgeAnimationHandle} handle
+ * @param {string} finalEmoji
+ * @returns {void}
+ */
+function concludeActionBadge(handle, finalEmoji) {
+  if (!handle) {
+    return;
+  }
+
+  badgeAnimationSequence += 1;
+  const clearToken = badgeAnimationSequence;
+
+  const isCurrent = Boolean(
+    currentBadgeAnimationHandle &&
+    currentBadgeAnimationHandle.token === handle.token
+  );
+  const isLatestStart = handle.token === lastStartedBadgeToken;
+  if (isCurrent) {
+    handle.stop();
+  }
+  if (!isLatestStart) {
+    return;
+  }
+
+  setActionBadgeText(finalEmoji);
+
+  setTimeout(() => {
+    if (badgeAnimationSequence !== clearToken) {
+      return;
+    }
+    setActionBadgeText('');
+  }, 2000);
+}
 
 /**
  * Read a numeric value from chrome.storage.local.
@@ -113,13 +273,18 @@ export async function runMirrorPull(trigger) {
   }
 
   syncInProgress = true;
+  const badgeAnimation = animateActionBadge(['⬇️', '🔽']);
+  let finalBadge = '❌';
   try {
     const stats = await performMirrorPull(trigger);
+    finalBadge = '✅';
     return { ok: true, stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    finalBadge = '❌';
     return { ok: false, error: message };
   } finally {
+    concludeActionBadge(badgeAnimation, finalBadge);
     syncInProgress = false;
   }
 }
@@ -137,17 +302,244 @@ export async function resetAndPull() {
   }
 
   syncInProgress = true;
+  const badgeAnimation = animateActionBadge(['⬇️', '🔽']);
+  let finalBadge = '❌';
   try {
     const settingsData = await loadRootFolderSettings();
     await resetMirrorState(settingsData);
     const stats = await performMirrorPull('reset');
+    finalBadge = '✅';
     return { ok: true, stats };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    finalBadge = '❌';
     return { ok: false, error: message };
   } finally {
+    concludeActionBadge(badgeAnimation, finalBadge);
     syncInProgress = false;
   }
+}
+
+/**
+ * Save URLs to the Raindrop Unsorted collection and mirror them as bookmarks.
+ * @param {SaveUnsortedEntry[]} entries
+ * @returns {Promise<SaveUnsortedResult>}
+ */
+export async function saveUrlsToUnsorted(entries) {
+  const badgeAnimation = animateActionBadge(['⬆️', '🔼']);
+  /** @type {SaveUnsortedResult} */
+  const summary = {
+    ok: false,
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    failed: 0,
+    total: 0,
+    errors: []
+  };
+
+  try {
+    if (!Array.isArray(entries)) {
+      summary.error = 'No URLs provided.';
+      return summary;
+    }
+
+    /** @type {SaveUnsortedEntry[]} */
+    const sanitized = [];
+    const seenUrls = new Set();
+
+    for (const entry of entries) {
+      const rawUrl = typeof entry?.url === 'string' ? entry.url.trim() : '';
+      if (!rawUrl) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      const normalizedUrl = normalizeHttpUrl(rawUrl);
+      if (!normalizedUrl) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      if (seenUrls.has(normalizedUrl)) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      seenUrls.add(normalizedUrl);
+      sanitized.push({
+        url: normalizedUrl,
+        title: typeof entry?.title === 'string' ? entry.title.trim() : ''
+      });
+    }
+
+    summary.total = sanitized.length;
+
+    if (sanitized.length === 0) {
+      summary.error = 'No valid URLs to save.';
+      return summary;
+    }
+
+    let tokens;
+    try {
+      tokens = await loadValidProviderTokens();
+    } catch (error) {
+      summary.error = error instanceof Error ? error.message : String(error);
+      return summary;
+    }
+
+    if (!tokens) {
+      summary.error = 'No Raindrop connection found. Connect in Options to enable saving.';
+      return summary;
+    }
+
+    const dedupeResult = await filterExistingRaindropEntries(tokens, sanitized);
+    summary.skipped += dedupeResult.skipped;
+    summary.failed += dedupeResult.failed;
+    if (dedupeResult.errors.length > 0) {
+      summary.errors.push(...dedupeResult.errors);
+    }
+
+    if (dedupeResult.entries.length === 0) {
+      summary.ok = summary.failed === 0;
+      if (!summary.ok && !summary.error && summary.errors.length > 0) {
+        summary.error = summary.errors[0];
+      }
+      return summary;
+    }
+
+    const folders = await ensureUnsortedBookmarkFolder();
+    const children = await bookmarksGetChildren(folders.unsortedId);
+    /** @type {Map<string, chrome.bookmarks.BookmarkTreeNode>} */
+    const bookmarkByUrl = new Map();
+    children.forEach((child) => {
+      if (child.url) {
+        bookmarkByUrl.set(child.url, child);
+      }
+    });
+
+    for (const entry of dedupeResult.entries) {
+      try {
+        const response = await raindropRequest('/raindrop', tokens, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            link: entry.url,
+            collectionId: -1,
+            pleaseParse: {}
+          })
+        });
+
+        const itemTitle = typeof response?.item?.title === 'string' ? response.item.title : '';
+        const bookmarkTitle = normalizeBookmarkTitle(itemTitle || entry.title, entry.url);
+
+        const existing = bookmarkByUrl.get(entry.url);
+        if (existing) {
+          const currentTitle = normalizeBookmarkTitle(existing.title, entry.url);
+          if (currentTitle !== bookmarkTitle) {
+            const updatedNode = await bookmarksUpdate(existing.id, { title: bookmarkTitle });
+            bookmarkByUrl.set(entry.url, updatedNode);
+            summary.updated += 1;
+          } else {
+            summary.skipped += 1;
+          }
+          continue;
+        }
+
+        const createdNode = await bookmarksCreate({
+          parentId: folders.unsortedId,
+          title: bookmarkTitle,
+          url: entry.url
+        });
+        bookmarkByUrl.set(entry.url, createdNode);
+        summary.created += 1;
+      } catch (error) {
+        summary.failed += 1;
+        summary.errors.push(entry.url + ': ' + (error instanceof Error ? error.message : String(error)));
+      }
+    }
+
+    summary.ok = summary.failed === 0;
+    if (!summary.ok && !summary.error && summary.errors.length > 0) {
+      summary.error = summary.errors[0];
+    }
+
+    return summary;
+  } finally {
+    concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
+  }
+}
+
+/**
+ * Filter entries that already exist in Raindrop.
+ * @param {StoredProviderTokens} tokens
+ * @param {SaveUnsortedEntry[]} entries
+ * @returns {Promise<{ entries: SaveUnsortedEntry[], skipped: number, failed: number, errors: string[] }>}
+ */
+async function filterExistingRaindropEntries(tokens, entries) {
+  /** @type {SaveUnsortedEntry[]} */
+  const filtered = [];
+  let skipped = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (const entry of entries) {
+    try {
+      const exists = await doesRaindropItemExist(tokens, entry.url);
+      if (exists) {
+        skipped += 1;
+        continue;
+      }
+      filtered.push(entry);
+    } catch (error) {
+      failed += 1;
+      errors.push(entry.url + ': ' + (error instanceof Error ? error.message : String(error)));
+    }
+  }
+
+  return {
+    entries: filtered,
+    skipped,
+    failed,
+    errors
+  };
+}
+
+/**
+ * Determine whether a Raindrop item already exists for the provided URL.
+ * @param {StoredProviderTokens} tokens
+ * @param {string} url
+ * @returns {Promise<boolean>}
+ */
+async function doesRaindropItemExist(tokens, url) {
+  const normalized = normalizeHttpUrl(url);
+  if (!normalized) {
+    return false;
+  }
+
+  const params = new URLSearchParams({
+    perpage: '1',
+    page: '0',
+    search: 'link:"' + escapeSearchValue(normalized) + '"'
+  });
+
+  const data = await raindropRequest('/raindrops/0?' + params.toString(), tokens);
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.some((item) => {
+    const itemUrl = typeof item?.link === 'string' ? item.link : '';
+    return normalizeHttpUrl(itemUrl) === normalized;
+  });
+}
+
+/**
+ * Escape a string for inclusion in a Raindrop search query.
+ * @param {string} value
+ * @returns {string}
+ */
+function escapeSearchValue(value) {
+  return value.replace(/(["\\])/g, '\\$1');
 }
 
 /**
@@ -1337,6 +1729,27 @@ function normalizeBookmarkTitle(title, url) {
 }
 
 /**
+ * Normalize an HTTP(S) URL for consistent comparisons.
+ * @param {string} value
+ * @returns {string | undefined}
+ */
+function normalizeHttpUrl(value) {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(value);
+    const protocol = parsed.protocol.toLowerCase();
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      return undefined;
+    }
+    return parsed.toString();
+  } catch (error) {
+    return undefined;
+  }
+}
+
+/**
  * Create or update a bookmark for the provided Raindrop item.
  * @param {string} url
  * @param {string} title
@@ -1508,6 +1921,49 @@ async function persistRootFolderSettings(data) {
   await chrome.storage.sync.set({
     [ROOT_FOLDER_SETTINGS_KEY]: data.map
   });
+}
+
+/**
+ * Ensure the mirror root and Unsorted bookmark folders exist.
+ * @returns {Promise<{ rootId: string, unsortedId: string }>}
+ */
+async function ensureUnsortedBookmarkFolder() {
+  const settingsData = await loadRootFolderSettings();
+  const parentId = await ensureParentFolderAvailable(settingsData);
+  const normalizedRootTitle = normalizeFolderTitle(
+    settingsData.settings.rootFolderName,
+    DEFAULT_ROOT_FOLDER_NAME
+  );
+
+  if (normalizedRootTitle !== settingsData.settings.rootFolderName) {
+    settingsData.settings.rootFolderName = normalizedRootTitle;
+    settingsData.didMutate = true;
+  }
+
+  let rootFolder = await findChildFolderByTitle(parentId, normalizedRootTitle);
+  if (!rootFolder) {
+    rootFolder = await bookmarksCreate({
+      parentId,
+      title: normalizedRootTitle
+    });
+  }
+
+  let unsortedFolder = await findChildFolderByTitle(rootFolder.id, UNSORTED_TITLE);
+  if (!unsortedFolder) {
+    unsortedFolder = await bookmarksCreate({
+      parentId: rootFolder.id,
+      title: UNSORTED_TITLE
+    });
+  }
+
+  if (settingsData.didMutate) {
+    await persistRootFolderSettings(settingsData);
+  }
+
+  return {
+    rootId: rootFolder.id,
+    unsortedId: unsortedFolder.id
+  };
 }
 
 /**
