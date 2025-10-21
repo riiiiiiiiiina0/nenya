@@ -1,30 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 
-  <head>
-    <meta charset="utf-8">
-    <title>Nenya - Popup</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="../libs/daisyui@5.css">
-    <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
-    <script src="../libs/tailwindcss@4.js"></script>
-  </head>
+<head>
+  <meta charset="utf-8">
+  <title>Nenya - Popup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="../libs/daisyui@5.css">
+  <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
+  <script src="../libs/tailwindcss@4.js"></script>
+</head>
 
-  <body class="bg-base-200">
-    <main class="w-80 p-5 space-y-4">
-      <header class="space-y-1">
-        <h1 class="text-xl font-semibold text-base-content">Mirror Cloud Bookmarks</h1>
-        <p class="text-sm text-base-content/70">Pull the latest Raindrop collections and items into the mirror folder.</p>
-      </header>
-      <div id="statusMessage" class="text-sm text-base-content/80 min-h-5" role="status" aria-live="polite">Ready to sync.</div>
-      <button id="pullButton" class="btn btn-primary w-full" type="button">
-        Pull now
+<body class="bg-base-200">
+  <div class="navbar bg-base-100 shadow-sm">
+    <div class="flex-1">
+      <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
+    </div>
+    <div class="flex-none">
+      <button id="openOptionsButton" class="btn btn-square btn-ghost" type="button" aria-label="Open options">
+        ⚙️
       </button>
-      <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
-        Save to Unsorted
-      </button>
-    </main>
-    <script src="./popup.js" type="module"></script>
-  </body>
+    </div>
+  </div>
+  <main class="w-80 p-5 space-y-4">
+    <header class="space-y-1">
+      <h1 class="text-xl font-semibold text-base-content">Mirror Cloud Bookmarks</h1>
+      <p class="text-sm text-base-content/70">Pull the latest Raindrop collections and items into the mirror folder.</p>
+    </header>
+    <div id="statusMessage" class="text-sm text-base-content/80 min-h-5" role="status" aria-live="polite">Ready to sync.
+    </div>
+    <button id="pullButton" class="btn btn-primary w-full" type="button">
+      Pull now
+    </button>
+    <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
+      Save to Unsorted
+    </button>
+  </main>
+  <script src="./popup.js" type="module"></script>
+</body>
 
 </html>
