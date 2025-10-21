@@ -1,0 +1,23 @@
+# Make authorized calls | API Documentation
+
+**URL:** https://developer.raindrop.io/v1/authentication/calls
+
+**Extracted:** 2025-10-21T01:23:06.001Z
+
+---
+
+<content>
+Once you have received an **access\_token**, include it in all API calls in [authorization header](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Authorization) with value `Bearer access_token`
+
+Copy
+
+```
+Authorization: Bearer ae261404-11r4-47c0-bce3-e18a423da828
+```
+
+[PreviousObtain access token](/v1/authentication/token)[NextCollections](/v1/collections)
+
+Last updated 5 years ago
+
+Was this helpful?
+</content>
