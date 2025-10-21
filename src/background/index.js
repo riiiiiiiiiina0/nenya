@@ -4,13 +4,15 @@ import {
   resetAndPull,
   runMirrorPull,
   saveUrlsToUnsorted,
-  saveTabsAsProject
+  saveTabsAsProject,
+  listSavedProjects
 } from './mirror.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
 const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
 const SAVE_PROJECT_MESSAGE = 'mirror:saveProject';
+const LIST_PROJECTS_MESSAGE = 'mirror:listProjects';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
 
@@ -75,6 +77,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const projectName = typeof message.projectName === 'string' ? message.projectName : '';
     const tabs = Array.isArray(message.tabs) ? message.tabs : [];
     saveTabsAsProject(projectName, tabs).then((result) => {
+      sendResponse(result);
+    }).catch((error) => {
+      const messageText = error instanceof Error ? error.message : String(error);
+      sendResponse({ ok: false, error: messageText });
+    });
+    return true;
+  }
+
+  if (message.type === LIST_PROJECTS_MESSAGE) {
+    listSavedProjects().then((result) => {
       sendResponse(result);
     }).catch((error) => {
       const messageText = error instanceof Error ? error.message : String(error);

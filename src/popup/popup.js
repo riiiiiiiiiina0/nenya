@@ -7,6 +7,8 @@ const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (document.get
 const saveProjectButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('saveProjectButton'));
 const openOptionsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('openOptionsButton'));
 const statusMessage = /** @type {HTMLDivElement | null} */ (document.getElementById('statusMessage'));
+const projectsContainer = /** @type {HTMLDivElement | null} */ (document.getElementById('projectsContainer'));
+const refreshProjectsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('refreshProjectsButton'));
 
 const STATUS_CLASS_SUCCESS = 'text-success';
 const STATUS_CLASS_ERROR = 'text-error';
@@ -136,6 +138,14 @@ if (saveProjectButton) {
   });
 } else {
   console.error('[popup] Save project button not found.');
+}
+
+if (refreshProjectsButton) {
+  refreshProjectsButton.addEventListener('click', () => {
+    void refreshProjectList();
+  });
+} else {
+  console.error('[popup] Refresh projects button not found.');
 }
 
 if (!statusMessage) {
@@ -311,6 +321,174 @@ function handleSaveResponse(response) {
   const errorText = typeof response.error === 'string' ? response.error : message;
   setStatus(errorText, 'error');
 }
+
+/**
+ * @typedef {Object} SavedProject
+ * @property {number} id
+ * @property {string} title
+ * @property {number} itemCount
+ * @property {string} url
+ */
+
+/**
+ * Refresh the list of saved projects.
+ * @returns {Promise<void>}
+ */
+async function refreshProjectList() {
+  if (!projectsContainer) {
+    return;
+  }
+
+  if (refreshProjectsButton) {
+    refreshProjectsButton.disabled = true;
+  }
+
+  const loader = document.createElement('div');
+  loader.className = 'text-sm text-base-content/70';
+  loader.textContent = 'Loading...';
+  projectsContainer.replaceChildren(loader);
+
+  try {
+    const response = await sendRuntimeMessage({ type: 'mirror:listProjects' });
+    renderProjectsResponse(response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    renderProjectsError(message);
+  } finally {
+    if (refreshProjectsButton) {
+      refreshProjectsButton.disabled = false;
+    }
+  }
+}
+
+/**
+ * Render the projects list based on background response.
+ * @param {any} response
+ * @returns {void}
+ */
+function renderProjectsResponse(response) {
+  if (!projectsContainer) {
+    return;
+  }
+
+  if (!response || typeof response !== 'object') {
+    renderProjectsError('Unable to load projects.');
+    return;
+  }
+
+  if (!response.ok) {
+    const errorText = typeof response.error === 'string'
+      ? response.error
+      : 'Unable to load projects.';
+    renderProjectsError(errorText);
+    return;
+  }
+
+  const projects = Array.isArray(response.projects) ? response.projects : [];
+  if (projects.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'text-sm text-base-content/60';
+    empty.textContent = 'No saved projects yet.';
+    projectsContainer.replaceChildren(empty);
+    return;
+  }
+
+  /** @type {HTMLElement[]} */
+  const elements = [];
+  projects.forEach((project) => {
+    const element = renderProjectRow(project);
+    if (element) {
+      elements.push(element);
+    }
+  });
+
+  if (elements.length === 0) {
+    const fallback = document.createElement('div');
+    fallback.className = 'text-sm text-error';
+    fallback.textContent = 'Unable to display saved projects.';
+    projectsContainer.replaceChildren(fallback);
+    return;
+  }
+
+  projectsContainer.replaceChildren(...elements);
+}
+
+/**
+ * Render an error message within the projects container.
+ * @param {string} message
+ * @returns {void}
+ */
+function renderProjectsError(message) {
+  if (!projectsContainer) {
+    return;
+  }
+  const errorNode = document.createElement('div');
+  errorNode.className = 'text-sm text-error';
+  errorNode.textContent = message;
+  projectsContainer.replaceChildren(errorNode);
+}
+
+/**
+ * Create an element for a single project row.
+ * @param {SavedProject} project
+ * @returns {HTMLElement | null}
+ */
+function renderProjectRow(project) {
+  if (!project || typeof project !== 'object') {
+    return null;
+  }
+  const id = Number(project.id);
+  const title = typeof project.title === 'string' && project.title.trim()
+    ? project.title.trim()
+    : 'Untitled project';
+  const itemCount = Number(project.itemCount);
+  const url = typeof project.url === 'string' && project.url ? project.url : '';
+
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'btn btn-outline btn-sm w-full justify-between gap-2';
+  row.setAttribute('role', 'listitem');
+  row.textContent = title;
+
+  const countBadge = document.createElement('span');
+  countBadge.className = 'badge badge-neutral';
+  countBadge.textContent = Number.isFinite(itemCount) && itemCount >= 0
+    ? String(itemCount)
+    : '—';
+
+  row.appendChild(countBadge);
+
+  if (url) {
+    row.addEventListener('click', () => {
+      openProjectUrl(url, id);
+    });
+  } else {
+    row.disabled = true;
+  }
+
+  return row;
+}
+
+/**
+ * Open the specified project URL in a new tab.
+ * @param {string} url
+ * @param {number} id
+ * @returns {void}
+ */
+function openProjectUrl(url, id) {
+  try {
+    const maybePromise = chrome.tabs.create({ url });
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      void maybePromise.catch((error) => {
+        console.error('[popup] Failed to open project', id, error);
+      });
+    }
+  } catch (error) {
+    console.error('[popup] Failed to open project', id, error);
+  }
+}
+
+void refreshProjectList();
 
 /**
  * Handle the save project action from the popup.

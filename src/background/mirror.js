@@ -129,6 +129,14 @@
  */
 
 /**
+ * @typedef {Object} SavedProjectDescriptor
+ * @property {number} id
+ * @property {string} title
+ * @property {number} itemCount
+ * @property {string} url
+ */
+
+/**
  * @typedef {Object} MirrorContext
  * @property {string} rootFolderId
  * @property {string} unsortedFolderId
@@ -156,6 +164,7 @@ const UNSORTED_TITLE = 'Unsorted';
 const SAVED_PROJECTS_GROUP_TITLE = 'Saved projects';
 const RAINDROP_API_BASE = 'https://api.raindrop.io/rest/v1';
 const RAINDROP_UNSORTED_URL = 'https://app.raindrop.io/my/-1';
+const RAINDROP_COLLECTION_URL_BASE = 'https://app.raindrop.io/my/';
 const BOOKMARK_MANAGER_URL_BASE = 'chrome://bookmarks/?id=';
 const NOTIFICATION_ICON_PATH = 'assets/icons/icon-128x128.png';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
@@ -1089,6 +1098,119 @@ export async function saveTabsAsProject(projectName, rawTabs) {
     throw error;
   } finally {
     concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
+  }
+}
+
+/**
+ * List the saved projects (collections in the Saved projects group).
+ * @returns {Promise<{ ok: boolean, projects?: SavedProjectDescriptor[], error?: string }>}
+ */
+export async function listSavedProjects() {
+  let tokens;
+  try {
+    tokens = await loadValidProviderTokens();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
+  }
+
+  if (!tokens) {
+    return {
+      ok: false,
+      error: 'No Raindrop connection found. Connect in Options to view projects.'
+    };
+  }
+
+  try {
+    const userData = await raindropRequest('/user', tokens);
+    const groups = Array.isArray(userData?.user?.groups) ? userData.user.groups : [];
+    const savedGroup = groups.find((group) => {
+      const title = typeof group?.title === 'string' ? group.title : '';
+      return title.trim().toLowerCase() === SAVED_PROJECTS_GROUP_TITLE.toLowerCase();
+    });
+
+    if (!savedGroup) {
+      return { ok: true, projects: [] };
+    }
+
+    const rawCollectionIds = Array.isArray(savedGroup?.collections) ? savedGroup.collections : [];
+    /** @type {number[]} */
+    const collectionIds = [];
+    const seen = new Set();
+    rawCollectionIds.forEach((value) => {
+      const id = Number(value);
+      if (!Number.isFinite(id) || seen.has(id)) {
+        return;
+      }
+      seen.add(id);
+      collectionIds.push(id);
+    });
+
+    if (collectionIds.length === 0) {
+      return { ok: true, projects: [] };
+    }
+
+    const [rootResponse, childResponse] = await Promise.all([
+      raindropRequest('/collections', tokens),
+      raindropRequest('/collections/childrens', tokens)
+    ]);
+
+    /** @type {Map<number, any>} */
+    const collectionMap = new Map();
+
+    const registerCollection = (collection) => {
+      if (!collection || typeof collection !== 'object') {
+        return;
+      }
+      const rawId = collection._id ?? collection.id ?? collection.ID;
+      const id = Number(rawId);
+      if (!Number.isFinite(id)) {
+        return;
+      }
+      collectionMap.set(id, collection);
+    };
+
+    const rootItems = Array.isArray(rootResponse?.items) ? rootResponse.items : [];
+    rootItems.forEach(registerCollection);
+    const childItems = Array.isArray(childResponse?.items) ? childResponse.items : [];
+    childItems.forEach(registerCollection);
+
+    const missingIds = collectionIds.filter((id) => !collectionMap.has(id));
+    if (missingIds.length > 0) {
+      await Promise.all(missingIds.map(async (id) => {
+        try {
+          const single = await raindropRequest('/collection/' + id, tokens);
+          if (single && typeof single === 'object' && single.item) {
+            registerCollection(single.item);
+          }
+        } catch (error) {
+          console.warn('[mirror] Failed to load collection', id, error);
+        }
+      }));
+    }
+
+    /** @type {SavedProjectDescriptor[]} */
+    const projects = [];
+    collectionIds.forEach((id) => {
+      const collection = collectionMap.get(id);
+      if (!collection) {
+        return;
+      }
+      const title = normalizeFolderTitle(collection?.title, 'Untitled project');
+      const countValue = Number(collection?.count);
+      const itemCount = Number.isFinite(countValue) && countValue >= 0 ? countValue : 0;
+      projects.push({
+        id,
+        title,
+        itemCount,
+        url: buildRaindropCollectionUrl(id)
+      });
+    });
+
+    return { ok: true, projects };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
   }
 }
 
@@ -2370,6 +2492,15 @@ function normalizeHttpUrl(value) {
   } catch (error) {
     return undefined;
   }
+}
+
+/**
+ * Build a Raindrop collection URL for the provided id.
+ * @param {number} id
+ * @returns {string}
+ */
+function buildRaindropCollectionUrl(id) {
+  return RAINDROP_COLLECTION_URL_BASE + String(id);
 }
 
 /**
