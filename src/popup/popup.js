@@ -616,6 +616,9 @@ function renderProjectRow(project) {
     return null;
   }
   const id = Number(project.id);
+  if (!Number.isFinite(id)) {
+    return null;
+  }
   const title =
     typeof project.title === 'string' && project.title.trim()
       ? project.title.trim()
@@ -623,10 +626,14 @@ function renderProjectRow(project) {
   const itemCount = Number(project.itemCount);
   const url = typeof project.url === 'string' && project.url ? project.url : '';
 
-  const row = document.createElement('button');
-  row.type = 'button';
-  row.className = 'btn btn-outline btn-sm w-full justify-between gap-2';
-  row.setAttribute('role', 'listitem');
+  const container = document.createElement('div');
+  container.className = 'flex items-center gap-2 w-full';
+  container.setAttribute('role', 'listitem');
+
+  const openButton = document.createElement('button');
+  openButton.type = 'button';
+  openButton.className =
+    'btn btn-outline btn-sm flex-1 justify-between gap-2 min-w-0';
 
   // Create title element with truncation
   const titleElement = document.createElement('span');
@@ -640,18 +647,33 @@ function renderProjectRow(project) {
   countBadge.textContent =
     Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
-  row.appendChild(titleElement);
-  row.appendChild(countBadge);
+  openButton.appendChild(titleElement);
+  openButton.appendChild(countBadge);
 
   if (url) {
-    row.addEventListener('click', () => {
+    openButton.addEventListener('click', () => {
       openProjectUrl(url, id);
     });
   } else {
-    row.disabled = true;
+    openButton.disabled = true;
   }
 
-  return row;
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'btn btn-ghost btn-sm flex-shrink-0';
+  addButton.textContent = '🔼';
+  const addLabel = 'Add current tabs to ' + title;
+  addButton.setAttribute('aria-label', addLabel);
+  addButton.title = addLabel;
+  addButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleAddTabsToProject(id, title, addButton);
+  });
+
+  container.append(openButton, addButton);
+
+  return container;
 }
 
 /**
@@ -755,6 +777,62 @@ async function handleSaveProject() {
     setStatus(message, 'error');
   } finally {
     saveProjectButton.disabled = false;
+  }
+}
+
+/**
+ * Add highlighted or active tabs to an existing project.
+ * @param {number} projectId
+ * @param {string} projectTitle
+ * @param {HTMLButtonElement} trigger
+ * @returns {Promise<void>}
+ */
+async function handleAddTabsToProject(projectId, projectTitle, trigger) {
+  if (!Number.isFinite(projectId)) {
+    setStatus('Project unavailable. Please refresh and try again.', 'error');
+    return;
+  }
+
+  const button = trigger;
+  const displayName =
+    typeof projectTitle === 'string' && projectTitle.trim()
+      ? projectTitle.trim()
+      : 'project';
+
+  if (button) {
+    button.disabled = true;
+  }
+
+  setStatus('Preparing to add tabs to ' + displayName + '...', 'info');
+
+  try {
+    const tabs = await collectSavableTabs();
+    if (tabs.length === 0) {
+      setStatus('No highlighted or active tabs available to save.', 'info');
+      return;
+    }
+
+    const descriptors = buildProjectTabDescriptors(tabs);
+    if (descriptors.length === 0) {
+      setStatus('No valid tab URLs to save.', 'info');
+      return;
+    }
+
+    setStatus('Adding tabs to ' + displayName + '...', 'info');
+    const response = await sendRuntimeMessage({
+      type: 'mirror:addTabsToProject',
+      projectId,
+      tabs: descriptors,
+    });
+
+    handleSaveProjectResponse(response);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    setStatus(message, 'error');
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
   }
 }
 

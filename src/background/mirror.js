@@ -118,6 +118,12 @@
  */
 
 /**
+ * @typedef {Object} ParsedProjectItemMetadata
+ * @property {number | undefined} tabIndex
+ * @property {{ name: string, color: string, index: number } | undefined} group
+ */
+
+/**
  * @typedef {Object} SaveProjectResult
  * @property {boolean} ok
  * @property {string} projectName
@@ -1187,6 +1193,217 @@ export async function saveTabsAsProject(projectName, rawTabs) {
           body: JSON.stringify(itemPayload),
         });
         summary.created += 1;
+      } catch (error) {
+        summary.failed += 1;
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(tab.url + ': ' + message);
+      }
+    }
+
+    summary.ok = summary.failed === 0;
+    if (!summary.ok && !summary.error && summary.errors.length > 0) {
+      summary.error = summary.errors[0];
+    }
+
+    return finalize();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    if (!summary.errors.includes(message)) {
+      summary.errors.push(message);
+    }
+    finalize();
+    throw error;
+  } finally {
+    concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
+  }
+}
+
+/**
+ * Add tabs to an existing Raindrop project collection.
+ * @param {number} projectId
+ * @param {ProjectTabDescriptor[]} rawTabs
+ * @returns {Promise<SaveProjectResult>}
+ */
+export async function addTabsToProject(projectId, rawTabs) {
+  const badgeAnimation = animateActionBadge(['🗂️', '➕']);
+  /** @type {SaveProjectResult} */
+  const summary = {
+    ok: false,
+    projectName: 'project',
+    created: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  const finalize = () => summary;
+
+  try {
+    const normalizedId = Number(projectId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+      summary.error = 'Project selection is invalid.';
+      return finalize();
+    }
+
+    const sanitized = sanitizeProjectTabDescriptors(rawTabs);
+    summary.skipped += sanitized.skipped;
+    if (sanitized.errors.length > 0) {
+      summary.errors.push(...sanitized.errors);
+    }
+
+    if (sanitized.tabs.length === 0) {
+      summary.error = 'No valid tabs to save.';
+      return finalize();
+    }
+
+    let tokens;
+    try {
+      tokens = await loadValidProviderTokens();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    if (!tokens) {
+      summary.error =
+        'No Raindrop connection found. Connect in Options to enable saving.';
+      return finalize();
+    }
+
+    const resolved = await resolveProjectTabs(sanitized.tabs);
+    summary.skipped += resolved.skipped;
+    if (resolved.errors.length > 0) {
+      summary.errors.push(...resolved.errors);
+    }
+
+    if (resolved.tabs.length === 0) {
+      summary.error = 'Selected tabs are no longer available.';
+      return finalize();
+    }
+
+    let collectionResponse;
+    try {
+      collectionResponse = await raindropRequest(
+        '/collection/' + normalizedId,
+        tokens,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    const collection = collectionResponse?.item;
+    if (!collection || typeof collection !== 'object') {
+      summary.error = 'Selected project could not be found.';
+      return finalize();
+    }
+    summary.projectName = normalizeFolderTitle(
+      collection?.title,
+      summary.projectName,
+    );
+
+    let existingItems;
+    try {
+      existingItems = await fetchAllProjectItems(tokens, normalizedId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    const existingUrls = new Set();
+    let maxIndex = -1;
+    /** @type {{ name: string, color: string, index: number } | undefined} */
+    let groupCandidate;
+    let consistentGroup = true;
+
+    existingItems.forEach((item) => {
+      const itemUrl = typeof item?.link === 'string' ? item.link : '';
+      const normalizedUrl = normalizeHttpUrl(itemUrl);
+      if (normalizedUrl) {
+        existingUrls.add(normalizedUrl);
+      }
+
+      const metadata = parseProjectItemMetadata(item);
+      if (Number.isFinite(metadata.tabIndex)) {
+        maxIndex = Math.max(maxIndex, Number(metadata.tabIndex));
+      }
+
+      if (metadata.group) {
+        if (!groupCandidate) {
+          groupCandidate = metadata.group;
+        } else if (!isMatchingGroupMetadata(groupCandidate, metadata.group)) {
+          consistentGroup = false;
+        }
+      } else {
+        consistentGroup = false;
+      }
+    });
+
+    if (!consistentGroup) {
+      groupCandidate = undefined;
+    }
+
+    const context = await buildProjectGroupContext(resolved.tabs);
+    const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+    const allTabsUngrouped = resolved.tabs.every(
+      (tab) => tab.groupId === noneGroupId,
+    );
+    if (allTabsUngrouped && groupCandidate) {
+      context.groupInfo.set(noneGroupId, {
+        name: groupCandidate.name,
+        color: groupCandidate.color,
+        index: groupCandidate.index,
+        windowId: chrome.windows?.WINDOW_ID_NONE ?? -1,
+      });
+    }
+
+    let currentIndex = Number.isFinite(maxIndex) ? Number(maxIndex) : -1;
+
+    for (const tab of resolved.tabs) {
+      const normalizedUrl = normalizeHttpUrl(tab.url);
+      if (!normalizedUrl) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      if (existingUrls.has(normalizedUrl)) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      const candidateIndex = currentIndex + 1;
+      context.tabIndexById.set(tab.id, candidateIndex);
+
+      const itemPayload = buildProjectItemPayload(
+        tab,
+        context,
+        normalizedId,
+      );
+
+      try {
+        await raindropRequest('/raindrop', tokens, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(itemPayload),
+        });
+        summary.created += 1;
+        existingUrls.add(normalizedUrl);
+        currentIndex = candidateIndex;
       } catch (error) {
         summary.failed += 1;
         const message = error instanceof Error ? error.message : String(error);
@@ -2639,6 +2856,34 @@ async function fetchRaindropItems(tokens, collectionId, page) {
 }
 
 /**
+ * Fetch all pages of Raindrop items for the specified project collection.
+ * @param {StoredProviderTokens} tokens
+ * @param {number} collectionId
+ * @returns {Promise<any[]>}
+ */
+async function fetchAllProjectItems(tokens, collectionId) {
+  /** @type {any[]} */
+  const items = [];
+  let page = 0;
+  let shouldContinue = true;
+
+  while (shouldContinue) {
+    const pageItems = await fetchRaindropItems(tokens, collectionId, page);
+    if (!pageItems || pageItems.length === 0) {
+      break;
+    }
+    items.push(...pageItems);
+    if (pageItems.length < FETCH_PAGE_SIZE) {
+      shouldContinue = false;
+    } else {
+      page += 1;
+    }
+  }
+
+  return items;
+}
+
+/**
  * Convert a Raindrop timestamp string to a numeric value.
  * @param {unknown} value
  * @returns {number}
@@ -3132,6 +3377,67 @@ function buildProjectItemPayload(tab, context, collectionId) {
     pleaseParse: {},
     excerpt: JSON.stringify(metadata),
   };
+}
+
+/**
+ * Parse stored project metadata from a Raindrop item.
+ * @param {any} item
+ * @returns {ParsedProjectItemMetadata}
+ */
+function parseProjectItemMetadata(item) {
+  const excerpt = typeof item?.excerpt === 'string' ? item.excerpt : '';
+  if (!excerpt) {
+    return { tabIndex: undefined, group: undefined };
+  }
+
+  try {
+    const parsed = JSON.parse(excerpt);
+    if (!parsed || typeof parsed !== 'object') {
+      return { tabIndex: undefined, group: undefined };
+    }
+
+    const tabIndexValue = Number(parsed?.tab?.index);
+    const tabIndex = Number.isFinite(tabIndexValue) ? tabIndexValue : undefined;
+
+    const groupValue = parsed?.group;
+    if (!groupValue || typeof groupValue !== 'object') {
+      return { tabIndex, group: undefined };
+    }
+
+    const groupName =
+      typeof groupValue.name === 'string' ? groupValue.name.trim() : '';
+    const groupColor =
+      typeof groupValue.color === 'string' ? groupValue.color : '';
+    const groupIndexValue = Number(groupValue.index);
+    const groupIndex = Number.isFinite(groupIndexValue)
+      ? groupIndexValue
+      : 0;
+
+    return {
+      tabIndex,
+      group: {
+        name: groupName,
+        color: groupColor,
+        index: groupIndex,
+      },
+    };
+  } catch (error) {
+    return { tabIndex: undefined, group: undefined };
+  }
+}
+
+/**
+ * Determine whether two project group metadata objects represent the same group.
+ * @param {{ name: string, color: string, index: number }} a
+ * @param {{ name: string, color: string, index: number }} b
+ * @returns {boolean}
+ */
+function isMatchingGroupMetadata(a, b) {
+  return (
+    a.name === b.name &&
+    a.color === b.color &&
+    Number(a.index) === Number(b.index)
+  );
 }
 
 /**

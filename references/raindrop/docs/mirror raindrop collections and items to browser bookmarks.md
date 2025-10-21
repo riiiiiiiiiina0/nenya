@@ -70,11 +70,11 @@
 
 ### Add tabs to a project
 
-1. Let the user pick an existing project from the popup list.
+1. Let the user pick an existing project from the popup list (from popup page projects list 🔼 button).
 2. Collect highlighted tabs, or fall back to the active tab.
 3. Fetch the project’s current Raindrop items.
 4. If all existing items belong to the same tab group `G` and the new tabs are ungrouped, assign the group metadata `G` to the new entries.
-5. Create new Raindrop items for the selected tabs within the project collection.
+5. Create new Raindrop items for the selected tabs within the project collection, this new item should have biggest sorting index in metadata.
 
 ### Replace items in a project
 
@@ -82,3 +82,7 @@
 2. Let the user choose whether to replace the project with highlighted tabs, the active tab, or all tabs in the current window.
 3. Delete all items currently stored in the project collection.
 4. Recreate the project by reusing the steps in “Save tabs as a project”.
+
+### Open a saved project
+
+TODO
