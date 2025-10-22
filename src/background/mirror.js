@@ -58,9 +58,19 @@
  */
 
 /**
+ * @typedef {Object} NotificationProjectSettings
+ * @property {boolean} enabled
+ * @property {boolean} saveProject
+ * @property {boolean} addTabs
+ * @property {boolean} replaceItems
+ * @property {boolean} deleteProject
+ */
+
+/**
  * @typedef {Object} NotificationPreferences
  * @property {boolean} enabled
  * @property {NotificationBookmarkSettings} bookmark
+ * @property {NotificationProjectSettings} project
  */
 
 /**
@@ -332,6 +342,13 @@ function createDefaultNotificationPreferences() {
       pullFinished: true,
       unsortedSaved: true,
     },
+    project: {
+      enabled: true,
+      saveProject: true,
+      addTabs: true,
+      replaceItems: true,
+      deleteProject: true,
+    },
   };
 }
 
@@ -348,6 +365,13 @@ function cloneNotificationPreferences(value) {
       pullFinished: Boolean(value.bookmark.pullFinished),
       unsortedSaved: Boolean(value.bookmark.unsortedSaved),
     },
+    project: {
+      enabled: Boolean(value.project?.enabled),
+      saveProject: Boolean(value.project?.saveProject),
+      addTabs: Boolean(value.project?.addTabs),
+      replaceItems: Boolean(value.project?.replaceItems),
+      deleteProject: Boolean(value.project?.deleteProject),
+    },
   };
 }
 
@@ -363,10 +387,11 @@ function normalizeNotificationPreferences(value) {
   }
 
   const raw =
-    /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings> }} */ (
+    /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings> }} */ (
       value
     );
   const bookmark = raw.bookmark ?? {};
+  const project = raw.project ?? {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
@@ -383,6 +408,28 @@ function normalizeNotificationPreferences(value) {
         typeof bookmark.unsortedSaved === 'boolean'
           ? bookmark.unsortedSaved
           : fallback.bookmark.unsortedSaved,
+    },
+    project: {
+      enabled:
+        typeof project.enabled === 'boolean'
+          ? project.enabled
+          : fallback.project.enabled,
+      saveProject:
+        typeof project.saveProject === 'boolean'
+          ? project.saveProject
+          : fallback.project.saveProject,
+      addTabs:
+        typeof project.addTabs === 'boolean'
+          ? project.addTabs
+          : fallback.project.addTabs,
+      replaceItems:
+        typeof project.replaceItems === 'boolean'
+          ? project.replaceItems
+          : fallback.project.replaceItems,
+      deleteProject:
+        typeof project.deleteProject === 'boolean'
+          ? project.deleteProject
+          : fallback.project.deleteProject,
     },
   };
 }
@@ -419,7 +466,7 @@ async function loadNotificationPreferences() {
  * Retrieve cached notification preferences, loading them if needed.
  * @returns {Promise<NotificationPreferences>}
  */
-async function getNotificationPreferences() {
+export async function getNotificationPreferences() {
   if (notificationPreferencesLoaded) {
     return notificationPreferencesCache;
   }
@@ -505,7 +552,7 @@ function getNotificationIconUrl() {
  * @param {string} [contextMessage]
  * @returns {Promise<void>}
  */
-async function pushNotification(
+export async function pushNotification(
   prefix,
   title,
   message,

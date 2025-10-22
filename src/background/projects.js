@@ -9,6 +9,8 @@ import {
   buildRaindropCollectionUrl,
   fetchRaindropItems,
   isPromiseLike,
+  pushNotification,
+  getNotificationPreferences,
 } from './mirror.js';
 
 /**
@@ -65,6 +67,7 @@ import {
  * @property {number} failed
  * @property {string[]} errors
  * @property {string} [error]
+ * @property {number} [collectionId]
  */
 
 /**
@@ -114,6 +117,124 @@ const FETCH_PAGE_SIZE = 100;
 // Storage keys for caching
 const CACHED_PROJECTS_KEY = 'cachedProjects';
 const CACHED_PROJECTS_TIMESTAMP_KEY = 'cachedProjectsTimestamp';
+
+/**
+ * Show notification for project save success.
+ * @param {SaveProjectResult} result
+ * @returns {Promise<void>}
+ */
+async function showProjectSaveNotification(result) {
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.saveProject) {
+    return;
+  }
+
+  if (result.ok) {
+    const title = `Project "${result.projectName}" Saved`;
+    const message = `Successfully saved ${result.created} tab${result.created !== 1 ? 's' : ''}`;
+    const contextParts = [];
+    
+    if (result.skipped > 0) {
+      contextParts.push(`${result.skipped} skipped`);
+    }
+    if (result.failed > 0) {
+      contextParts.push(`${result.failed} failed`);
+    }
+    
+    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    const targetUrl = result.collectionId ? buildRaindropCollectionUrl(result.collectionId) : undefined;
+    await pushNotification('project-save-success', title, message, targetUrl, contextMessage);
+  } else {
+    const reason = result.error || 'Unknown error';
+    await pushNotification('project-save-failure', 'Failed to Save Project', reason);
+  }
+}
+
+/**
+ * Show notification for add tabs to project success.
+ * @param {SaveProjectResult} result
+ * @returns {Promise<void>}
+ */
+async function showAddTabsNotification(result) {
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.addTabs) {
+    return;
+  }
+
+  if (result.ok) {
+    const title = `Added to "${result.projectName}"`;
+    const message = `Successfully added ${result.created} tab${result.created !== 1 ? 's' : ''}`;
+    const contextParts = [];
+    
+    if (result.skipped > 0) {
+      contextParts.push(`${result.skipped} skipped`);
+    }
+    if (result.failed > 0) {
+      contextParts.push(`${result.failed} failed`);
+    }
+    
+    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    const targetUrl = result.collectionId ? buildRaindropCollectionUrl(result.collectionId) : undefined;
+    await pushNotification('project-add-success', title, message, targetUrl, contextMessage);
+  } else {
+    const reason = result.error || 'Unknown error';
+    await pushNotification('project-add-failure', 'Failed to Add Tabs', reason);
+  }
+}
+
+/**
+ * Show notification for replace project items success.
+ * @param {SaveProjectResult} result
+ * @returns {Promise<void>}
+ */
+async function showReplaceItemsNotification(result) {
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.replaceItems) {
+    return;
+  }
+
+  if (result.ok) {
+    const title = `Project "${result.projectName}" Updated`;
+    const message = `Successfully replaced with ${result.created} tab${result.created !== 1 ? 's' : ''}`;
+    const contextParts = [];
+    
+    if (result.skipped > 0) {
+      contextParts.push(`${result.skipped} skipped`);
+    }
+    if (result.failed > 0) {
+      contextParts.push(`${result.failed} failed`);
+    }
+    
+    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    const targetUrl = result.collectionId ? buildRaindropCollectionUrl(result.collectionId) : undefined;
+    await pushNotification('project-replace-success', title, message, targetUrl, contextMessage);
+  } else {
+    const reason = result.error || 'Unknown error';
+    await pushNotification('project-replace-failure', 'Failed to Replace Items', reason);
+  }
+}
+
+/**
+ * Show notification for project deletion success.
+ * @param {Object} result
+ * @param {string} projectName
+ * @returns {Promise<void>}
+ */
+async function showDeleteProjectNotification(result, projectName) {
+  const preferences = await getNotificationPreferences();
+  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.deleteProject) {
+    return;
+  }
+
+  if (result.ok) {
+    const title = `Project Deleted`;
+    const message = `"${projectName}" has been deleted`;
+    await pushNotification('project-delete-success', title, message);
+  } else {
+    const reason = result.error || 'Unknown error';
+    await pushNotification('project-delete-failure', 'Failed to Delete Project', reason);
+  }
+}
 
 // Animation sequences
 const CLOCK_SEQUENCE = ['🕛', '🕑', '🕒', '🕓', '🕧', '🕗', '🕘', '🕙'];
@@ -388,6 +509,7 @@ export async function saveTabsAsProject(projectName, rawTabs) {
     const ensureResult = await ensureSavedProjectsGroup(tokens);
     const collection = await createProjectCollection(tokens, normalizedName);
     summary.projectName = collection.title;
+    summary.collectionId = collection.id;
 
     await assignCollectionToGroup(
       tokens,
@@ -423,14 +545,17 @@ export async function saveTabsAsProject(projectName, rawTabs) {
       summary.error = summary.errors[0];
     }
 
-    return finalize();
+    const result = finalize();
+    await showProjectSaveNotification(result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     summary.error = message;
     if (!summary.errors.includes(message)) {
       summary.errors.push(message);
     }
-    finalize();
+    const result = finalize();
+    await showProjectSaveNotification(result);
     throw error;
   } finally {
     concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
@@ -453,6 +578,7 @@ export async function addTabsToProject(projectId, rawTabs) {
     skipped: 0,
     failed: 0,
     errors: [],
+    collectionId: Number(projectId),
   };
 
   const finalize = () => summary;
@@ -630,14 +756,17 @@ export async function addTabsToProject(projectId, rawTabs) {
       summary.error = summary.errors[0];
     }
 
-    return finalize();
+    const result = finalize();
+    await showAddTabsNotification(result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     summary.error = message;
     if (!summary.errors.includes(message)) {
       summary.errors.push(message);
     }
-    finalize();
+    const result = finalize();
+    await showAddTabsNotification(result);
     throw error;
   } finally {
     concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
@@ -660,6 +789,7 @@ export async function replaceProjectItems(projectId, rawTabs) {
     skipped: 0,
     failed: 0,
     errors: [],
+    collectionId: Number(projectId),
   };
 
   const finalize = () => summary;
@@ -803,14 +933,17 @@ export async function replaceProjectItems(projectId, rawTabs) {
       summary.error = summary.errors[0];
     }
 
-    return finalize();
+    const result = finalize();
+    await showReplaceItemsNotification(result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     summary.error = message;
     if (!summary.errors.includes(message)) {
       summary.errors.push(message);
     }
-    finalize();
+    const result = finalize();
+    await showReplaceItemsNotification(result);
     throw error;
   } finally {
     concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
@@ -846,6 +979,18 @@ export async function deleteProject(projectId) {
       };
     }
 
+    // Get project name before deletion for notification
+    let projectName = 'Project';
+    try {
+      const collectionResponse = await raindropRequest(`/collection/${normalizedId}`, tokens);
+      if (collectionResponse?.item?.title) {
+        projectName = collectionResponse.item.title;
+      }
+    } catch (error) {
+      // Continue with deletion even if we can't get the name
+      console.warn('[deleteProject] Could not get project name:', error);
+    }
+
     // Delete the collection using Raindrop API
     const deleteResponse = await raindropRequest(
       `/collection/${normalizedId}`,
@@ -865,10 +1010,14 @@ export async function deleteProject(projectId) {
     // Clear cached projects since we deleted one
     await chrome.storage.local.remove([CACHED_PROJECTS_KEY, CACHED_PROJECTS_TIMESTAMP_KEY]);
 
-    return { ok: true };
+    const result = { ok: true };
+    await showDeleteProjectNotification(result, projectName);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { ok: false, error: message };
+    const result = { ok: false, error: message };
+    await showDeleteProjectNotification(result, 'Project');
+    return result;
   } finally {
     concludeActionBadge(badgeAnimation, '🗑️');
   }

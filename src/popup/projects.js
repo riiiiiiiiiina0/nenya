@@ -791,6 +791,9 @@ async function handleDeleteProject(projectId, projectTitle, trigger) {
     /** @type {HTMLButtonElement} */ (button).disabled = true;
   }
 
+  // Find and store reference to the project row for immediate removal
+  const projectRow = trigger.closest('[role="listitem"]');
+  
   // Disable projects container during operation
   const projectsContainer = document.getElementById('projectsContainer');
   setProjectsContainerDisabled(projectsContainer, true);
@@ -804,6 +807,11 @@ async function handleDeleteProject(projectId, projectTitle, trigger) {
       type: 'projects:deleteProject',
       projectId,
     });
+
+    // Immediately remove the project row from DOM if deletion was successful
+    if (response && response.ok && projectRow) {
+      projectRow.remove();
+    }
 
     if (statusElement) {
       handleDeleteProjectResponse(response, statusElement, displayName);
@@ -1163,12 +1171,7 @@ function handleDeleteProjectResponse(response, statusMessage, projectName) {
       3000,
       statusMessage,
     );
-    // Auto-refresh the projects list after successful deletion
-    const projectsContainer = document.getElementById('projectsContainer');
-    const refreshButton = document.getElementById('refreshProjectsButton');
-    if (projectsContainer && refreshButton) {
-      void refreshProjectList(projectsContainer, refreshButton);
-    }
+    // Note: DOM element is already removed in handleDeleteProject, no need to refresh
     return;
   }
 
