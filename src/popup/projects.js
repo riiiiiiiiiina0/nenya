@@ -287,7 +287,7 @@ function renderProjectRow(project) {
       renderArrowIcon();
     });
     container.addEventListener('focusout', (event) => {
-      if (container.contains(event.relatedTarget)) {
+      if (event.relatedTarget && event.relatedTarget instanceof Node && container.contains(event.relatedTarget)) {
         return;
       }
       renderCoverIcon();
@@ -563,7 +563,7 @@ export async function handleSaveProject(saveProjectButton, statusMessage) {
       return;
     }
 
-    const descriptors = buildProjectTabDescriptors(tabs);
+    const descriptors = await buildProjectTabDescriptors(tabs);
     if (descriptors.length === 0) {
       concludeStatus('No valid tab URLs to save.', 'info', 3000, statusMessage);
       return;
@@ -644,7 +644,7 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
       return;
     }
 
-    const descriptors = buildProjectTabDescriptors(tabs);
+    const descriptors = await buildProjectTabDescriptors(tabs);
     if (descriptors.length === 0) {
       const statusElement = document.getElementById('statusMessage');
       if (statusElement) {
@@ -904,7 +904,7 @@ async function handleProjectReplacementAction(
       return;
     }
 
-    const descriptors = buildProjectTabDescriptors(tabs);
+    const descriptors = await buildProjectTabDescriptors(tabs);
     if (descriptors.length === 0) {
       if (statusElement) {
         concludeStatus(messages.noValidTabs, 'info', 3000, statusElement);
@@ -941,12 +941,20 @@ async function handleProjectReplacementAction(
 /**
  * Build normalized tab descriptors for project saves.
  * @param {chrome.tabs.Tab[]} tabs
- * @returns {ProjectTabDescriptor[]}
+ * @returns {Promise<ProjectTabDescriptor[]>}
  */
-function buildProjectTabDescriptors(tabs) {
+async function buildProjectTabDescriptors(tabs) {
   /** @type {ProjectTabDescriptor[]} */
   const descriptors = [];
   const seen = new Set();
+
+  // Get all custom titles at once for efficiency
+  const tabIds = tabs
+    .filter(tab => tab && typeof tab.id === 'number')
+    .map(tab => tab.id);
+  
+  const customTitleKeys = tabIds.map(id => `customTitle_${id}`);
+  const customTitles = await chrome.storage.local.get(customTitleKeys);
 
   tabs.forEach((tab) => {
     if (!tab || typeof tab.id !== 'number' || !tab.url) {
@@ -958,6 +966,12 @@ function buildProjectTabDescriptors(tabs) {
       return;
     }
     seen.add(normalizedUrl);
+
+    // Check for custom title
+    const customTitle = customTitles[`customTitle_${tab.id}`];
+    const finalTitle = customTitle && typeof customTitle === 'string' && customTitle.trim() 
+      ? customTitle.trim() 
+      : (typeof tab.title === 'string' ? tab.title : '');
 
     descriptors.push({
       id: tab.id,
@@ -972,7 +986,7 @@ function buildProjectTabDescriptors(tabs) {
           : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1,
       pinned: Boolean(tab.pinned),
       url: normalizedUrl,
-      title: typeof tab.title === 'string' ? tab.title : '',
+      title: finalTitle,
     });
   });
 
