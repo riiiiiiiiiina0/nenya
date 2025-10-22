@@ -45,6 +45,7 @@ import {
  * @typedef {Object} ProjectGroupContext
  * @property {Map<number, ProjectGroupMetadata>} groupInfo
  * @property {Map<number, number>} tabIndexById
+ * @property {Map<number, string>} [customTitles]
  */
 
 /**
@@ -52,6 +53,7 @@ import {
  * @property {number | undefined} tabIndex
  * @property {{ name: string, color: string, index: number } | undefined} group
  * @property {boolean} pinned
+ * @property {string | undefined} customTitle
  */
 
 /**
@@ -81,6 +83,7 @@ import {
  * @property {boolean} pinned
  * @property {number | undefined} tabIndex
  * @property {{ name: string, color: string, index: number } | undefined} group
+ * @property {string | undefined} customTitle
  * @property {number} order
  */
 
@@ -1153,13 +1156,17 @@ function sanitizeProjectItemsForRestore(items) {
 
     const metadata = parseProjectItemMetadata(item);
     const title = normalizeBookmarkTitle(item?.title, normalizedUrl);
+    const finalTitle = metadata.customTitle && typeof metadata.customTitle === 'string' && metadata.customTitle.trim() !== ''
+      ? metadata.customTitle.trim()
+      : title;
 
     entries.push({
       url: normalizedUrl,
-      title,
+      title: finalTitle,
       pinned: metadata.pinned,
       tabIndex: metadata.tabIndex,
       group: metadata.group,
+      customTitle: metadata.customTitle,
       order: index,
     });
   });
@@ -1218,11 +1225,13 @@ function computeProjectEntryIndex(entry) {
  * @returns {Promise<{ created: number, pinned: number, grouped: number, errors: string[] }>}
  */
 async function applyProjectRestore(entries) {
+  /** @type {string[]} */
+  const errors = [];
   const outcome = {
     created: 0,
     pinned: 0,
     grouped: 0,
-    errors: [],
+    errors,
   };
 
   if (!Array.isArray(entries) || entries.length === 0) {
@@ -1295,6 +1304,21 @@ async function applyProjectRestore(entries) {
           pinnedOffset += 1;
           outcome.pinned += 1;
         }
+        
+        // Save custom title as object with tab ID, URL, and title to local storage if it exists
+        if (entry.customTitle && typeof entry.customTitle === 'string' && entry.customTitle.trim() !== '') {
+          try {
+            await chrome.storage.local.set({
+              [`customTitle_${tab.id}`]: {
+                tabId: tab.id,
+                url: entry.url,
+                title: entry.customTitle.trim()
+              }
+            });
+          } catch (error) {
+            console.log('Could not save custom title for tab', tab.id, ':', error);
+          }
+        }
       }
       totalCreated += 1;
     } catch (error) {
@@ -1360,16 +1384,21 @@ async function applyProjectRestore(entries) {
   });
 
   for (const record of groupingRecords) {
+    if (record.tabIds.length === 0) {
+      continue;
+    }
     try {
       const groupId = await tabsGroup({
-        tabIds: record.tabIds,
+        tabIds: record.tabIds.length === 1 ? record.tabIds[0] : /** @type {[number, ...number[]]} */ (record.tabIds),
         createProperties: { windowId },
       });
       outcome.grouped += 1;
       try {
         await tabGroupsUpdate(groupId, {
           title: record.meta.name || 'Tab group',
-          color: record.meta.color || 'grey',
+          color: (record.meta.color && ['grey', 'blue', 'cyan', 'green', 'orange', 'pink', 'purple', 'red', 'yellow'].includes(record.meta.color)) 
+            ? /** @type {'grey' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'yellow'} */ (record.meta.color)
+            : 'grey',
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1535,10 +1564,28 @@ async function buildProjectGroupContext(tabs) {
   const context = {
     groupInfo: new Map(),
     tabIndexById: new Map(),
+    customTitles: new Map(),
   };
 
   if (!Array.isArray(tabs) || tabs.length === 0) {
     return context;
+  }
+
+  // Fetch custom titles for all tabs
+  const tabIds = tabs.map(tab => tab.id).filter(id => typeof id === 'number');
+  const customTitleKeys = tabIds.map(id => `customTitle_${id}`);
+  if (customTitleKeys.length > 0) {
+    try {
+      const customTitles = await chrome.storage.local.get(customTitleKeys);
+      tabIds.forEach(id => {
+        const customTitle = customTitles[`customTitle_${id}`];
+        if (customTitle && typeof customTitle === 'string' && customTitle.trim() !== '' && context.customTitles) {
+          context.customTitles.set(id, customTitle.trim());
+        }
+      });
+    } catch (error) {
+      console.warn('[projects] Failed to fetch custom titles:', error);
+    }
   }
 
   const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
@@ -1853,6 +1900,12 @@ function buildProjectItemPayload(tab, context, collectionId) {
     };
   }
 
+  // Include custom title in metadata if it exists
+  const customTitle = context.customTitles?.get(tab.id);
+  if (customTitle && typeof customTitle === 'string' && customTitle.trim() !== '') {
+    metadata.customTitle = customTitle.trim();
+  }
+
   return {
     link: tab.url,
     title: normalizeBookmarkTitle(tab.title, tab.url),
@@ -1870,22 +1923,23 @@ function buildProjectItemPayload(tab, context, collectionId) {
 function parseProjectItemMetadata(item) {
   const excerpt = typeof item?.excerpt === 'string' ? item.excerpt : '';
   if (!excerpt) {
-    return { tabIndex: undefined, group: undefined, pinned: false };
+    return { tabIndex: undefined, group: undefined, pinned: false, customTitle: undefined };
   }
 
   try {
     const parsed = JSON.parse(excerpt);
     if (!parsed || typeof parsed !== 'object') {
-      return { tabIndex: undefined, group: undefined, pinned: false };
+      return { tabIndex: undefined, group: undefined, pinned: false, customTitle: undefined };
     }
 
     const tabIndexValue = Number(parsed?.tab?.index);
     const tabIndex = Number.isFinite(tabIndexValue) ? tabIndexValue : undefined;
     const pinned = Boolean(parsed?.tab?.pinned);
+    const customTitle = typeof parsed?.customTitle === 'string' ? parsed.customTitle.trim() : undefined;
 
     const groupValue = parsed?.group;
     if (!groupValue || typeof groupValue !== 'object') {
-      return { tabIndex, group: undefined, pinned };
+      return { tabIndex, group: undefined, pinned, customTitle };
     }
 
     const groupName =
@@ -1903,9 +1957,10 @@ function parseProjectItemMetadata(item) {
         index: groupIndex,
       },
       pinned,
+      customTitle,
     };
   } catch (error) {
-    return { tabIndex: undefined, group: undefined, pinned: false };
+    return { tabIndex: undefined, group: undefined, pinned: false, customTitle: undefined };
   }
 }
 
@@ -2097,7 +2152,7 @@ async function tabGroupsUpdate(groupId, updateProperties) {
   try {
     const maybe = chrome.tabGroups.update(groupId, updateProperties);
     if (isPromiseLike(maybe)) {
-      return await maybe;
+      return /** @type {chrome.tabGroups.TabGroup} */ (await maybe);
     }
   } catch (error) {
     // Fall through to callback variant.
@@ -2110,7 +2165,7 @@ async function tabGroupsUpdate(groupId, updateProperties) {
         reject(new Error(lastError.message));
         return;
       }
-      resolve(group);
+      resolve(/** @type {chrome.tabGroups.TabGroup} */ (group || {}));
     });
   });
 }

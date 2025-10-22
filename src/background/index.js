@@ -27,6 +27,7 @@ const RESET_PULL_MESSAGE = 'mirror:resetPull';
 const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
+const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
 
 /**
  * Ensure the repeating alarm is scheduled.
@@ -62,6 +63,19 @@ chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
 });
 
+/**
+ * Handle tab removal to clean up custom title records.
+ * @param {number} tabId - The ID of the tab that was removed.
+ * @param {Object} removeInfo - Information about the tab removal.
+ * @returns {void}
+ */
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  // Clean up custom title record for the closed tab
+  void chrome.storage.local.remove([`customTitle_${tabId}`]).catch((error) => {
+    console.warn('[background] Failed to clean up custom title for tab:', tabId, error);
+  });
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== MIRROR_ALARM_NAME) {
     return;
@@ -72,9 +86,19 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') {
     return false;
+  }
+
+  if (message.type === GET_CURRENT_TAB_ID_MESSAGE) {
+    // Return the tab ID of the sender (content script)
+    if (sender && sender.tab && typeof sender.tab.id === 'number') {
+      sendResponse({ tabId: sender.tab.id });
+    } else {
+      sendResponse({ error: 'No valid tab ID found' });
+    }
+    return true;
   }
 
   if (message.type === SAVE_UNSORTED_MESSAGE) {
