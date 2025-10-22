@@ -70,6 +70,14 @@ const projectDeleteToggle = /** @type {HTMLInputElement | null} */ (
   document.getElementById('notificationProjectDeleteToggle')
 );
 
+// Section elements for showing/hiding based on login status
+const bookmarkManagementSection = /** @type {HTMLElement | null} */ (
+  document.querySelector('[aria-labelledby="notifications-bookmark-heading"]')
+);
+const projectManagementSection = /** @type {HTMLElement | null} */ (
+  document.querySelector('[aria-labelledby="notifications-project-heading"]')
+);
+
 /** @type {NotificationPreferences} */
 let preferences = clonePreferences(DEFAULT_NOTIFICATION_PREFERENCES);
 
@@ -392,6 +400,20 @@ async function initializeNotificationControls() {
 
   preferences = await loadPreferences();
   applyPreferencesToUI();
+}
+
+/**
+ * Show or hide the bookmark and project management sections based on login status.
+ * @param {boolean} isLoggedIn - Whether the user is logged in
+ * @returns {void}
+ */
+export function updateNotificationSectionsVisibility(isLoggedIn) {
+  if (bookmarkManagementSection) {
+    bookmarkManagementSection.hidden = !isLoggedIn;
+  }
+  if (projectManagementSection) {
+    projectManagementSection.hidden = !isLoggedIn;
+  }
 }
 
 attachEventListeners();

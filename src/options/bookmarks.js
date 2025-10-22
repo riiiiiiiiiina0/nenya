@@ -1,5 +1,9 @@
 /* global chrome */
 
+import { resetMirrorState } from '../background/mirror.js';
+import { clearAllProjectData } from '../background/projects.js';
+import { updateNotificationSectionsVisibility } from './notifications.js';
+
 /**
  * @typedef {Object} ToastifyOptions
  * @property {string} text
@@ -1138,6 +1142,10 @@ function renderProviderState() {
   }
 
   void updateRootFolderSection(storedTokens);
+  
+  // Update notification sections visibility based on login status
+  const isLoggedIn = hasSelection && Boolean(storedTokens);
+  updateNotificationSectionsVisibility(isLoggedIn);
 }
 
 /**
@@ -1171,16 +1179,38 @@ function handleConnectClick() {
 }
 
 /**
- * Clear stored tokens for the selected provider.
+ * Clear stored tokens for the selected provider and reset all local data.
  */
 async function handleDisconnectClick() {
   if (!currentProvider) {
     return;
   }
 
-  await clearProviderTokens(currentProvider.id);
-  renderProviderState();
-  showToast('Disconnected from ' + currentProvider.name + '.', 'info');
+  try {
+    // Clear provider tokens
+    await clearProviderTokens(currentProvider.id);
+    
+    // Reset mirror state (bookmark root folder and timestamps)
+    const rootFolderSettings = await readRootFolderSettings();
+    const providerSettings = rootFolderSettings[currentProvider.id];
+    if (providerSettings) {
+      const settingsData = {
+        settings: providerSettings,
+        map: rootFolderSettings,
+        didMutate: false
+      };
+      await resetMirrorState(settingsData);
+    }
+    
+    // Clear all project-related data and custom title records
+    await clearAllProjectData();
+    
+    renderProviderState();
+    showToast('Disconnected from ' + currentProvider.name + '. All local data has been cleared.', 'info');
+  } catch (error) {
+    console.error('[bookmarks] Error during logout:', error);
+    showToast('Error during logout. Some data may not have been cleared.', 'error');
+  }
 }
 
 /**
@@ -1209,6 +1239,14 @@ async function processOAuthSuccess(message) {
   }
 
   showToast('Connected to ' + provider.name + '.', 'success');
+  
+  // Automatically start pulling when user logs in
+  try {
+    await sendRuntimeMessage({ type: 'mirror:pull' });
+  } catch (error) {
+    console.warn('[bookmarks] Failed to start automatic pull after login:', error);
+    // Don't show error to user as the login was successful
+  }
 }
 
 /**

@@ -859,6 +859,15 @@ export async function runMirrorPull(trigger) {
     };
   }
 
+  // Check if user is logged in before starting sync
+  const tokens = await loadValidProviderTokens();
+  if (!tokens) {
+    return {
+      ok: false,
+      error: 'No Raindrop connection found. Connect in Options to enable syncing.',
+    };
+  }
+
   syncInProgress = true;
   const badgeAnimation = animateActionBadge(ANIMATION_DOWN_SEQUENCE);
   let finalBadge = '❌';
@@ -916,6 +925,43 @@ export async function resetAndPull() {
   } finally {
     concludeActionBadge(badgeAnimation, finalBadge);
     syncInProgress = false;
+  }
+}
+
+/**
+ * Reset stored timestamps and remove the current mirror root folder.
+ * @param {{ settings: RootFolderSettings, map: Record<string, RootFolderSettings>, didMutate: boolean }} settingsData
+ * @returns {Promise<void>}
+ */
+export async function resetMirrorState(settingsData) {
+  await chrome.storage.local.remove([
+    LOCAL_KEY_OLDEST_ITEM,
+    LOCAL_KEY_OLDEST_DELETED,
+  ]);
+
+  const parentId = await ensureParentFolderAvailable(settingsData);
+  const normalizedTitle = normalizeFolderTitle(
+    settingsData.settings.rootFolderName,
+    DEFAULT_ROOT_FOLDER_NAME,
+  );
+  if (normalizedTitle !== settingsData.settings.rootFolderName) {
+    settingsData.settings.rootFolderName = normalizedTitle;
+    settingsData.didMutate = true;
+  }
+
+  const parentExists = await bookmarkNodeExists(parentId);
+  if (parentExists) {
+    const existingRoot = await findChildFolderByTitle(
+      parentId,
+      normalizedTitle,
+    );
+    if (existingRoot) {
+      await bookmarksRemoveTree(existingRoot.id);
+    }
+  }
+
+  if (settingsData.didMutate) {
+    await persistRootFolderSettings(settingsData);
   }
 }
 
@@ -2706,42 +2752,6 @@ async function ensureUnsortedBookmarkFolder() {
   };
 }
 
-/**
- * Reset stored timestamps and remove the current mirror root folder.
- * @param {{ settings: RootFolderSettings, map: Record<string, RootFolderSettings>, didMutate: boolean }} settingsData
- * @returns {Promise<void>}
- */
-async function resetMirrorState(settingsData) {
-  await chrome.storage.local.remove([
-    LOCAL_KEY_OLDEST_ITEM,
-    LOCAL_KEY_OLDEST_DELETED,
-  ]);
-
-  const parentId = await ensureParentFolderAvailable(settingsData);
-  const normalizedTitle = normalizeFolderTitle(
-    settingsData.settings.rootFolderName,
-    DEFAULT_ROOT_FOLDER_NAME,
-  );
-  if (normalizedTitle !== settingsData.settings.rootFolderName) {
-    settingsData.settings.rootFolderName = normalizedTitle;
-    settingsData.didMutate = true;
-  }
-
-  const parentExists = await bookmarkNodeExists(parentId);
-  if (parentExists) {
-    const existingRoot = await findChildFolderByTitle(
-      parentId,
-      normalizedTitle,
-    );
-    if (existingRoot) {
-      await bookmarksRemoveTree(existingRoot.id);
-    }
-  }
-
-  if (settingsData.didMutate) {
-    await persistRootFolderSettings(settingsData);
-  }
-}
 
 /**
  * @typedef {Object} CollectionNode

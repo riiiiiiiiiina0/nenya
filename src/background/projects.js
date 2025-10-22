@@ -1024,6 +1024,27 @@ export async function deleteProject(projectId) {
 }
 
 /**
+ * Clear all project-related cache and custom title records.
+ * @returns {Promise<void>}
+ */
+export async function clearAllProjectData() {
+  try {
+    // Clear project cache
+    await chrome.storage.local.remove([CACHED_PROJECTS_KEY, CACHED_PROJECTS_TIMESTAMP_KEY]);
+    
+    // Clear all custom title records
+    const allStorage = await chrome.storage.local.get(null);
+    const customTitleKeys = Object.keys(allStorage).filter(key => key.startsWith('customTitle_'));
+    
+    if (customTitleKeys.length > 0) {
+      await chrome.storage.local.remove(customTitleKeys);
+    }
+  } catch (error) {
+    console.warn('[projects] Failed to clear project data:', error);
+  }
+}
+
+/**
  * Restore saved project tabs into the current browser window.
  * @param {number} projectId
  * @returns {Promise<RestoreProjectResult>}
