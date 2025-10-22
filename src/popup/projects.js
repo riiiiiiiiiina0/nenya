@@ -2,11 +2,11 @@
 
 import {
   sendRuntimeMessage,
-  setStatus,
-  concludeStatus,
-  queryTabs,
-  normalizeUrlForSave,
-  collectSavableTabs,
+ setStatus,
+ concludeStatus,
+ queryTabs,
+ normalizeUrlForSave,
+ collectSavableTabs,
 } from './shared.js';
 
 /**
@@ -26,6 +26,17 @@ import {
  * @property {boolean} pinned
  * @property {string} url
  * @property {string} title
+ */
+
+/**
+ * @typedef {Object} ReplacementActionMessages
+ * @property {(name: string) => string} confirm
+ * @property {(name: string) => string} preparing
+ * @property {(name: string) => string} running
+ * @property {string} emptySelection
+ * @property {string} noValidTabs
+ * @property {string} cancelMessage
+ * @property {string} collectError
  */
 
 /**
@@ -219,6 +230,7 @@ function renderProjectRow(project) {
     /** @type {HTMLButtonElement} */ (openButton).disabled = true;
   }
 
+  // add tabs to project button 🔼
   const addButton = document.createElement('button');
   addButton.type = 'button';
   addButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
@@ -232,7 +244,40 @@ function renderProjectRow(project) {
     void handleAddTabsToProject(id, title, addButton);
   });
 
-  container.append(openButton, addButton);
+  // replace project items with highlighted/active tabs button ⏫
+  const replaceButton = document.createElement('button');
+  replaceButton.type = 'button';
+  replaceButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
+  replaceButton.textContent = '⏫';
+  const replaceLabel = 'Replace items in ' + title + ' with highlighted tabs';
+  replaceButton.setAttribute('aria-label', replaceLabel);
+  replaceButton.title = replaceLabel;
+  replaceButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleReplaceProjectItems(id, title, replaceButton);
+  });
+
+  // replace project items with all tabs in current window button 🔄
+  const replaceWindowButton = document.createElement('button');
+  replaceWindowButton.type = 'button';
+  replaceWindowButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
+  replaceWindowButton.textContent = '🔄';
+  const replaceWindowLabel =
+    'Replace items in ' + title + ' with current window tabs';
+  replaceWindowButton.setAttribute('aria-label', replaceWindowLabel);
+  replaceWindowButton.title = replaceWindowLabel;
+  replaceWindowButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleReplaceProjectItemsWithWindowTabs(
+      id,
+      title,
+      replaceWindowButton,
+    );
+  });
+
+  container.append(openButton, addButton, replaceButton, replaceWindowButton);
 
   return container;
 }
@@ -413,6 +458,183 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
 }
 
 /**
+ * Replace project items using highlighted tabs or the active tab.
+ * @param {number} projectId
+ * @param {string} projectTitle
+ * @param {HTMLButtonElement} trigger
+ * @returns {Promise<void>}
+ */
+async function handleReplaceProjectItems(projectId, projectTitle, trigger) {
+  await handleProjectReplacementAction(
+    projectId,
+    projectTitle,
+    trigger,
+    collectSavableTabs,
+    {
+      confirm: (name) =>
+        'Replace all items in ' +
+        name +
+        ' with highlighted tabs? Existing project items in Raindrop will be removed.',
+      preparing: (name) => 'Preparing to replace items in ' + name + '...',
+      running: (name) => 'Replacing items in ' + name + '...',
+      emptySelection: 'No highlighted or active tabs available to save.',
+      noValidTabs: 'No valid tab URLs to save.',
+      cancelMessage: 'Replace project canceled.',
+      collectError: 'Unable to access highlighted tabs.',
+    },
+  );
+}
+
+/**
+ * Replace project items using all tabs from the current window.
+ * @param {number} projectId
+ * @param {string} projectTitle
+ * @param {HTMLButtonElement} trigger
+ * @returns {Promise<void>}
+ */
+async function handleReplaceProjectItemsWithWindowTabs(
+  projectId,
+  projectTitle,
+  trigger,
+) {
+  await handleProjectReplacementAction(
+    projectId,
+    projectTitle,
+    trigger,
+    collectCurrentWindowSavableTabs,
+    {
+      confirm: (name) =>
+        'Replace all items in ' +
+        name +
+        ' with every savable tab in the current window? Existing project items in Raindrop will be removed.',
+      preparing: (name) =>
+        'Preparing to replace items in ' + name + ' using current window tabs...',
+      running: (name) =>
+        'Replacing items in ' + name + ' using current window tabs...',
+      emptySelection: 'No tabs in the current window can be saved.',
+      noValidTabs: 'No valid tab URLs to save.',
+      cancelMessage: 'Replace project canceled.',
+      collectError: 'Unable to access tabs in the current window.',
+    },
+  );
+}
+
+/**
+ * Handle replace project workflow with custom tab collector.
+ * @param {number} projectId
+ * @param {string} projectTitle
+ * @param {HTMLButtonElement} trigger
+ * @param {() => Promise<chrome.tabs.Tab[]>} tabCollector
+ * @param {ReplacementActionMessages} messages
+ * @returns {Promise<void>}
+ */
+async function handleProjectReplacementAction(
+  projectId,
+  projectTitle,
+  trigger,
+  tabCollector,
+  messages,
+) {
+  if (!Number.isFinite(projectId)) {
+    const statusElement = document.getElementById('statusMessage');
+    if (statusElement) {
+      concludeStatus(
+        'Project unavailable. Please refresh and try again.',
+        'error',
+        3000,
+        statusElement,
+      );
+    }
+    return;
+  }
+
+  const displayName =
+    typeof projectTitle === 'string' && projectTitle.trim()
+      ? projectTitle.trim()
+      : 'project';
+
+  const statusElement = document.getElementById('statusMessage');
+
+  const confirmText = messages.confirm(displayName);
+  if (confirmText && !window.confirm(confirmText)) {
+    if (statusElement) {
+      concludeStatus(messages.cancelMessage, 'info', 3000, statusElement);
+    }
+    return;
+  }
+
+  const button = trigger;
+  if (button) {
+    /** @type {HTMLButtonElement} */ (button).disabled = true;
+  }
+
+  try {
+    if (statusElement) {
+      setStatus(messages.preparing(displayName), 'info', statusElement);
+    }
+
+    let tabs;
+    try {
+      tabs = await tabCollector();
+    } catch (error) {
+      const fallbackMessage =
+        error instanceof Error ? error.message : String(error);
+      if (statusElement) {
+        concludeStatus(
+          messages.collectError + ' ' + fallbackMessage,
+          'error',
+          3000,
+          statusElement,
+        );
+      }
+      return;
+    }
+
+    if (!tabs || tabs.length === 0) {
+      if (statusElement) {
+        concludeStatus(
+          messages.emptySelection,
+          'info',
+          3000,
+          statusElement,
+        );
+      }
+      return;
+    }
+
+    const descriptors = buildProjectTabDescriptors(tabs);
+    if (descriptors.length === 0) {
+      if (statusElement) {
+        concludeStatus(messages.noValidTabs, 'info', 3000, statusElement);
+      }
+      return;
+    }
+
+    if (statusElement) {
+      setStatus(messages.running(displayName), 'info', statusElement);
+    }
+    const response = await sendRuntimeMessage({
+      type: 'projects:replaceProjectItems',
+      projectId,
+      tabs: descriptors,
+    });
+
+    if (statusElement) {
+      handleSaveProjectResponse(response, statusElement);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (statusElement) {
+      concludeStatus(message, 'error', 3000, statusElement);
+    }
+  } finally {
+    if (button) {
+      /** @type {HTMLButtonElement} */ (button).disabled = false;
+    }
+  }
+}
+
+/**
  * Build normalized tab descriptors for project saves.
  * @param {chrome.tabs.Tab[]} tabs
  * @returns {ProjectTabDescriptor[]}
@@ -451,6 +673,22 @@ function buildProjectTabDescriptors(tabs) {
   });
 
   return descriptors;
+}
+
+/**
+ * Gather all savable tabs in the current window.
+ * @returns {Promise<chrome.tabs.Tab[]>}
+ */
+async function collectCurrentWindowSavableTabs() {
+  const allTabs = await queryTabs({
+    currentWindow: true,
+  });
+  return allTabs.filter((tab) => {
+    if (!tab?.url) {
+      return false;
+    }
+    return Boolean(normalizeUrlForSave(tab.url));
+  });
 }
 
 /**

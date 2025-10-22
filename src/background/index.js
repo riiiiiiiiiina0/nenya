@@ -10,10 +10,12 @@ import {
   LIST_PROJECTS_MESSAGE,
   GET_CACHED_PROJECTS_MESSAGE,
   ADD_PROJECT_TABS_MESSAGE,
+  REPLACE_PROJECT_ITEMS_MESSAGE,
   handleSaveProjectMessage,
   handleListProjectsMessage,
   handleGetCachedProjectsMessage,
   handleAddTabsToProjectMessage,
+  handleReplaceProjectItemsMessage,
 } from './projects.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
@@ -91,6 +93,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === ADD_PROJECT_TABS_MESSAGE) {
     return handleAddTabsToProjectMessage(message, sendResponse);
+  }
+
+  if (message.type === REPLACE_PROJECT_ITEMS_MESSAGE) {
+    return handleReplaceProjectItemsMessage(message, sendResponse);
   }
 
   if (message.type === LIST_PROJECTS_MESSAGE) {

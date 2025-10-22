@@ -77,6 +77,8 @@ export const SAVE_PROJECT_MESSAGE = 'projects:saveProject';
 export const LIST_PROJECTS_MESSAGE = 'projects:listProjects';
 export const GET_CACHED_PROJECTS_MESSAGE = 'projects:getCachedProjects';
 export const ADD_PROJECT_TABS_MESSAGE = 'projects:addTabsToProject';
+export const REPLACE_PROJECT_ITEMS_MESSAGE =
+  'projects:replaceProjectItems';
 
 // Project-related constants
 const SAVED_PROJECTS_GROUP_TITLE = 'Saved projects';
@@ -163,6 +165,27 @@ export function handleAddTabsToProjectMessage(message, sendResponse) {
   const projectId = Number(message.projectId);
   const tabs = Array.isArray(message.tabs) ? message.tabs : [];
   addTabsToProject(projectId, tabs)
+    .then((result) => {
+      sendResponse(result);
+    })
+    .catch((error) => {
+      const messageText =
+        error instanceof Error ? error.message : String(error);
+      sendResponse({ ok: false, error: messageText });
+    });
+  return true;
+}
+
+/**
+ * Handle replace project items message.
+ * @param {any} message
+ * @param {Function} sendResponse
+ * @returns {boolean}
+ */
+export function handleReplaceProjectItemsMessage(message, sendResponse) {
+  const projectId = Number(message.projectId);
+  const tabs = Array.isArray(message.tabs) ? message.tabs : [];
+  replaceProjectItems(projectId, tabs)
     .then((result) => {
       sendResponse(result);
     })
@@ -520,6 +543,179 @@ export async function addTabsToProject(projectId, rawTabs) {
         summary.created += 1;
         existingUrls.add(normalizedUrl);
         currentIndex = candidateIndex;
+      } catch (error) {
+        summary.failed += 1;
+        const message = error instanceof Error ? error.message : String(error);
+        summary.errors.push(tab.url + ': ' + message);
+      }
+    }
+
+    summary.ok = summary.failed === 0;
+    if (!summary.ok && !summary.error && summary.errors.length > 0) {
+      summary.error = summary.errors[0];
+    }
+
+    return finalize();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    if (!summary.errors.includes(message)) {
+      summary.errors.push(message);
+    }
+    finalize();
+    throw error;
+  } finally {
+    concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
+  }
+}
+
+/**
+ * Replace all items in an existing Raindrop project collection.
+ * @param {number} projectId
+ * @param {ProjectTabDescriptor[]} rawTabs
+ * @returns {Promise<SaveProjectResult>}
+ */
+export async function replaceProjectItems(projectId, rawTabs) {
+  const badgeAnimation = animateActionBadge(['🗂️', '♻️']);
+  /** @type {SaveProjectResult} */
+  const summary = {
+    ok: false,
+    projectName: 'project',
+    created: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [],
+  };
+
+  const finalize = () => summary;
+
+  try {
+    const normalizedId = Number(projectId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+      summary.error = 'Project selection is invalid.';
+      return finalize();
+    }
+
+    const sanitized = sanitizeProjectTabDescriptors(rawTabs);
+    summary.skipped += sanitized.skipped;
+    if (sanitized.errors.length > 0) {
+      summary.errors.push(...sanitized.errors);
+    }
+
+    if (sanitized.tabs.length === 0) {
+      summary.error = 'No valid tabs to save.';
+      return finalize();
+    }
+
+    let tokens;
+    try {
+      tokens = await loadValidProviderTokens();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    if (!tokens) {
+      summary.error =
+        'No Raindrop connection found. Connect in Options to enable saving.';
+      return finalize();
+    }
+
+    const resolved = await resolveProjectTabs(sanitized.tabs);
+    summary.skipped += resolved.skipped;
+    if (resolved.errors.length > 0) {
+      summary.errors.push(...resolved.errors);
+    }
+
+    if (resolved.tabs.length === 0) {
+      summary.error = 'Selected tabs are no longer available.';
+      return finalize();
+    }
+
+    let collectionResponse;
+    try {
+      collectionResponse = await raindropRequest(
+        '/collection/' + normalizedId,
+        tokens,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    const collection = collectionResponse?.item;
+    if (!collection || typeof collection !== 'object') {
+      summary.error = 'Selected project could not be found.';
+      return finalize();
+    }
+    summary.projectName = normalizeFolderTitle(
+      collection?.title,
+      summary.projectName,
+    );
+
+    let existingItems;
+    try {
+      existingItems = await fetchAllProjectItems(tokens, normalizedId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      summary.error = message;
+      if (!summary.errors.includes(message)) {
+        summary.errors.push(message);
+      }
+      return finalize();
+    }
+
+    const deletionIds = existingItems
+      .map((item) => Number(item?._id ?? item?.id ?? item?.ID))
+      .filter((value) => Number.isFinite(value) && value > 0);
+    if (deletionIds.length > 0) {
+      try {
+        await raindropRequest('/raindrops/' + normalizedId, tokens, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids: deletionIds }),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        summary.error =
+          'Failed to remove existing items before replacing the project.';
+        summary.errors.push('Bulk delete: ' + message);
+        return finalize();
+      }
+    }
+
+    const context = await buildProjectGroupContext(resolved.tabs);
+    resolved.tabs.forEach((tab, orderIndex) => {
+      if (!context.tabIndexById.has(tab.id)) {
+        context.tabIndexById.set(tab.id, orderIndex);
+      }
+    });
+
+    for (const tab of resolved.tabs) {
+      const itemPayload = buildProjectItemPayload(
+        tab,
+        context,
+        normalizedId,
+      );
+      try {
+        await raindropRequest('/raindrop', tokens, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(itemPayload),
+        });
+        summary.created += 1;
       } catch (error) {
         summary.failed += 1;
         const message = error instanceof Error ? error.message : String(error);

@@ -78,10 +78,14 @@
 
 ### Replace items in a project
 
-1. Let the user pick an existing project from the popup.
-2. Let the user choose whether to replace the project with highlighted tabs, the active tab, or all tabs in the current window.
+1. Let the user pick an existing project from the popup (from popup page projects list ⏫ button).
+2. Collect highlighted tabs, or fall back to the active tab.
 3. Delete all items currently stored in the project collection.
 4. Recreate the project by reusing the steps in “Save tabs as a project”.
+
+### Replace items in a project with tabs in current window
+
+Save as "Replace items in a project", but instead of highlight tabs or active tab, we use all tabs from current window.
 
 ### Open a saved project
 
