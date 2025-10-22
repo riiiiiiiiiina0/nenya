@@ -967,11 +967,19 @@ async function buildProjectTabDescriptors(tabs) {
     }
     seen.add(normalizedUrl);
 
-    // Check for custom title
-    const customTitle = customTitles[`customTitle_${tab.id}`];
-    const finalTitle = customTitle && typeof customTitle === 'string' && customTitle.trim() 
-      ? customTitle.trim() 
-      : (typeof tab.title === 'string' ? tab.title : '');
+    // Check for custom title (handle both old string format and new object format)
+    const customTitleData = customTitles[`customTitle_${tab.id}`];
+    let customTitle = '';
+    
+    if (typeof customTitleData === 'string' && customTitleData.trim() !== '') {
+      // Old format: just a string
+      customTitle = customTitleData.trim();
+    } else if (customTitleData && typeof customTitleData === 'object' && customTitleData.title && typeof customTitleData.title === 'string' && customTitleData.title.trim() !== '') {
+      // New format: object with tabId, url, and title
+      customTitle = customTitleData.title.trim();
+    }
+    
+    const finalTitle = customTitle || (typeof tab.title === 'string' ? tab.title : '');
 
     descriptors.push({
       id: tab.id,

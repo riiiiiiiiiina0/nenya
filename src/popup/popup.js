@@ -135,10 +135,14 @@ async function handleRenameTab() {
       return;
     }
 
-    // Save custom title and tab ID to Chrome local storage
+    // Save custom title as object with tab ID, URL, and title to Chrome local storage
     try {
       await chrome.storage.local.set({
-        [`customTitle_${currentTab.id}`]: customTitle.trim()
+        [`customTitle_${currentTab.id}`]: {
+          tabId: currentTab.id,
+          url: currentTab.url,
+          title: customTitle.trim()
+        }
       });
     } catch (error) {
       console.error('[popup] Failed to save custom title to storage:', error);

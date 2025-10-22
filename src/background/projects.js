@@ -1305,11 +1305,15 @@ async function applyProjectRestore(entries) {
           outcome.pinned += 1;
         }
         
-        // Save custom title to local storage if it exists
+        // Save custom title as object with tab ID, URL, and title to local storage if it exists
         if (entry.customTitle && typeof entry.customTitle === 'string' && entry.customTitle.trim() !== '') {
           try {
             await chrome.storage.local.set({
-              [`customTitle_${tab.id}`]: entry.customTitle.trim()
+              [`customTitle_${tab.id}`]: {
+                tabId: tab.id,
+                url: entry.url,
+                title: entry.customTitle.trim()
+              }
             });
           } catch (error) {
             console.log('Could not save custom title for tab', tab.id, ':', error);
