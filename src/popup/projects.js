@@ -50,7 +50,7 @@ function setProjectsContainerDisabled(projectsContainer, disabled) {
   if (!projectsContainer) {
     return;
   }
-  
+
   if (disabled) {
     projectsContainer.style.opacity = '0.5';
     projectsContainer.style.pointerEvents = 'none';
@@ -217,7 +217,8 @@ function renderProjectRow(project) {
       : 'Untitled project';
   const itemCount = Number(project.itemCount);
   const url = typeof project.url === 'string' && project.url ? project.url : '';
-  const cover = typeof project.cover === 'string' && project.cover ? project.cover : null;
+  const cover =
+    typeof project.cover === 'string' && project.cover ? project.cover : null;
 
   const container = document.createElement('div');
   container.className =
@@ -287,7 +288,11 @@ function renderProjectRow(project) {
       renderArrowIcon();
     });
     container.addEventListener('focusout', (event) => {
-      if (event.relatedTarget && event.relatedTarget instanceof Node && container.contains(event.relatedTarget)) {
+      if (
+        event.relatedTarget &&
+        event.relatedTarget instanceof Node &&
+        container.contains(event.relatedTarget)
+      ) {
         return;
       }
       renderCoverIcon();
@@ -366,7 +371,8 @@ function renderProjectRow(project) {
   // replace project items with all tabs in current window button
   const replaceWindowButton = document.createElement('button');
   replaceWindowButton.type = 'button';
-  replaceWindowButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
+  replaceWindowButton.className =
+    'btn btn-ghost btn-xs btn-square flex-shrink-0';
   replaceWindowButton.textContent = '⏫';
   const replaceWindowLabel =
     'Replace items in ' + title + ' with current window tabs';
@@ -382,21 +388,28 @@ function renderProjectRow(project) {
     );
   });
 
-  // delete project button
-  const deleteButton = document.createElement('button');
-  deleteButton.type = 'button';
-  deleteButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0 text-error hover:bg-error hover:text-error-content';
-  deleteButton.textContent = '🗑️';
-  const deleteLabel = 'Delete ' + title;
-  deleteButton.setAttribute('aria-label', deleteLabel);
-  deleteButton.title = deleteLabel;
-  deleteButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void handleDeleteProject(id, title, deleteButton);
-  });
+  // NOTE: hide delete project button, i want to keep ui clean and simple
+  // // delete project button
+  // const deleteButton = document.createElement('button');
+  // deleteButton.type = 'button';
+  // deleteButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0 text-error hover:bg-error hover:text-error-content';
+  // deleteButton.textContent = '🗑️';
+  // const deleteLabel = 'Delete ' + title;
+  // deleteButton.setAttribute('aria-label', deleteLabel);
+  // deleteButton.title = deleteLabel;
+  // deleteButton.addEventListener('click', (event) => {
+  //   event.preventDefault();
+  //   event.stopPropagation();
+  //   void handleDeleteProject(id, title, deleteButton);
+  // });
 
-  container.append(openButton, addButton, replaceButton, replaceWindowButton, deleteButton);
+  container.append(
+    openButton,
+    addButton,
+    replaceButton,
+    replaceWindowButton,
+    // deleteButton
+  );
 
   return container;
 }
@@ -778,7 +791,10 @@ async function handleDeleteProject(projectId, projectTitle, trigger) {
 
   const statusElement = document.getElementById('statusMessage');
 
-  const confirmText = 'Are you sure you want to delete ' + displayName + '? This will permanently remove the collection and all its items from Raindrop.';
+  const confirmText =
+    'Are you sure you want to delete ' +
+    displayName +
+    '? This will permanently remove the collection and all its items from Raindrop.';
   if (confirmText && !window.confirm(confirmText)) {
     if (statusElement) {
       concludeStatus('Delete canceled.', 'info', 3000, statusElement);
@@ -793,7 +809,7 @@ async function handleDeleteProject(projectId, projectTitle, trigger) {
 
   // Find and store reference to the project row for immediate removal
   const projectRow = trigger.closest('[role="listitem"]');
-  
+
   // Disable projects container during operation
   const projectsContainer = document.getElementById('projectsContainer');
   setProjectsContainerDisabled(projectsContainer, true);
@@ -958,10 +974,10 @@ async function buildProjectTabDescriptors(tabs) {
 
   // Get all custom titles at once for efficiency
   const tabIds = tabs
-    .filter(tab => tab && typeof tab.id === 'number')
-    .map(tab => tab.id);
-  
-  const customTitleKeys = tabIds.map(id => `customTitle_${id}`);
+    .filter((tab) => tab && typeof tab.id === 'number')
+    .map((tab) => tab.id);
+
+  const customTitleKeys = tabIds.map((id) => `customTitle_${id}`);
   const customTitles = await chrome.storage.local.get(customTitleKeys);
 
   tabs.forEach((tab) => {
@@ -978,16 +994,23 @@ async function buildProjectTabDescriptors(tabs) {
     // Check for custom title (handle both old string format and new object format)
     const customTitleData = customTitles[`customTitle_${tab.id}`];
     let customTitle = '';
-    
+
     if (typeof customTitleData === 'string' && customTitleData.trim() !== '') {
       // Old format: just a string
       customTitle = customTitleData.trim();
-    } else if (customTitleData && typeof customTitleData === 'object' && customTitleData.title && typeof customTitleData.title === 'string' && customTitleData.title.trim() !== '') {
+    } else if (
+      customTitleData &&
+      typeof customTitleData === 'object' &&
+      customTitleData.title &&
+      typeof customTitleData.title === 'string' &&
+      customTitleData.title.trim() !== ''
+    ) {
       // New format: object with tabId, url, and title
       customTitle = customTitleData.title.trim();
     }
-    
-    const finalTitle = customTitle || (typeof tab.title === 'string' ? tab.title : '');
+
+    const finalTitle =
+      customTitle || (typeof tab.title === 'string' ? tab.title : '');
 
     descriptors.push({
       id: tab.id,
@@ -1176,7 +1199,9 @@ function handleDeleteProjectResponse(response, statusMessage, projectName) {
   }
 
   const errorText =
-    typeof response.error === 'string' ? response.error : 'Project deletion failed.';
+    typeof response.error === 'string'
+      ? response.error
+      : 'Project deletion failed.';
   concludeStatus(errorText, 'error', 3000, statusMessage);
 }
 

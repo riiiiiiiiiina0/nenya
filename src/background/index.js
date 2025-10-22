@@ -21,6 +21,11 @@ import {
   handleDeleteProjectMessage,
   handleRestoreProjectTabsMessage,
 } from './projects.js';
+import {
+  initializeOptionsBackupService,
+  handleOptionsBackupLifecycle,
+  handleOptionsBackupMessage,
+} from './options-backup.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -47,6 +52,13 @@ async function scheduleMirrorAlarm() {
 function handleLifecycleEvent(trigger) {
   setupContextMenus();
   void scheduleMirrorAlarm();
+  initializeOptionsBackupService();
+  void handleOptionsBackupLifecycle(trigger).catch((error) => {
+    console.warn(
+      '[options-backup] Lifecycle restore skipped:',
+      error instanceof Error ? error.message : error,
+    );
+  });
   void runMirrorPull(trigger).catch((error) => {
     console.warn(
       '[mirror] Initial pull skipped:',
@@ -89,6 +101,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') {
     return false;
+  }
+
+  if (handleOptionsBackupMessage(message, sendResponse)) {
+    return true;
   }
 
   if (message.type === GET_CURRENT_TAB_ID_MESSAGE) {
