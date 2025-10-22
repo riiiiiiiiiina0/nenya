@@ -1451,6 +1451,19 @@ async function applyProjectRestore(entries) {
   const existingPinnedCount = existingTabs.filter((tab) => tab?.pinned).length;
   const existingTabCount = existingTabs.length;
 
+  // Check if current window has only 1 empty tab (new tab page)
+  const hasOnlyEmptyTab = existingTabCount === 1 && 
+    existingTabs[0] && 
+    existingTabs[0].url && 
+    (existingTabs[0].url === 'chrome://newtab/' || 
+     existingTabs[0].url === 'chrome://new-tab-page/' ||
+     existingTabs[0].url === 'edge://newtab/' ||
+     existingTabs[0].url === 'about:newtab' ||
+     existingTabs[0].url === 'about:blank' ||
+     existingTabs[0].url.startsWith('chrome://newtab/') ||
+     existingTabs[0].url.startsWith('chrome://new-tab-page/') ||
+     existingTabs[0].url.startsWith('edge://newtab/'));
+
   const sortedEntries = sortProjectRestoreEntries(entries);
   /** @type {{ tab: chrome.tabs.Tab, entry: ProjectRestoreEntry }[]} */
   const createdEntries = [];
@@ -1502,6 +1515,19 @@ async function applyProjectRestore(entries) {
 
   if (createdEntries.length === 0) {
     return outcome;
+  }
+
+  // Close the empty tab if we had only one empty tab and successfully created new tabs
+  if (hasOnlyEmptyTab && createdEntries.length > 0) {
+    try {
+      const emptyTab = existingTabs[0];
+      if (emptyTab && typeof emptyTab.id === 'number') {
+        await chrome.tabs.remove(emptyTab.id);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outcome.errors.push('Failed to close empty tab: ' + message);
+    }
   }
 
   if (
