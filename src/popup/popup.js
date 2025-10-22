@@ -542,7 +542,7 @@ async function refreshProjectList() {
   try {
     // First, try to load cached projects for immediate display
     const cachedResponse = await sendRuntimeMessage({
-      type: 'mirror:getCachedProjects',
+      type: 'projects:getCachedProjects',
     });
     if (
       cachedResponse &&
@@ -563,7 +563,9 @@ async function refreshProjectList() {
     }
 
     // Then fetch fresh data in the background
-    const response = await sendRuntimeMessage({ type: 'mirror:listProjects' });
+    const response = await sendRuntimeMessage({
+      type: 'projects:listProjects',
+    });
     renderProjectsResponse(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -811,7 +813,7 @@ async function handleSaveProject() {
 
     setStatus('Saving project...', 'info');
     const response = await sendRuntimeMessage({
-      type: 'mirror:saveProject',
+      type: 'projects:saveProject',
       projectName,
       tabs: descriptors,
     });
@@ -871,7 +873,7 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
 
     setStatus('Adding tabs to ' + displayName + '...', 'info');
     const response = await sendRuntimeMessage({
-      type: 'mirror:addTabsToProject',
+      type: 'projects:addTabsToProject',
       projectId,
       tabs: descriptors,
     });
