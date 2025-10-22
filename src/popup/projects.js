@@ -41,6 +41,26 @@ import {
  */
 
 /**
+ * Set the projects container to disabled state.
+ * @param {HTMLElement | null} projectsContainer
+ * @param {boolean} disabled
+ * @returns {void}
+ */
+function setProjectsContainerDisabled(projectsContainer, disabled) {
+  if (!projectsContainer) {
+    return;
+  }
+  
+  if (disabled) {
+    projectsContainer.style.opacity = '0.5';
+    projectsContainer.style.pointerEvents = 'none';
+  } else {
+    projectsContainer.style.opacity = '';
+    projectsContainer.style.pointerEvents = '';
+  }
+}
+
+/**
  * Refresh the list of saved projects.
  * @param {HTMLElement} projectsContainer
  * @param {HTMLElement} refreshProjectsButton
@@ -299,7 +319,21 @@ function renderProjectRow(project) {
     );
   });
 
-  container.append(openButton, addButton, replaceButton, replaceWindowButton);
+  // delete project button
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0 text-error hover:bg-error hover:text-error-content';
+  deleteButton.textContent = '🗑️';
+  const deleteLabel = 'Delete ' + title;
+  deleteButton.setAttribute('aria-label', deleteLabel);
+  deleteButton.title = deleteLabel;
+  deleteButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void handleDeleteProject(id, title, deleteButton);
+  });
+
+  container.append(openButton, addButton, replaceButton, replaceWindowButton, deleteButton);
 
   return container;
 }
@@ -415,6 +449,10 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
     /** @type {HTMLButtonElement} */ (button).disabled = true;
   }
 
+  // Disable projects container during operation
+  const projectsContainer = document.getElementById('projectsContainer');
+  setProjectsContainerDisabled(projectsContainer, true);
+
   const statusElement = document.getElementById('statusMessage');
   if (statusElement) {
     setStatus(
@@ -476,6 +514,8 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
     if (button) {
       /** @type {HTMLButtonElement} */ (button).disabled = false;
     }
+    // Re-enable projects container
+    setProjectsContainerDisabled(projectsContainer, false);
   }
 }
 
@@ -544,6 +584,78 @@ async function handleReplaceProjectItemsWithWindowTabs(
 }
 
 /**
+ * Handle delete project action.
+ * @param {number} projectId
+ * @param {string} projectTitle
+ * @param {HTMLButtonElement} trigger
+ * @returns {Promise<void>}
+ */
+async function handleDeleteProject(projectId, projectTitle, trigger) {
+  if (!Number.isFinite(projectId)) {
+    const statusElement = document.getElementById('statusMessage');
+    if (statusElement) {
+      concludeStatus(
+        'Project unavailable. Please refresh and try again.',
+        'error',
+        3000,
+        statusElement,
+      );
+    }
+    return;
+  }
+
+  const displayName =
+    typeof projectTitle === 'string' && projectTitle.trim()
+      ? projectTitle.trim()
+      : 'project';
+
+  const statusElement = document.getElementById('statusMessage');
+
+  const confirmText = 'Are you sure you want to delete ' + displayName + '? This will permanently remove the collection and all its items from Raindrop.';
+  if (confirmText && !window.confirm(confirmText)) {
+    if (statusElement) {
+      concludeStatus('Delete canceled.', 'info', 3000, statusElement);
+    }
+    return;
+  }
+
+  const button = trigger;
+  if (button) {
+    /** @type {HTMLButtonElement} */ (button).disabled = true;
+  }
+
+  // Disable projects container during operation
+  const projectsContainer = document.getElementById('projectsContainer');
+  setProjectsContainerDisabled(projectsContainer, true);
+
+  try {
+    if (statusElement) {
+      setStatus('Deleting ' + displayName + '...', 'info', statusElement);
+    }
+
+    const response = await sendRuntimeMessage({
+      type: 'projects:deleteProject',
+      projectId,
+    });
+
+    if (statusElement) {
+      handleDeleteProjectResponse(response, statusElement, displayName);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (statusElement) {
+      concludeStatus(message, 'error', 3000, statusElement);
+    }
+  } finally {
+    if (button) {
+      /** @type {HTMLButtonElement} */ (button).disabled = false;
+    }
+    // Re-enable projects container
+    setProjectsContainerDisabled(projectsContainer, false);
+  }
+}
+
+/**
  * Handle replace project workflow with custom tab collector.
  * @param {number} projectId
  * @param {string} projectTitle
@@ -591,6 +703,10 @@ async function handleProjectReplacementAction(
   if (button) {
     /** @type {HTMLButtonElement} */ (button).disabled = true;
   }
+
+  // Disable projects container during operation
+  const projectsContainer = document.getElementById('projectsContainer');
+  setProjectsContainerDisabled(projectsContainer, true);
 
   try {
     if (statusElement) {
@@ -650,6 +766,8 @@ async function handleProjectReplacementAction(
     if (button) {
       /** @type {HTMLButtonElement} */ (button).disabled = false;
     }
+    // Re-enable projects container
+    setProjectsContainerDisabled(projectsContainer, false);
   }
 }
 
@@ -828,6 +946,45 @@ function handleSaveProjectResponse(response, statusMessage) {
 
   const errorText =
     typeof response.error === 'string' ? response.error : message;
+  concludeStatus(errorText, 'error', 3000, statusMessage);
+}
+
+/**
+ * Update popup status based on a delete project response.
+ * @param {any} response
+ * @param {HTMLElement} statusMessage
+ * @param {string} projectName
+ * @returns {void}
+ */
+function handleDeleteProjectResponse(response, statusMessage, projectName) {
+  if (!response || typeof response !== 'object') {
+    concludeStatus(
+      'Project deletion failed. Please try again.',
+      'error',
+      3000,
+      statusMessage,
+    );
+    return;
+  }
+
+  if (response.ok) {
+    concludeStatus(
+      projectName + ' has been deleted successfully.',
+      'success',
+      3000,
+      statusMessage,
+    );
+    // Auto-refresh the projects list after successful deletion
+    const projectsContainer = document.getElementById('projectsContainer');
+    const refreshButton = document.getElementById('refreshProjectsButton');
+    if (projectsContainer && refreshButton) {
+      void refreshProjectList(projectsContainer, refreshButton);
+    }
+    return;
+  }
+
+  const errorText =
+    typeof response.error === 'string' ? response.error : 'Project deletion failed.';
   concludeStatus(errorText, 'error', 3000, statusMessage);
 }
 

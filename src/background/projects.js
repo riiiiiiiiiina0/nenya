@@ -80,6 +80,7 @@ export const GET_CACHED_PROJECTS_MESSAGE = 'projects:getCachedProjects';
 export const ADD_PROJECT_TABS_MESSAGE = 'projects:addTabsToProject';
 export const REPLACE_PROJECT_ITEMS_MESSAGE =
   'projects:replaceProjectItems';
+export const DELETE_PROJECT_MESSAGE = 'projects:deleteProject';
 
 // Project-related constants
 const SAVED_PROJECTS_GROUP_TITLE = 'Saved projects';
@@ -229,6 +230,31 @@ export function handleListProjectsMessage(message, sendResponse) {
  */
 export function handleGetCachedProjectsMessage(message, sendResponse) {
   getCachedProjects()
+    .then((result) => {
+      sendResponse(result);
+    })
+    .catch((error) => {
+      const messageText =
+        error instanceof Error ? error.message : String(error);
+      sendResponse({ ok: false, error: messageText });
+    });
+  return true;
+}
+
+/**
+ * Handle delete project message.
+ * @param {any} message
+ * @param {Function} sendResponse
+ * @returns {boolean}
+ */
+export function handleDeleteProjectMessage(message, sendResponse) {
+  const projectId = Number(message.projectId);
+  if (!Number.isFinite(projectId)) {
+    sendResponse({ ok: false, error: 'Invalid project ID.' });
+    return true;
+  }
+
+  deleteProject(projectId)
     .then((result) => {
       sendResponse(result);
     })
@@ -740,6 +766,63 @@ export async function replaceProjectItems(projectId, rawTabs) {
     throw error;
   } finally {
     concludeActionBadge(badgeAnimation, summary.ok ? '✅' : '❌');
+  }
+}
+
+/**
+ * Delete a project (collection) from Raindrop.
+ * @param {number} projectId
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+export async function deleteProject(projectId) {
+  const badgeAnimation = animateActionBadge(['🗑️', '💥']);
+  
+  try {
+    const normalizedId = Number(projectId);
+    if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+      return { ok: false, error: 'Invalid project ID.' };
+    }
+
+    let tokens;
+    try {
+      tokens = await loadValidProviderTokens();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { ok: false, error: message };
+    }
+
+    if (!tokens) {
+      return {
+        ok: false,
+        error: 'No Raindrop connection found. Connect in Options to enable deletion.',
+      };
+    }
+
+    // Delete the collection using Raindrop API
+    const deleteResponse = await raindropRequest(
+      `/collection/${normalizedId}`,
+      tokens,
+      {
+        method: 'DELETE',
+      },
+    );
+
+    if (!deleteResponse || !deleteResponse.result) {
+      return {
+        ok: false,
+        error: 'Failed to delete project from Raindrop.',
+      };
+    }
+
+    // Clear cached projects since we deleted one
+    await chrome.storage.local.remove([CACHED_PROJECTS_KEY, CACHED_PROJECTS_TIMESTAMP_KEY]);
+
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message };
+  } finally {
+    concludeActionBadge(badgeAnimation, '🗑️');
   }
 }
 
