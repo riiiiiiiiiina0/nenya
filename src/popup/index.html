@@ -22,23 +22,31 @@
       </button>
     </div>
   </div>
-  <main class="w-80 p-5 space-y-4">
+  <main class="min-w-[420px] p-5 space-y-4">
+    <!-- cloud bookmarks -->
     <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
       <div class="card-body gap-2">
         <header class="space-y-1">
-          <h1 class="text-xl font-semibold text-base-content">Mirror Cloud Bookmarks</h1>
-          <p class="text-sm text-base-content/70">Pull the latest Raindrop collections and items into the mirror folder.
-          </p>
+          <h1 class="text-xl font-semibold text-base-content">🔖 Cloud Bookmarks</h1>
+          <p class="text-sm text-base-content/70">Pull your Raindrop collections to local bookmarks.</p>
         </header>
-        <div id="statusMessage" class="text-sm text-base-content/80 min-h-5" role="status" aria-live="polite">Ready to
-          sync.
-        </div>
         <button id="pullButton" class="btn btn-primary w-full" type="button">
           Pull now
         </button>
         <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
           Save to Unsorted
         </button>
+
+      </div>
+    </article>
+
+    <!-- saved projects -->
+    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">
+      <div class="card-body gap-2">
+        <header class="space-y-1">
+          <h1 class="text-xl font-semibold text-base-content">📚 Saved Projects</h1>
+          <p class="text-sm text-base-content/70">Group tabs into a project for easy access later.</p>
+        </header>
         <button id="saveProjectButton" class="btn btn-accent w-full" type="button">
           Save current tab as project
         </button>
@@ -54,6 +62,13 @@
       </div>
     </article>
   </main>
+
+  <!-- status message -->
+  <div id="statusMessage"
+    class="fixed bottom-0 left-0 right-0 z-30 text-center p-2 text-sm text-base-content/80 bg-base-100/80 min-h-5 opacity-0 transition-opacity duration-300"
+    role="status" aria-live="polite">
+  </div>
+
   <script src="./popup.js" type="module"></script>
 </body>
 

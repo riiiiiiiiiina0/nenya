@@ -62,6 +62,7 @@ const mirrorSection = /** @type {HTMLElement | null} */ (
 const STATUS_CLASS_SUCCESS = 'text-success';
 const STATUS_CLASS_ERROR = 'text-error';
 const STATUS_CLASS_INFO = 'text-base-content/80';
+const STATUS_CLASS_HIDDEN = 'opacity-0';
 
 /**
  * @typedef {Object} SaveUnsortedEntry
@@ -100,6 +101,7 @@ function setStatus(text, tone) {
   }
   statusMessage.textContent = text;
   statusMessage.classList.remove(
+    STATUS_CLASS_HIDDEN,
     STATUS_CLASS_SUCCESS,
     STATUS_CLASS_ERROR,
     STATUS_CLASS_INFO,
@@ -111,6 +113,20 @@ function setStatus(text, tone) {
   } else {
     statusMessage.classList.add(STATUS_CLASS_INFO);
   }
+}
+
+/**
+ * Update the popup status text and styling, then hide it after a delay.
+ * @param {string} text
+ * @param {'success' | 'error' | 'info'} tone
+ * @param {number} delay
+ * @returns {void}
+ */
+function concludeStatus(text, tone, delay = 3000) {
+  setStatus(text, tone);
+  setTimeout(() => {
+    statusMessage?.classList.add(STATUS_CLASS_HIDDEN);
+  }, delay);
 }
 
 /**
@@ -215,18 +231,18 @@ if (pullButton) {
       .then((response) => {
         if (response && response.ok) {
           const summary = formatStats(response.stats);
-          setStatus('Sync complete. ' + summary, 'success');
+          concludeStatus('Sync complete. ' + summary, 'success');
         } else {
           const message =
             response && typeof response.error === 'string'
               ? response.error
               : 'Sync failed. Please try again.';
-          setStatus(message, 'error');
+          concludeStatus(message, 'error');
         }
       })
       .catch((error) => {
         const message = error instanceof Error ? error.message : String(error);
-        setStatus(message, 'error');
+        concludeStatus(message, 'error');
       })
       .finally(() => {
         pullButton.disabled = false;
@@ -234,7 +250,7 @@ if (pullButton) {
   });
 } else {
   console.error('[popup] Sync button not found.');
-  setStatus('Unable to locate sync controls.', 'error');
+  concludeStatus('Unable to locate sync controls.', 'error');
 }
 
 if (saveUnsortedButton) {
@@ -284,7 +300,7 @@ if (openOptionsButton) {
       const error = chrome.runtime.lastError;
       if (error) {
         console.error('[popup] Unable to open options page.', error);
-        setStatus('Unable to open options page.', 'error');
+        concludeStatus('Unable to open options page.', 'error');
       }
     });
   });
@@ -307,13 +323,16 @@ async function handleSaveToUnsorted() {
   try {
     const tabs = await collectSavableTabs();
     if (tabs.length === 0) {
-      setStatus('No highlighted or active tabs available to save.', 'info');
+      concludeStatus(
+        'No highlighted or active tabs available to save.',
+        'info',
+      );
       return;
     }
 
     const entries = buildSaveEntriesFromTabs(tabs);
     if (entries.length === 0) {
-      setStatus('No valid tab URLs to save.', 'info');
+      concludeStatus('No valid tab URLs to save.', 'info');
       return;
     }
 
@@ -325,7 +344,7 @@ async function handleSaveToUnsorted() {
     handleSaveResponse(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    setStatus(message, 'error');
+    concludeStatus(message, 'error');
   } finally {
     saveUnsortedButton.disabled = false;
   }
@@ -463,7 +482,7 @@ function normalizeUrlForSave(url) {
  */
 function handleSaveResponse(response) {
   if (!response || typeof response !== 'object') {
-    setStatus('Save failed. Please try again.', 'error');
+    concludeStatus('Save failed. Please try again.', 'error');
     return;
   }
 
@@ -485,13 +504,13 @@ function handleSaveResponse(response) {
   const message = fragments.join('. ') + '.';
 
   if (response.ok) {
-    setStatus(message, 'success');
+    concludeStatus(message, 'success');
     return;
   }
 
   const errorText =
     typeof response.error === 'string' ? response.error : message;
-  setStatus(errorText, 'error');
+  concludeStatus(errorText, 'error');
 }
 
 /**
@@ -521,6 +540,29 @@ async function refreshProjectList() {
   projectsContainer.style.pointerEvents = 'none';
 
   try {
+    // First, try to load cached projects for immediate display
+    const cachedResponse = await sendRuntimeMessage({
+      type: 'mirror:getCachedProjects',
+    });
+    if (
+      cachedResponse &&
+      cachedResponse.ok &&
+      Array.isArray(cachedResponse.projects)
+    ) {
+      // Render cached data immediately
+      renderProjectsResponse(cachedResponse);
+
+      // Reset loading state for cached data
+      projectsContainer.style.opacity = '';
+      projectsContainer.style.pointerEvents = '';
+
+      if (refreshProjectsButton) {
+        refreshProjectsButton.disabled = false;
+        refreshProjectsButton.textContent = '🔄️';
+      }
+    }
+
+    // Then fetch fresh data in the background
     const response = await sendRuntimeMessage({ type: 'mirror:listProjects' });
     renderProjectsResponse(response);
   } catch (error) {
@@ -530,7 +572,7 @@ async function refreshProjectList() {
     // Reset loading state
     projectsContainer.style.opacity = '';
     projectsContainer.style.pointerEvents = '';
-    
+
     if (refreshProjectsButton) {
       refreshProjectsButton.disabled = false;
       refreshProjectsButton.textContent = '🔄️';
@@ -741,26 +783,29 @@ async function handleSaveProject() {
   try {
     const tabs = await collectSavableTabs();
     if (tabs.length === 0) {
-      setStatus('No highlighted or active tabs available to save.', 'info');
+      concludeStatus(
+        'No highlighted or active tabs available to save.',
+        'info',
+      );
       return;
     }
 
     const defaultName = await deriveDefaultProjectName(tabs[0]);
     const input = window.prompt('Project name', defaultName);
     if (input === null) {
-      setStatus('Project save canceled.', 'info');
+      concludeStatus('Project save canceled.', 'info');
       return;
     }
 
     const projectName = input.trim();
     if (!projectName) {
-      setStatus('Project name is required.', 'error');
+      concludeStatus('Project name is required.', 'error');
       return;
     }
 
     const descriptors = buildProjectTabDescriptors(tabs);
     if (descriptors.length === 0) {
-      setStatus('No valid tab URLs to save.', 'info');
+      concludeStatus('No valid tab URLs to save.', 'info');
       return;
     }
 
@@ -774,7 +819,7 @@ async function handleSaveProject() {
     handleSaveProjectResponse(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    setStatus(message, 'error');
+    concludeStatus(message, 'error');
   } finally {
     saveProjectButton.disabled = false;
   }
@@ -789,7 +834,10 @@ async function handleSaveProject() {
  */
 async function handleAddTabsToProject(projectId, projectTitle, trigger) {
   if (!Number.isFinite(projectId)) {
-    setStatus('Project unavailable. Please refresh and try again.', 'error');
+    concludeStatus(
+      'Project unavailable. Please refresh and try again.',
+      'error',
+    );
     return;
   }
 
@@ -808,13 +856,16 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
   try {
     const tabs = await collectSavableTabs();
     if (tabs.length === 0) {
-      setStatus('No highlighted or active tabs available to save.', 'info');
+      concludeStatus(
+        'No highlighted or active tabs available to save.',
+        'info',
+      );
       return;
     }
 
     const descriptors = buildProjectTabDescriptors(tabs);
     if (descriptors.length === 0) {
-      setStatus('No valid tab URLs to save.', 'info');
+      concludeStatus('No valid tab URLs to save.', 'info');
       return;
     }
 
@@ -828,7 +879,7 @@ async function handleAddTabsToProject(projectId, projectTitle, trigger) {
     handleSaveProjectResponse(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    setStatus(message, 'error');
+    concludeStatus(message, 'error');
   } finally {
     if (button) {
       button.disabled = false;
@@ -964,7 +1015,7 @@ function safeHostname(url) {
  */
 function handleSaveProjectResponse(response) {
   if (!response || typeof response !== 'object') {
-    setStatus('Project save failed. Please try again.', 'error');
+    concludeStatus('Project save failed. Please try again.', 'error');
     return;
   }
 
@@ -988,7 +1039,7 @@ function handleSaveProjectResponse(response) {
   const message = fragments.join('. ') + '.';
 
   if (response.ok) {
-    setStatus(message, 'success');
+    concludeStatus(message, 'success');
     // Auto-refresh the projects list after successful save
     void refreshProjectList();
     return;
@@ -996,5 +1047,5 @@ function handleSaveProjectResponse(response) {
 
   const errorText =
     typeof response.error === 'string' ? response.error : message;
-  setStatus(errorText, 'error');
+  concludeStatus(errorText, 'error');
 }
