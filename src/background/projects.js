@@ -1590,6 +1590,20 @@ async function applyProjectRestore(entries) {
     }
   }
 
+  // Auto-activate and focus on the first created tab
+  if (createdEntries.length > 0) {
+    try {
+      const firstTab = createdEntries[0].tab;
+      if (firstTab && typeof firstTab.id === 'number') {
+        await tabsUpdate(firstTab.id, { active: true });
+        await tabsHighlight({ tabs: [firstTab.id] });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outcome.errors.push('Failed to activate first tab: ' + message);
+    }
+  }
+
   return outcome;
 }
 
@@ -2372,6 +2386,61 @@ async function windowsGetCurrent() {
 
   return new Promise((resolve, reject) => {
     chrome.windows.getCurrent((window) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(window);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabs.update.
+ * @param {number} tabId
+ * @param {chrome.tabs.UpdateProperties} updateProperties
+ * @returns {Promise<chrome.tabs.Tab>}
+ */
+async function tabsUpdate(tabId, updateProperties) {
+  try {
+    const maybe = chrome.tabs.update(tabId, updateProperties);
+    if (isPromiseLike(maybe)) {
+      return /** @type {chrome.tabs.Tab} */ (await maybe);
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.update(tabId, updateProperties, (tab) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(/** @type {chrome.tabs.Tab} */ (tab));
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabs.highlight.
+ * @param {chrome.tabs.HighlightInfo} highlightInfo
+ * @returns {Promise<chrome.windows.Window>}
+ */
+async function tabsHighlight(highlightInfo) {
+  try {
+    const maybe = chrome.tabs.highlight(highlightInfo);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.highlight(highlightInfo, (window) => {
       const lastError = chrome.runtime.lastError;
       if (lastError) {
         reject(new Error(lastError.message));
