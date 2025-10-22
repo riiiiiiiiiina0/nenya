@@ -2,11 +2,11 @@
 
 import {
   sendRuntimeMessage,
- setStatus,
- concludeStatus,
- queryTabs,
- normalizeUrlForSave,
- collectSavableTabs,
+  setStatus,
+  concludeStatus,
+  queryTabs,
+  normalizeUrlForSave,
+  collectSavableTabs,
 } from './shared.js';
 
 /**
@@ -15,6 +15,7 @@ import {
  * @property {string} title
  * @property {number} itemCount
  * @property {string} url
+ * @property {string} [cover]
  */
 
 /**
@@ -196,16 +197,36 @@ function renderProjectRow(project) {
       : 'Untitled project';
   const itemCount = Number(project.itemCount);
   const url = typeof project.url === 'string' && project.url ? project.url : '';
+  const cover = typeof project.cover === 'string' && project.cover ? project.cover : null;
 
   const container = document.createElement('div');
   container.className =
-    'flex items-center gap-1 w-full border border-base-content/10 rounded-md p-1';
+    'flex items-center w-full border border-base-content/10 rounded-md p-1';
   container.setAttribute('role', 'listitem');
 
   const openButton = document.createElement('button');
   openButton.type = 'button';
   openButton.className =
     'btn btn-ghost btn-xs flex-1 justify-between gap-2 min-w-0';
+
+  // Create icon element
+  const iconElement = document.createElement('div');
+  iconElement.className = 'flex-shrink-0 w-4 h-4 flex items-center justify-center';
+  
+  if (cover) {
+    const img = document.createElement('img');
+    img.src = cover;
+    img.alt = title + ' icon';
+    img.className = 'w-4 h-4 object-cover rounded';
+    img.onerror = () => {
+      // Fallback to default icon if image fails to load
+      iconElement.innerHTML = '📁';
+    };
+    iconElement.appendChild(img);
+  } else {
+    // Default folder icon for projects without cover
+    iconElement.innerHTML = '📁';
+  }
 
   // Create title element with truncation
   const titleElement = document.createElement('span');
@@ -215,10 +236,11 @@ function renderProjectRow(project) {
 
   // Create count badge
   const countBadge = document.createElement('span');
-  countBadge.className = 'badge badge-neutral badge-xs flex-shrink-0';
+  countBadge.className = 'badge badge-ghost badge-xs flex-shrink-0';
   countBadge.textContent =
     Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
+  openButton.appendChild(iconElement);
   openButton.appendChild(titleElement);
   openButton.appendChild(countBadge);
 
@@ -230,11 +252,11 @@ function renderProjectRow(project) {
     /** @type {HTMLButtonElement} */ (openButton).disabled = true;
   }
 
-  // add tabs to project button 🔼
+  // add tabs to project button
   const addButton = document.createElement('button');
   addButton.type = 'button';
-  addButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
-  addButton.textContent = '🔼';
+  addButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
+  addButton.textContent = '➕';
   const addLabel = 'Add current tabs to ' + title;
   addButton.setAttribute('aria-label', addLabel);
   addButton.title = addLabel;
@@ -244,11 +266,11 @@ function renderProjectRow(project) {
     void handleAddTabsToProject(id, title, addButton);
   });
 
-  // replace project items with highlighted/active tabs button ⏫
+  // replace project items with highlighted/active tabs button
   const replaceButton = document.createElement('button');
   replaceButton.type = 'button';
-  replaceButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
-  replaceButton.textContent = '⏫';
+  replaceButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
+  replaceButton.textContent = '🔼';
   const replaceLabel = 'Replace items in ' + title + ' with highlighted tabs';
   replaceButton.setAttribute('aria-label', replaceLabel);
   replaceButton.title = replaceLabel;
@@ -258,11 +280,11 @@ function renderProjectRow(project) {
     void handleReplaceProjectItems(id, title, replaceButton);
   });
 
-  // replace project items with all tabs in current window button 🔄
+  // replace project items with all tabs in current window button
   const replaceWindowButton = document.createElement('button');
   replaceWindowButton.type = 'button';
-  replaceWindowButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
-  replaceWindowButton.textContent = '🔄';
+  replaceWindowButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
+  replaceWindowButton.textContent = '⏫';
   const replaceWindowLabel =
     'Replace items in ' + title + ' with current window tabs';
   replaceWindowButton.setAttribute('aria-label', replaceWindowLabel);
@@ -508,7 +530,9 @@ async function handleReplaceProjectItemsWithWindowTabs(
         name +
         ' with every savable tab in the current window? Existing project items in Raindrop will be removed.',
       preparing: (name) =>
-        'Preparing to replace items in ' + name + ' using current window tabs...',
+        'Preparing to replace items in ' +
+        name +
+        ' using current window tabs...',
       running: (name) =>
         'Replacing items in ' + name + ' using current window tabs...',
       emptySelection: 'No tabs in the current window can be saved.',
@@ -592,12 +616,7 @@ async function handleProjectReplacementAction(
 
     if (!tabs || tabs.length === 0) {
       if (statusElement) {
-        concludeStatus(
-          messages.emptySelection,
-          'info',
-          3000,
-          statusElement,
-        );
+        concludeStatus(messages.emptySelection, 'info', 3000, statusElement);
       }
       return;
     }

@@ -70,6 +70,7 @@ import {
  * @property {string} title
  * @property {number} itemCount
  * @property {string} url
+ * @property {string} [cover]
  */
 
 // Message constants for saved projects
@@ -854,11 +855,17 @@ export async function listSavedProjects() {
       const countValue = Number(collection?.count);
       const itemCount =
         Number.isFinite(countValue) && countValue >= 0 ? countValue : 0;
+      
+      // Extract cover URL from collection
+      const coverArray = Array.isArray(collection?.cover) ? collection.cover : [];
+      const cover = coverArray.length > 0 ? coverArray[0] : undefined;
+      
       projects.push({
         id,
         title,
         itemCount,
         url: buildRaindropCollectionUrl(id),
+        cover,
       });
     });
 
@@ -1183,18 +1190,72 @@ async function ensureSavedProjectsGroup(tokens) {
 }
 
 /**
+ * Search for a cover using Raindrop's cover search API.
+ * @param {any} tokens
+ * @param {string} searchText
+ * @returns {Promise<string | null>}
+ */
+async function searchForCover(tokens, searchText) {
+  if (!searchText || typeof searchText !== 'string') {
+    return null;
+  }
+
+  try {
+    const response = await raindropRequest(
+      '/collections/covers/' + encodeURIComponent(searchText.trim()),
+      tokens,
+    );
+
+    if (!response?.result || !Array.isArray(response.items)) {
+      return null;
+    }
+
+    // Look for the first available cover from any source
+    for (const item of response.items) {
+      if (Array.isArray(item.icons) && item.icons.length > 0) {
+        const icon = item.icons[0];
+        if (icon.png) {
+          return icon.png;
+        }
+        if (icon.svg) {
+          return icon.svg;
+        }
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.warn('[projects] Failed to search for cover:', error);
+    return null;
+  }
+}
+
+/**
  * Create a new Raindrop collection for the project.
  * @param {any} tokens
  * @param {string} projectName
- * @returns {Promise<{ id: number, title: string }>}
+ * @returns {Promise<{ id: number, title: string, cover?: string }>}
  */
 async function createProjectCollection(tokens, projectName) {
+  // Search for a cover based on the project name
+  let coverUrl = null;
+  try {
+    coverUrl = await searchForCover(tokens, projectName);
+  } catch (error) {
+    console.warn('[projects] Cover search failed, proceeding without cover:', error);
+  }
+
   const payload = {
     title: projectName,
     view: 'list',
     public: false,
     sort: Date.now(),
   };
+
+  // If we found a cover, add it to the collection
+  if (coverUrl) {
+    payload.cover = coverUrl;
+  }
 
   const response = await raindropRequest('/collection', tokens, {
     method: 'POST',
@@ -1214,6 +1275,7 @@ async function createProjectCollection(tokens, projectName) {
   return {
     id,
     title,
+    cover: coverUrl || undefined,
   };
 }
 
