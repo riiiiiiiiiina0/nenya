@@ -187,13 +187,14 @@ function renderProjectRow(project) {
   const url = typeof project.url === 'string' && project.url ? project.url : '';
 
   const container = document.createElement('div');
-  container.className = 'flex items-center gap-2 w-full';
+  container.className =
+    'flex items-center gap-1 w-full border border-base-content/10 rounded-md p-1';
   container.setAttribute('role', 'listitem');
 
   const openButton = document.createElement('button');
   openButton.type = 'button';
   openButton.className =
-    'btn btn-outline btn-sm flex-1 justify-between gap-2 min-w-0';
+    'btn btn-ghost btn-xs flex-1 justify-between gap-2 min-w-0';
 
   // Create title element with truncation
   const titleElement = document.createElement('span');
@@ -203,7 +204,7 @@ function renderProjectRow(project) {
 
   // Create count badge
   const countBadge = document.createElement('span');
-  countBadge.className = 'badge badge-neutral flex-shrink-0';
+  countBadge.className = 'badge badge-neutral badge-xs flex-shrink-0';
   countBadge.textContent =
     Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
@@ -220,7 +221,7 @@ function renderProjectRow(project) {
 
   const addButton = document.createElement('button');
   addButton.type = 'button';
-  addButton.className = 'btn btn-ghost btn-sm flex-shrink-0';
+  addButton.className = 'btn btn-ghost btn-xs flex-shrink-0';
   addButton.textContent = '🔼';
   const addLabel = 'Add current tabs to ' + title;
   addButton.setAttribute('aria-label', addLabel);

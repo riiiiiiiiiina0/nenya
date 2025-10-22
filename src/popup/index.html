@@ -44,19 +44,18 @@
     <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">
       <div class="card-body gap-2">
         <header class="space-y-1">
-          <h1 class="text-xl font-semibold text-base-content">📚 Saved Projects</h1>
+          <div class="flex flex-row items-center justify-between">
+            <h1 class="text-xl font-semibold text-base-content">📚 Saved Projects</h1>
+            <button id="refreshProjectsButton" class="btn btn-ghost btn-sm" type="button" aria-label="Refresh projects">
+              🔄️
+            </button>
+          </div>
           <p class="text-sm text-base-content/70">Group tabs into a project for easy access later.</p>
         </header>
         <button id="saveProjectButton" class="btn btn-accent w-full" type="button">
           Save current tab as project
         </button>
         <section class="space-y-2 mt-2">
-          <header class="flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-base-content">Saved projects</h2>
-            <button id="refreshProjectsButton" class="btn btn-ghost btn-xs" type="button" aria-label="Refresh projects">
-              🔄️
-            </button>
-          </header>
           <div id="projectsContainer" class="space-y-2" role="list"></div>
         </section>
       </div>
