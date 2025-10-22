@@ -2531,6 +2531,24 @@ function buildRaindropCollectionUrl(id) {
 }
 
 /**
+ * Check if a bookmark with the given URL already exists in the target folder.
+ * This function queries the actual Chrome bookmarks API to prevent duplicate entries
+ * that could occur due to race conditions or index synchronization issues.
+ * @param {string} url
+ * @param {string} targetFolderId
+ * @returns {Promise<chrome.bookmarks.BookmarkTreeNode | null>}
+ */
+async function findExistingBookmarkInFolder(url, targetFolderId) {
+  try {
+    const folderChildren = await bookmarksGetChildren(targetFolderId);
+    return folderChildren.find((child) => child.url === url) || null;
+  } catch (error) {
+    console.warn('[findExistingBookmarkInFolder] Failed to check existing bookmarks:', error);
+    return null;
+  }
+}
+
+/**
  * Create or update a bookmark for the provided Raindrop item.
  * @param {string} url
  * @param {string} title
@@ -2542,6 +2560,43 @@ function buildRaindropCollectionUrl(id) {
 async function upsertBookmark(url, title, targetFolderId, context, stats) {
   const folderInfo = context.index.folders.get(targetFolderId);
   if (!folderInfo) {
+    return;
+  }
+
+  // First, check if a bookmark with this URL already exists in the target folder
+  // by querying the actual Chrome bookmarks API to prevent duplicates.
+  // This addresses the issue where duplicate bookmarks could be created due to
+  // race conditions or index synchronization problems.
+  const existingBookmark = await findExistingBookmarkInFolder(url, targetFolderId);
+  
+  if (existingBookmark) {
+    // Bookmark already exists in the target folder, just update title if needed
+    if (existingBookmark.title !== title) {
+      await bookmarksUpdate(existingBookmark.id, { title });
+      stats.bookmarksUpdated += 1;
+    }
+    
+    // Update the context index
+    const updatedEntry = {
+      id: existingBookmark.id,
+      parentId: targetFolderId,
+      title,
+      url,
+      pathSegments: [...folderInfo.pathSegments],
+    };
+    
+    context.index.bookmarks.set(existingBookmark.id, updatedEntry);
+    const existingEntries = context.index.bookmarksByUrl.get(url) ?? [];
+    const existingIndex = existingEntries.findIndex(
+      (entry) => entry.parentId === targetFolderId
+    );
+    
+    if (existingIndex >= 0) {
+      existingEntries[existingIndex] = updatedEntry;
+    } else {
+      existingEntries.push(updatedEntry);
+    }
+    context.index.bookmarksByUrl.set(url, existingEntries);
     return;
   }
 
