@@ -1750,10 +1750,23 @@ async function buildProjectGroupContext(tabs) {
   if (customTitleKeys.length > 0) {
     try {
       const customTitles = await chrome.storage.local.get(customTitleKeys);
-      tabIds.forEach(id => {
-        const customTitle = customTitles[`customTitle_${id}`];
-        if (customTitle && typeof customTitle === 'string' && customTitle.trim() !== '' && context.customTitles) {
-          context.customTitles.set(id, customTitle.trim());
+      tabIds.forEach((id) => {
+        const customTitleData = customTitles[`customTitle_${id}`];
+        if (!context.customTitles || !customTitleData) {
+          return;
+        }
+
+        if (typeof customTitleData === 'string' && customTitleData.trim() !== '') {
+          context.customTitles.set(id, customTitleData.trim());
+          return;
+        }
+
+        if (
+          typeof customTitleData === 'object' &&
+          typeof customTitleData.title === 'string' &&
+          customTitleData.title.trim() !== ''
+        ) {
+          context.customTitles.set(id, customTitleData.title.trim());
         }
       });
     } catch (error) {
