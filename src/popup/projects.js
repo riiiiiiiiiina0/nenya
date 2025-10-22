@@ -487,6 +487,10 @@ async function handleRestoreProjectTabs(projectId, projectTitle, trigger) {
           statusElement,
         );
       }
+      // focus on the first tab
+      if (Array.isArray(response.createdTabIds) && response.createdTabIds.length > 0) {
+        chrome.tabs.update(response.createdTabIds[0], { active: true });
+      }
       return;
     }
 

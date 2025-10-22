@@ -98,6 +98,7 @@ import {
  * @property {number} grouped
  * @property {string[]} errors
  * @property {string} [error]
+ * @property {number[]} [createdTabIds]
  */
 
 // Message constants for saved projects
@@ -1120,6 +1121,7 @@ export async function restoreProjectTabs(projectId) {
     summary.created = restoreOutcome.created;
     summary.pinned = restoreOutcome.pinned;
     summary.grouped = restoreOutcome.grouped;
+    summary.createdTabIds = restoreOutcome.createdTabIds;
     if (restoreOutcome.errors.length > 0) {
       summary.errors.push(...restoreOutcome.errors);
     }
@@ -1395,7 +1397,7 @@ function computeProjectEntryIndex(entry) {
 /**
  * Restore project tabs into the current window based on sanitized entries.
  * @param {ProjectRestoreEntry[]} entries
- * @returns {Promise<{ created: number, pinned: number, grouped: number, errors: string[] }>}
+ * @returns {Promise<{ created: number, pinned: number, grouped: number, errors: string[], createdTabIds: number[] }>}
  */
 async function applyProjectRestore(entries) {
   /** @type {string[]} */
@@ -1405,6 +1407,7 @@ async function applyProjectRestore(entries) {
     pinned: 0,
     grouped: 0,
     errors,
+    createdTabIds: [],
   };
 
   if (!Array.isArray(entries) || entries.length === 0) {
@@ -1472,6 +1475,7 @@ async function applyProjectRestore(entries) {
       });
       if (tab && typeof tab.id === 'number') {
         createdEntries.push({ tab, entry });
+        outcome.createdTabIds.push(tab.id);
         outcome.created += 1;
         if (entry.pinned) {
           pinnedOffset += 1;
