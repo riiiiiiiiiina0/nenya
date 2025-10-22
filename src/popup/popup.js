@@ -1,132 +1,61 @@
 /* global chrome */
 
 import '../options/theme.js';
+import {
+  isUserLoggedIn,
+  toggleMirrorSection,
+  showLoginMessage,
+  initializeMirror,
+} from './mirror.js';
+import { concludeStatus } from './shared.js';
+import { initializeProjects } from './projects.js';
 
-const pullButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('pullButton'));
-const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('saveUnsortedButton'));
-const openOptionsButton = /** @type {HTMLButtonElement | null} */ (document.getElementById('openOptionsButton'));
-const statusMessage = /** @type {HTMLDivElement | null} */ (document.getElementById('statusMessage'));
+const pullButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('pullButton')
+);
+const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('saveUnsortedButton')
+);
+const saveProjectButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('saveProjectButton')
+);
+const renameTabButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('renameTabButton')
+);
+const openOptionsButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('openOptionsButton')
+);
+const statusMessage = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('statusMessage')
+);
+const projectsContainer = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('projectsContainer')
+);
+const refreshProjectsButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('refreshProjectsButton')
+);
+const mirrorSection = /** @type {HTMLElement | null} */ (
+  document.querySelector('article[aria-labelledby="mirror-heading"]')
+);
 
-const STATUS_CLASS_SUCCESS = 'text-success';
-const STATUS_CLASS_ERROR = 'text-error';
-const STATUS_CLASS_INFO = 'text-base-content/80';
-
-/**
- * @typedef {Object} SaveUnsortedEntry
- * @property {string} url
- * @property {string} [title]
- */
-
-/**
- * Send a runtime message with promise semantics.
- * @template T
- * @param {any} payload
- * @returns {Promise<T>}
- */
-function sendRuntimeMessage(payload) {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(payload, (response) => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        reject(new Error(error.message));
-        return;
-      }
-      resolve(response);
-    });
-  });
+// Initialize mirror functionality
+if (pullButton && saveUnsortedButton && statusMessage) {
+  initializeMirror(pullButton, saveUnsortedButton, statusMessage);
 }
 
-/**
- * Update the popup status text and styling.
- * @param {string} text
- * @param {'success' | 'error' | 'info'} tone
- * @returns {void}
- */
-function setStatus(text, tone) {
-  if (!statusMessage) {
-    return;
-  }
-  statusMessage.textContent = text;
-  statusMessage.classList.remove(STATUS_CLASS_SUCCESS, STATUS_CLASS_ERROR, STATUS_CLASS_INFO);
-  if (tone === 'success') {
-    statusMessage.classList.add(STATUS_CLASS_SUCCESS);
-  } else if (tone === 'error') {
-    statusMessage.classList.add(STATUS_CLASS_ERROR);
-  } else {
-    statusMessage.classList.add(STATUS_CLASS_INFO);
-  }
-}
-
-/**
- * Format a summary of applied changes.
- * @param {{ bookmarksCreated?: number, bookmarksUpdated?: number, bookmarksMoved?: number, bookmarksDeleted?: number, foldersCreated?: number, foldersRemoved?: number } | undefined} stats
- * @returns {string}
- */
-function formatStats(stats) {
-  if (!stats) {
-    return 'No changes detected.';
-  }
-
-  const entries = [];
-  if (stats.bookmarksCreated) {
-    entries.push(stats.bookmarksCreated + ' bookmark(s) created');
-  }
-  if (stats.bookmarksUpdated) {
-    entries.push(stats.bookmarksUpdated + ' bookmark(s) updated');
-  }
-  if (stats.bookmarksMoved) {
-    entries.push(stats.bookmarksMoved + ' bookmark(s) moved');
-  }
-  if (stats.bookmarksDeleted) {
-    entries.push(stats.bookmarksDeleted + ' bookmark(s) removed');
-  }
-  if (stats.foldersCreated) {
-    entries.push(stats.foldersCreated + ' folder(s) added');
-  }
-  if (stats.foldersRemoved) {
-    entries.push(stats.foldersRemoved + ' folder(s) removed');
-  }
-
-  if (entries.length === 0) {
-    return 'No changes detected.';
-  }
-
-  return entries.join(', ');
-}
-
-if (pullButton) {
-  pullButton.addEventListener('click', () => {
-    pullButton.disabled = true;
-    setStatus('Syncing bookmarks...', 'info');
-
-    sendRuntimeMessage({ type: 'mirror:pull' }).then((response) => {
-      if (response && response.ok) {
-        const summary = formatStats(response.stats);
-        setStatus('Sync complete. ' + summary, 'success');
-      } else {
-        const message = response && typeof response.error === 'string'
-          ? response.error
-          : 'Sync failed. Please try again.';
-        setStatus(message, 'error');
-      }
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message, 'error');
-    }).finally(() => {
-      pullButton.disabled = false;
-    });
-  });
-} else {
-  console.error('[popup] Sync button not found.');
-  setStatus('Unable to locate sync controls.', 'error');
-}
-
-if (saveUnsortedButton) {
-  saveUnsortedButton.addEventListener('click', () => {
-    void handleSaveToUnsorted();
-  });
-} else {
-  console.error('[popup] Save button not found.');
+// Initialize projects functionality
+if (
+  saveProjectButton &&
+  refreshProjectsButton &&
+  projectsContainer &&
+  statusMessage
+) {
+  initializeProjects(
+    saveProjectButton,
+    refreshProjectsButton,
+    projectsContainer,
+    statusMessage,
+  );
 }
 
 if (!statusMessage) {
@@ -139,7 +68,14 @@ if (openOptionsButton) {
       const error = chrome.runtime.lastError;
       if (error) {
         console.error('[popup] Unable to open options page.', error);
-        setStatus('Unable to open options page.', 'error');
+        if (statusMessage) {
+          concludeStatus(
+            'Unable to open options page.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
       }
     });
   });
@@ -147,158 +83,125 @@ if (openOptionsButton) {
   console.error('[popup] Options button not found.');
 }
 
+if (renameTabButton) {
+  renameTabButton.addEventListener('click', () => {
+    void handleRenameTab();
+  });
+} else {
+  console.error('[popup] Rename tab button not found.');
+}
+
 /**
- * Handle the save to Unsorted action from the popup.
+ * Handle the rename tab action.
  * @returns {Promise<void>}
  */
-async function handleSaveToUnsorted() {
-  if (!saveUnsortedButton) {
-    return;
-  }
-
-  saveUnsortedButton.disabled = true;
-  setStatus('Saving tabs to Unsorted...', 'info');
-
+async function handleRenameTab() {
   try {
-    const tabs = await collectSavableTabs();
-    if (tabs.length === 0) {
-      setStatus('No highlighted or active tabs available to save.', 'info');
-      return;
-    }
-
-    const entries = buildSaveEntriesFromTabs(tabs);
-    if (entries.length === 0) {
-      setStatus('No valid tab URLs to save.', 'info');
-      return;
-    }
-
-    const response = await sendRuntimeMessage({
-      type: 'mirror:saveToUnsorted',
-      entries
-    });
-
-    handleSaveResponse(response);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    setStatus(message, 'error');
-  } finally {
-    saveUnsortedButton.disabled = false;
-  }
-}
-
-/**
- * Build save entries from tab descriptors.
- * @param {chrome.tabs.Tab[]} tabs
- * @returns {SaveUnsortedEntry[]}
- */
-function buildSaveEntriesFromTabs(tabs) {
-  /** @type {SaveUnsortedEntry[]} */
-  const entries = [];
-  const seen = new Set();
-
-  tabs.forEach((tab) => {
-    if (!tab.url) {
-      return;
-    }
-    const normalizedUrl = normalizeUrlForSave(tab.url);
-    if (!normalizedUrl || seen.has(normalizedUrl)) {
-      return;
-    }
-    seen.add(normalizedUrl);
-    entries.push({
-      url: normalizedUrl,
-      title: typeof tab.title === 'string' ? tab.title : ''
-    });
-  });
-
-  return entries;
-}
-
-/**
- * Gather highlighted tabs or fall back to the active tab in the current window.
- * @returns {Promise<chrome.tabs.Tab[]>}
- */
-async function collectSavableTabs() {
-  const highlighted = await queryTabs({
-    currentWindow: true,
-    highlighted: true
-  });
-  const candidates = highlighted.length > 0 ? highlighted : await queryTabs({
-    currentWindow: true,
-    active: true
-  });
-  return candidates.filter((tab) => Boolean(tab.url) && Boolean(normalizeUrlForSave(tab.url)));
-}
-
-/**
- * Query chrome tabs, returning a promise.
- * @param {chrome.tabs.QueryInfo} queryInfo
- * @returns {Promise<chrome.tabs.Tab[]>}
- */
-function queryTabs(queryInfo) {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.query(queryInfo, (tabs) => {
-      const lastError = chrome.runtime.lastError;
-      if (lastError) {
-        reject(new Error(lastError.message));
-        return;
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
       }
-      resolve(tabs);
-    });
-  });
-}
-
-/**
- * Normalize a URL string for saving, ensuring supported protocols.
- * @param {string} url
- * @returns {string | undefined}
- */
-function normalizeUrlForSave(url) {
-  try {
-    const parsed = new URL(url);
-    const protocol = parsed.protocol.toLowerCase();
-    if (protocol !== 'http:' && protocol !== 'https:') {
-      return undefined;
+      return;
     }
-    return parsed.toString();
-  } catch {
-    return undefined;
+
+    const currentTab = tabs[0];
+    const currentTitle = currentTab.title || '';
+
+    // Check if tab has a valid ID
+    if (typeof currentTab.id !== 'number') {
+      if (statusMessage) {
+        concludeStatus('Invalid tab ID.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Prompt user for custom title with current title as default
+    const customTitle = window.prompt('Enter custom title for this tab:', currentTitle);
+    
+    if (customTitle === null) {
+      // User cancelled
+      if (statusMessage) {
+        concludeStatus('Rename cancelled.', 'info', 2000, statusMessage);
+      }
+      return;
+    }
+
+    if (customTitle.trim() === '') {
+      if (statusMessage) {
+        concludeStatus('Title cannot be empty.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Save custom title as object with tab ID, URL, and title to Chrome local storage
+    try {
+      await chrome.storage.local.set({
+        [`customTitle_${currentTab.id}`]: {
+          tabId: currentTab.id,
+          url: currentTab.url,
+          title: customTitle.trim()
+        }
+      });
+    } catch (error) {
+      console.error('[popup] Failed to save custom title to storage:', error);
+    }
+
+    // Send message to content script to rename the tab
+    try {
+      await chrome.tabs.sendMessage(currentTab.id, {
+        type: 'renameTab',
+        title: customTitle.trim()
+      });
+      
+      if (statusMessage) {
+        concludeStatus('Tab renamed successfully!', 'success', 3000, statusMessage);
+      }
+    } catch (error) {
+      console.error('[popup] Failed to send rename message:', error);
+      if (statusMessage) {
+        concludeStatus('Failed to rename tab. Please refresh the page and try again.', 'error', 4000, statusMessage);
+      }
+    }
+  } catch (error) {
+    console.error('[popup] Error in handleRenameTab:', error);
+    if (statusMessage) {
+      concludeStatus('Unable to rename tab.', 'error', 3000, statusMessage);
+    }
   }
 }
 
 /**
- * Update popup status based on a save response.
- * @param {any} response
- * @returns {void}
+ * Initialize the popup based on login status.
+ * @returns {Promise<void>}
  */
-function handleSaveResponse(response) {
-  if (!response || typeof response !== 'object') {
-    setStatus('Save failed. Please try again.', 'error');
-    return;
+async function initializePopup() {
+  try {
+    const loggedIn = await isUserLoggedIn();
+    if (loggedIn) {
+      if (mirrorSection) {
+        toggleMirrorSection(true, mirrorSection);
+      }
+    } else {
+      if (statusMessage && openOptionsButton) {
+        showLoginMessage(statusMessage, openOptionsButton);
+      }
+    }
+  } catch (error) {
+    console.error('[popup] Error initializing popup:', error);
+    if (statusMessage && openOptionsButton) {
+      showLoginMessage(statusMessage, openOptionsButton);
+    }
   }
-
-  const created = Number(response.created) || 0;
-  const updated = Number(response.updated) || 0;
-  const skipped = Number(response.skipped) || 0;
-  const failed = Number(response.failed) || 0;
-  const savedCount = created + updated;
-  const fragments = [];
-
-  fragments.push(savedCount + ' tab(s) saved');
-  if (skipped > 0) {
-    fragments.push(skipped + ' skipped');
-  }
-  if (failed > 0) {
-    fragments.push(failed + ' failed');
-  }
-
-  const message = fragments.join('. ') + '.';
-
-  if (response.ok) {
-    setStatus(message, 'success');
-    return;
-  }
-
-  const errorText = typeof response.error === 'string' ? response.error : message;
-  setStatus(errorText, 'error');
 }
+
+// Initialize the popup when the script loads
+void initializePopup();
+
+// Listen for storage changes to update popup when user logs in/out
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'sync' && changes.cloudAuthTokens) {
+    void initializePopup();
+  }
+});

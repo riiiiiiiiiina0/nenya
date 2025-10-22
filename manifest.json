@@ -27,6 +27,7 @@
     "bookmarks",
     "storage",
     "tabs",
+    "tabGroups",
     "notifications",
     "contextMenus",
     "alarms"
@@ -38,5 +39,12 @@
   },
   "host_permissions": [
     "https://api.raindrop.io/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/contentScript/custom-title.js"],
+      "run_at": "document_idle"
+    }
   ]
 }

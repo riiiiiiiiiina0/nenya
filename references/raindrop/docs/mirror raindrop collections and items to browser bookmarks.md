@@ -70,15 +70,45 @@
 
 ### Add tabs to a project
 
-1. Let the user pick an existing project from the popup list.
+1. Let the user pick an existing project from the popup list (from popup page projects list 🔼 button).
 2. Collect highlighted tabs, or fall back to the active tab.
 3. Fetch the project’s current Raindrop items.
 4. If all existing items belong to the same tab group `G` and the new tabs are ungrouped, assign the group metadata `G` to the new entries.
-5. Create new Raindrop items for the selected tabs within the project collection.
+5. Create new Raindrop items for the selected tabs within the project collection, this new item should have biggest sorting index in metadata.
 
 ### Replace items in a project
 
-1. Let the user pick an existing project from the popup.
-2. Let the user choose whether to replace the project with highlighted tabs, the active tab, or all tabs in the current window.
+1. Let the user pick an existing project from the popup (from popup page projects list ⏫ button).
+2. Collect highlighted tabs, or fall back to the active tab.
 3. Delete all items currently stored in the project collection.
 4. Recreate the project by reusing the steps in “Save tabs as a project”.
+
+### Replace items in a project with tabs in current window
+
+Save as "Replace items in a project", but instead of highlight tabs or active tab, we use all tabs from current window.
+
+### Open a saved project
+
+1. Let the user pick an existing project from the popup list.
+2. Fetch all Raindrop items from the selected project collection.
+3. Parse the JSON metadata from each item's description to extract tab group and tab information.
+4. Group the items by their tab group metadata (items without group metadata are treated as ungrouped).
+5. For each tab group:
+   - Create a new tab group in the browser window with the group's name and color.
+   - Create tabs within the group in the order specified by their tab index.
+   - Set pinned status for tabs that were originally pinned.
+6. For ungrouped items:
+   - Create tabs in the main window area in the order specified by their tab index.
+   - Set pinned status for tabs that were originally pinned.
+
+### Rename tab title
+
+1. **Add rename functionality to popup**: Add a "Rename Tab" button below the "Save tabs as project" button in the popup page.
+2. **Prompt for custom title**: When clicked, display a prompt for the user to enter a custom title, with the current page title as the default value.
+3. **Apply and persist custom title**: 
+   - Set the custom title as the active tab's title
+   - Persist the custom title across page reloads
+   - Use a content script to override the `document.title` setter, preventing the page from modifying the title
+4. **Integrate with project system**: 
+   - When saving a tab to a project, include the custom title in the tab's metadata if one exists
+   - When opening a saved project, restore any custom titles that were previously set

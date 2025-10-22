@@ -1,4 +1,32 @@
-/* global chrome, Toastify */
+/* global chrome */
+
+import { resetMirrorState } from '../background/mirror.js';
+import { clearAllProjectData } from '../background/projects.js';
+import { updateNotificationSectionsVisibility } from './notifications.js';
+
+/**
+ * @typedef {Object} ToastifyOptions
+ * @property {string} text
+ * @property {number} duration
+ * @property {string} gravity
+ * @property {string} position
+ * @property {boolean} close
+ * @property {Object} style
+ */
+
+/**
+ * @typedef {Object} ToastifyInstance
+ * @property {() => void} showToast
+ */
+
+/**
+ * @typedef {function(ToastifyOptions): ToastifyInstance} ToastifyFunction
+ */
+
+/**
+ * @typedef {Object} WindowWithToastify
+ * @property {ToastifyFunction} Toastify
+ */
 
 /**
  * @typedef {Object} ProviderDefinition
@@ -206,14 +234,16 @@ function cloneRootFolderSettings(settings) {
  * @returns {void}
  */
 function showToast(message, variant = 'info') {
-  if (typeof Toastify !== 'function') {
+  /** @type {WindowWithToastify} */
+  const windowWithToastify = /** @type {any} */ (window);
+  if (typeof windowWithToastify.Toastify !== 'function') {
     return;
   }
 
   const background =
     TOAST_BACKGROUND_BY_VARIANT[variant] ?? TOAST_BACKGROUND_BY_VARIANT.info;
 
-  Toastify({
+  windowWithToastify.Toastify({
     text: message,
     duration: 4000,
     gravity: 'top',
@@ -445,7 +475,7 @@ function bookmarksSearch(query) {
 /**
  * Move a bookmark node to a new destination.
  * @param {string} nodeId
- * @param {chrome.bookmarks.Destination} destination
+ * @param {chrome.bookmarks.MoveDestination} destination
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 function moveBookmark(nodeId, destination) {
@@ -482,7 +512,7 @@ function moveBookmark(nodeId, destination) {
 /**
  * Update properties on the bookmark node.
  * @param {string} nodeId
- * @param {chrome.bookmarks.BookmarkChangesArg} changes
+ * @param {any} changes
  * @returns {Promise<chrome.bookmarks.BookmarkTreeNode>}
  */
 function updateBookmark(nodeId, changes) {
@@ -1112,6 +1142,10 @@ function renderProviderState() {
   }
 
   void updateRootFolderSection(storedTokens);
+  
+  // Update notification sections visibility based on login status
+  const isLoggedIn = hasSelection && Boolean(storedTokens);
+  updateNotificationSectionsVisibility(isLoggedIn);
 }
 
 /**
@@ -1145,16 +1179,38 @@ function handleConnectClick() {
 }
 
 /**
- * Clear stored tokens for the selected provider.
+ * Clear stored tokens for the selected provider and reset all local data.
  */
 async function handleDisconnectClick() {
   if (!currentProvider) {
     return;
   }
 
-  await clearProviderTokens(currentProvider.id);
-  renderProviderState();
-  showToast('Disconnected from ' + currentProvider.name + '.', 'info');
+  try {
+    // Clear provider tokens
+    await clearProviderTokens(currentProvider.id);
+    
+    // Reset mirror state (bookmark root folder and timestamps)
+    const rootFolderSettings = await readRootFolderSettings();
+    const providerSettings = rootFolderSettings[currentProvider.id];
+    if (providerSettings) {
+      const settingsData = {
+        settings: providerSettings,
+        map: rootFolderSettings,
+        didMutate: false
+      };
+      await resetMirrorState(settingsData);
+    }
+    
+    // Clear all project-related data and custom title records
+    await clearAllProjectData();
+    
+    renderProviderState();
+    showToast('Disconnected from ' + currentProvider.name + '. All local data has been cleared.', 'info');
+  } catch (error) {
+    console.error('[bookmarks] Error during logout:', error);
+    showToast('Error during logout. Some data may not have been cleared.', 'error');
+  }
 }
 
 /**
@@ -1183,6 +1239,14 @@ async function processOAuthSuccess(message) {
   }
 
   showToast('Connected to ' + provider.name + '.', 'success');
+  
+  // Automatically start pulling when user logs in
+  try {
+    await sendRuntimeMessage({ type: 'mirror:pull' });
+  } catch (error) {
+    console.warn('[bookmarks] Failed to start automatic pull after login:', error);
+    // Don't show error to user as the login was successful
+  }
 }
 
 /**

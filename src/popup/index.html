@@ -22,20 +22,55 @@
       </button>
     </div>
   </div>
-  <main class="w-80 p-5 space-y-4">
-    <header class="space-y-1">
-      <h1 class="text-xl font-semibold text-base-content">Mirror Cloud Bookmarks</h1>
-      <p class="text-sm text-base-content/70">Pull the latest Raindrop collections and items into the mirror folder.</p>
-    </header>
-    <div id="statusMessage" class="text-sm text-base-content/80 min-h-5" role="status" aria-live="polite">Ready to sync.
-    </div>
-    <button id="pullButton" class="btn btn-primary w-full" type="button">
-      Pull now
-    </button>
-    <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
-      Save to Unsorted
-    </button>
+  <main class="min-w-[480px] p-5 space-y-4">
+    <!-- cloud bookmarks -->
+    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
+      <div class="card-body gap-2">
+        <header class="space-y-1">
+          <h1 class="text-xl font-semibold text-base-content">🔖 Cloud Bookmarks</h1>
+          <p class="text-sm text-base-content/70">Pull your Raindrop collections to local bookmarks.</p>
+        </header>
+        <button id="pullButton" class="btn btn-primary w-full" type="button">
+          Pull now
+        </button>
+        <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
+          Save to Unsorted
+        </button>
+
+      </div>
+    </article>
+
+    <!-- saved projects -->
+    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">
+      <div class="card-body gap-2">
+        <header class="space-y-1">
+          <div class="flex flex-row items-center justify-between">
+            <h1 class="text-xl font-semibold text-base-content">📚 Saved Projects</h1>
+            <button id="refreshProjectsButton" class="btn btn-ghost btn-sm" type="button" aria-label="Refresh projects">
+              🔄️
+            </button>
+          </div>
+          <p class="text-sm text-base-content/70">Group tabs into a project for easy access later.</p>
+        </header>
+        <button id="saveProjectButton" class="btn btn-accent w-full" type="button">
+          Save current tab as project
+        </button>
+        <button id="renameTabButton" class="btn btn-outline w-full" type="button">
+          Rename tab
+        </button>
+        <section class="space-y-2 mt-2">
+          <div id="projectsContainer" class="space-y-2" role="list"></div>
+        </section>
+      </div>
+    </article>
   </main>
+
+  <!-- status message -->
+  <div id="statusMessage"
+    class="fixed bottom-0 left-0 right-0 z-30 text-center p-2 text-sm text-base-content/80 bg-base-100/80 min-h-5 opacity-0 transition-opacity duration-300"
+    role="status" aria-live="polite">
+  </div>
+
   <script src="./popup.js" type="module"></script>
 </body>
 
