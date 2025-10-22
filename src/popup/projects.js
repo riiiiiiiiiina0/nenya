@@ -229,23 +229,89 @@ function renderProjectRow(project) {
   openButton.className =
     'btn btn-ghost btn-xs flex-1 justify-between gap-2 min-w-0';
 
-  // Create icon element
+  // Create icon element with hover affordance for Raindrop link
   const iconElement = document.createElement('div');
-  iconElement.className = 'flex-shrink-0 w-4 h-4 flex items-center justify-center';
-  
-  if (cover) {
-    const img = document.createElement('img');
-    img.src = cover;
-    img.alt = title + ' icon';
-    img.className = 'w-4 h-4 object-cover rounded';
-    img.onerror = () => {
-      // Fallback to default icon if image fails to load
-      iconElement.innerHTML = '📁';
-    };
-    iconElement.appendChild(img);
-  } else {
-    // Default folder icon for projects without cover
-    iconElement.innerHTML = '📁';
+  const openCollectionLabel = 'Open ' + title + ' on Raindrop';
+
+  const renderDefaultIcon = () => {
+    iconElement.textContent = '📁';
+  };
+
+  const renderCoverIcon = () => {
+    iconElement.dataset.state = 'cover';
+    iconElement.className =
+      'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded';
+    iconElement.innerHTML = '';
+    iconElement.removeAttribute('role');
+    iconElement.removeAttribute('tabindex');
+    iconElement.removeAttribute('aria-label');
+
+    if (cover) {
+      const img = document.createElement('img');
+      img.src = cover;
+      img.alt = title + ' icon';
+      img.className = 'w-6 h-6 object-cover rounded';
+      img.onerror = () => {
+        iconElement.innerHTML = '';
+        renderDefaultIcon();
+      };
+      iconElement.appendChild(img);
+    } else {
+      renderDefaultIcon();
+    }
+  };
+
+  const renderArrowIcon = () => {
+    if (!url) {
+      return;
+    }
+    iconElement.dataset.state = 'link';
+    iconElement.className =
+      'btn btn-ghost btn-xs btn-square flex-shrink-0';
+    iconElement.textContent = '↗️';
+    iconElement.setAttribute('role', 'button');
+    iconElement.setAttribute('tabindex', '0');
+    iconElement.setAttribute('aria-label', openCollectionLabel);
+  };
+
+  renderCoverIcon();
+
+  if (url) {
+    container.addEventListener('mouseenter', () => {
+      renderArrowIcon();
+    });
+    container.addEventListener('mouseleave', () => {
+      renderCoverIcon();
+    });
+    container.addEventListener('focusin', () => {
+      renderArrowIcon();
+    });
+    container.addEventListener('focusout', (event) => {
+      if (container.contains(event.relatedTarget)) {
+        return;
+      }
+      renderCoverIcon();
+    });
+
+    iconElement.addEventListener('click', (event) => {
+      if (iconElement.dataset.state !== 'link') {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      openProjectUrl(url, id);
+    });
+
+    iconElement.addEventListener('keydown', (event) => {
+      if (iconElement.dataset.state !== 'link') {
+        return;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        event.stopPropagation();
+        openProjectUrl(url, id);
+      }
+    });
   }
 
   // Create title element with truncation
@@ -264,13 +330,10 @@ function renderProjectRow(project) {
   openButton.appendChild(titleElement);
   openButton.appendChild(countBadge);
 
-  if (url) {
-    openButton.addEventListener('click', () => {
-      openProjectUrl(url, id);
-    });
-  } else {
-    /** @type {HTMLButtonElement} */ (openButton).disabled = true;
-  }
+  openButton.addEventListener('click', (event) => {
+    event.preventDefault();
+    void handleRestoreProjectTabs(id, title, openButton);
+  });
 
   // add tabs to project button
   const addButton = document.createElement('button');
@@ -354,6 +417,110 @@ function openProjectUrl(url, id) {
     }
   } catch (error) {
     console.error('[popup] Failed to open project', id, error);
+  }
+}
+
+/**
+ * Restore saved project tabs into the current window.
+ * @param {number} projectId
+ * @param {string} projectTitle
+ * @param {HTMLButtonElement} trigger
+ * @returns {Promise<void>}
+ */
+async function handleRestoreProjectTabs(projectId, projectTitle, trigger) {
+  const normalizedId = Number(projectId);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+    const statusElement = document.getElementById('statusMessage');
+    if (statusElement) {
+      concludeStatus(
+        'Project unavailable. Please refresh and try again.',
+        'error',
+        3000,
+        statusElement,
+      );
+    }
+    return;
+  }
+
+  const button = trigger;
+  if (button) {
+    button.disabled = true;
+  }
+
+  const projectsContainer = document.getElementById('projectsContainer');
+  setProjectsContainerDisabled(projectsContainer, true);
+
+  const displayName =
+    typeof projectTitle === 'string' && projectTitle.trim()
+      ? projectTitle.trim()
+      : 'project';
+  const statusElement = document.getElementById('statusMessage');
+  if (statusElement) {
+    setStatus('Restoring ' + displayName + '...', 'info', statusElement);
+  }
+
+  try {
+    const response = await sendRuntimeMessage({
+      type: 'projects:restoreProjectTabs',
+      projectId: normalizedId,
+    });
+
+    if (!response || typeof response !== 'object') {
+      if (statusElement) {
+        concludeStatus(
+          'Unable to restore ' + displayName + '.',
+          'error',
+          4000,
+          statusElement,
+        );
+      }
+      return;
+    }
+
+    if (response.ok) {
+      const restoredCount = Number(response.created);
+      const message =
+        Number.isFinite(restoredCount) && restoredCount > 0
+          ? 'Restored ' +
+            restoredCount +
+            ' tab' +
+            (restoredCount === 1 ? '' : 's') +
+            ' from ' +
+            displayName +
+            '.'
+          : 'No tabs were restored from ' + displayName + '.';
+      if (statusElement) {
+        concludeStatus(
+          message,
+          restoredCount > 0 ? 'success' : 'info',
+          4000,
+          statusElement,
+        );
+      }
+      return;
+    }
+
+    const errorText =
+      typeof response.error === 'string'
+        ? response.error
+        : 'Unable to restore ' + displayName + '.';
+    if (statusElement) {
+      concludeStatus(errorText, 'error', 4000, statusElement);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const fallbackStatus = document.getElementById('statusMessage');
+    if (fallbackStatus) {
+      concludeStatus(message, 'error', 4000, fallbackStatus);
+    }
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
+    setProjectsContainerDisabled(
+      document.getElementById('projectsContainer'),
+      false,
+    );
   }
 }
 

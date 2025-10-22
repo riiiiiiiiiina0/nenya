@@ -51,6 +51,7 @@ import {
  * @typedef {Object} ParsedProjectItemMetadata
  * @property {number | undefined} tabIndex
  * @property {{ name: string, color: string, index: number } | undefined} group
+ * @property {boolean} pinned
  */
 
 /**
@@ -73,6 +74,26 @@ import {
  * @property {string} [cover]
  */
 
+/**
+ * @typedef {Object} ProjectRestoreEntry
+ * @property {string} url
+ * @property {string} title
+ * @property {boolean} pinned
+ * @property {number | undefined} tabIndex
+ * @property {{ name: string, color: string, index: number } | undefined} group
+ * @property {number} order
+ */
+
+/**
+ * @typedef {Object} RestoreProjectResult
+ * @property {boolean} ok
+ * @property {number} created
+ * @property {number} pinned
+ * @property {number} grouped
+ * @property {string[]} errors
+ * @property {string} [error]
+ */
+
 // Message constants for saved projects
 export const SAVE_PROJECT_MESSAGE = 'projects:saveProject';
 export const LIST_PROJECTS_MESSAGE = 'projects:listProjects';
@@ -81,6 +102,7 @@ export const ADD_PROJECT_TABS_MESSAGE = 'projects:addTabsToProject';
 export const REPLACE_PROJECT_ITEMS_MESSAGE =
   'projects:replaceProjectItems';
 export const DELETE_PROJECT_MESSAGE = 'projects:deleteProject';
+export const RESTORE_PROJECT_TABS_MESSAGE = 'projects:restoreProjectTabs';
 
 // Project-related constants
 const SAVED_PROJECTS_GROUP_TITLE = 'Saved projects';
@@ -255,6 +277,26 @@ export function handleDeleteProjectMessage(message, sendResponse) {
   }
 
   deleteProject(projectId)
+    .then((result) => {
+      sendResponse(result);
+    })
+    .catch((error) => {
+      const messageText =
+        error instanceof Error ? error.message : String(error);
+      sendResponse({ ok: false, error: messageText });
+    });
+  return true;
+}
+
+/**
+ * Handle restore project tabs message.
+ * @param {any} message
+ * @param {Function} sendResponse
+ * @returns {boolean}
+ */
+export function handleRestoreProjectTabsMessage(message, sendResponse) {
+  const projectId = Number(message.projectId);
+  restoreProjectTabs(projectId)
     .then((result) => {
       sendResponse(result);
     })
@@ -827,6 +869,105 @@ export async function deleteProject(projectId) {
 }
 
 /**
+ * Restore saved project tabs into the current browser window.
+ * @param {number} projectId
+ * @returns {Promise<RestoreProjectResult>}
+ */
+export async function restoreProjectTabs(projectId) {
+  /** @type {RestoreProjectResult} */
+  const summary = {
+    ok: false,
+    created: 0,
+    pinned: 0,
+    grouped: 0,
+    errors: [],
+  };
+
+  const normalizedId = Number(projectId);
+  if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
+    summary.error = 'Project selection is invalid.';
+    summary.errors.push(summary.error);
+    return summary;
+  }
+
+  let tokens;
+  try {
+    tokens = await loadValidProviderTokens();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    summary.errors.push(message);
+    return summary;
+  }
+
+  if (!tokens) {
+    const message =
+      'No Raindrop connection found. Connect in Options to restore projects.';
+    summary.error = message;
+    summary.errors.push(message);
+    return summary;
+  }
+
+  let items;
+  try {
+    items = await fetchAllProjectItems(tokens, normalizedId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    summary.errors.push(message);
+    return summary;
+  }
+
+  if (!Array.isArray(items) || items.length === 0) {
+    const message = 'Project does not contain any saved tabs.';
+    summary.error = message;
+    summary.errors.push(message);
+    return summary;
+  }
+
+  const sanitized = sanitizeProjectItemsForRestore(items);
+  if (sanitized.errors.length > 0) {
+    summary.errors.push(...sanitized.errors);
+  }
+
+  if (sanitized.entries.length === 0) {
+    const message = 'Project does not contain any valid tabs to restore.';
+    summary.error = message;
+    if (!summary.errors.includes(message)) {
+      summary.errors.push(message);
+    }
+    return summary;
+  }
+
+  try {
+    const restoreOutcome = await applyProjectRestore(sanitized.entries);
+    summary.created = restoreOutcome.created;
+    summary.pinned = restoreOutcome.pinned;
+    summary.grouped = restoreOutcome.grouped;
+    if (restoreOutcome.errors.length > 0) {
+      summary.errors.push(...restoreOutcome.errors);
+    }
+
+    summary.ok =
+      restoreOutcome.created > 0 && restoreOutcome.errors.length === 0;
+    if (!summary.ok && !summary.error) {
+      summary.error =
+        restoreOutcome.errors[0] ??
+        sanitized.errors[0] ??
+        'Failed to restore project tabs.';
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    summary.error = message;
+    if (!summary.errors.includes(message)) {
+      summary.errors.push(message);
+    }
+  }
+
+  return summary;
+}
+
+/**
  * List the saved projects (collections in the Saved projects group).
  * @returns {Promise<{ ok: boolean, projects?: SavedProjectDescriptor[], error?: string }>}
  */
@@ -985,6 +1126,269 @@ async function fetchAllProjectItems(tokens, collectionId) {
   }
 
   return items;
+}
+
+/**
+ * Prepare Raindrop items for tab restoration.
+ * @param {any[]} items
+ * @returns {{ entries: ProjectRestoreEntry[], errors: string[] }}
+ */
+function sanitizeProjectItemsForRestore(items) {
+  /** @type {ProjectRestoreEntry[]} */
+  const entries = [];
+  /** @type {string[]} */
+  const errors = [];
+
+  if (!Array.isArray(items)) {
+    return { entries, errors };
+  }
+
+  items.forEach((item, index) => {
+    const rawLink = typeof item?.link === 'string' ? item.link : '';
+    const normalizedUrl = normalizeHttpUrl(rawLink);
+    if (!normalizedUrl) {
+      errors.push('Item at index ' + index + ' is missing a supported URL.');
+      return;
+    }
+
+    const metadata = parseProjectItemMetadata(item);
+    const title = normalizeBookmarkTitle(item?.title, normalizedUrl);
+
+    entries.push({
+      url: normalizedUrl,
+      title,
+      pinned: metadata.pinned,
+      tabIndex: metadata.tabIndex,
+      group: metadata.group,
+      order: index,
+    });
+  });
+
+  return { entries, errors };
+}
+
+/**
+ * Sort restore entries to approximate the original tab ordering.
+ * @param {ProjectRestoreEntry[]} entries
+ * @returns {ProjectRestoreEntry[]}
+ */
+function sortProjectRestoreEntries(entries) {
+  const clones = [...entries];
+  clones.sort((a, b) => {
+    const pinnedA = a.pinned ? 0 : 1;
+    const pinnedB = b.pinned ? 0 : 1;
+    if (pinnedA !== pinnedB) {
+      return pinnedA - pinnedB;
+    }
+    const indexA = computeProjectEntryIndex(a);
+    const indexB = computeProjectEntryIndex(b);
+    if (indexA !== indexB) {
+      return indexA - indexB;
+    }
+    return a.order - b.order;
+  });
+  return clones;
+}
+
+/**
+ * Compute a sortable index for a restored project entry.
+ * @param {ProjectRestoreEntry} entry
+ * @returns {number}
+ */
+function computeProjectEntryIndex(entry) {
+  const fallback = 1000000 + entry.order;
+  if (entry.group) {
+    const groupIndex = Number.isFinite(entry.group.index)
+      ? Number(entry.group.index)
+      : 100000;
+    const tabIndex = Number.isFinite(entry.tabIndex)
+      ? Number(entry.tabIndex)
+      : entry.order;
+    return groupIndex * 1000 + tabIndex;
+  }
+  if (Number.isFinite(entry.tabIndex)) {
+    return Number(entry.tabIndex);
+  }
+  return fallback;
+}
+
+/**
+ * Restore project tabs into the current window based on sanitized entries.
+ * @param {ProjectRestoreEntry[]} entries
+ * @returns {Promise<{ created: number, pinned: number, grouped: number, errors: string[] }>}
+ */
+async function applyProjectRestore(entries) {
+  const outcome = {
+    created: 0,
+    pinned: 0,
+    grouped: 0,
+    errors: [],
+  };
+
+  if (!Array.isArray(entries) || entries.length === 0) {
+    return outcome;
+  }
+
+  /** @type {chrome.tabs.Tab[]} */
+  let activeTabs = [];
+  try {
+    activeTabs = await tabsQuery({ active: true, currentWindow: true });
+  } catch (error) {
+    activeTabs = [];
+  }
+
+  let windowId = Number(
+    activeTabs?.[0]?.windowId ?? chrome.windows?.WINDOW_ID_CURRENT ?? -1,
+  );
+  if (!Number.isFinite(windowId) || windowId < 0) {
+    try {
+      const currentWindow = await windowsGetCurrent();
+      windowId = Number(
+        currentWindow?.id ?? chrome.windows?.WINDOW_ID_CURRENT ?? -1,
+      );
+    } catch (error) {
+      windowId = chrome.windows?.WINDOW_ID_CURRENT ?? -1;
+    }
+  }
+
+  if (!Number.isFinite(windowId) || windowId < 0) {
+    outcome.errors.push('No active window available to restore tabs.');
+    return outcome;
+  }
+
+  /** @type {chrome.tabs.Tab[]} */
+  let existingTabs = [];
+  try {
+    existingTabs = await tabsQuery({ windowId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    outcome.errors.push(message);
+    existingTabs = [];
+  }
+
+  const existingPinnedCount = existingTabs.filter((tab) => tab?.pinned).length;
+  const existingTabCount = existingTabs.length;
+
+  const sortedEntries = sortProjectRestoreEntries(entries);
+  /** @type {{ tab: chrome.tabs.Tab, entry: ProjectRestoreEntry }[]} */
+  const createdEntries = [];
+
+  let totalCreated = 0;
+  let pinnedOffset = existingPinnedCount;
+
+  for (const entry of sortedEntries) {
+    const targetIndex = entry.pinned
+      ? pinnedOffset
+      : existingTabCount + totalCreated;
+    try {
+      const tab = await tabsCreate({
+        windowId,
+        url: entry.url,
+        active: false,
+        index: targetIndex,
+        pinned: entry.pinned,
+      });
+      if (tab && typeof tab.id === 'number') {
+        createdEntries.push({ tab, entry });
+        outcome.created += 1;
+        if (entry.pinned) {
+          pinnedOffset += 1;
+          outcome.pinned += 1;
+        }
+      }
+      totalCreated += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outcome.errors.push(entry.url + ': ' + message);
+    }
+  }
+
+  if (createdEntries.length === 0) {
+    return outcome;
+  }
+
+  if (
+    !chrome.tabs ||
+    typeof chrome.tabs.group !== 'function' ||
+    !chrome.tabGroups ||
+    typeof chrome.tabGroups.update !== 'function'
+  ) {
+    return outcome;
+  }
+
+  /** @type {Map<string, { meta: { name: string, color: string, index: number }, tabIds: number[], firstIndex: number }>} */
+  const groupingMap = new Map();
+  createdEntries.forEach(({ tab, entry }) => {
+    if (!entry.group || typeof tab?.id !== 'number') {
+      return;
+    }
+    const key = JSON.stringify({
+      name: entry.group.name,
+      color: entry.group.color,
+      index: entry.group.index,
+    });
+    const tabIndex = Number.isFinite(tab.index)
+      ? Number(tab.index)
+      : Number.POSITIVE_INFINITY;
+    const existing = groupingMap.get(key);
+    if (existing) {
+      existing.tabIds.push(tab.id);
+      existing.firstIndex = Math.min(existing.firstIndex, tabIndex);
+      return;
+    }
+    groupingMap.set(key, {
+      meta: entry.group,
+      tabIds: [tab.id],
+      firstIndex: tabIndex,
+    });
+  });
+
+  const groupingRecords = Array.from(groupingMap.values()).filter(
+    (record) => record.tabIds.length > 0,
+  );
+  groupingRecords.sort((a, b) => {
+    const metaIndexA = Number.isFinite(a.meta.index)
+      ? Number(a.meta.index)
+      : Number.POSITIVE_INFINITY;
+    const metaIndexB = Number.isFinite(b.meta.index)
+      ? Number(b.meta.index)
+      : Number.POSITIVE_INFINITY;
+    if (metaIndexA !== metaIndexB) {
+      return metaIndexA - metaIndexB;
+    }
+    return a.firstIndex - b.firstIndex;
+  });
+
+  for (const record of groupingRecords) {
+    try {
+      const groupId = await tabsGroup({
+        tabIds: record.tabIds,
+        createProperties: { windowId },
+      });
+      outcome.grouped += 1;
+      try {
+        await tabGroupsUpdate(groupId, {
+          title: record.meta.name || 'Tab group',
+          color: record.meta.color || 'grey',
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        outcome.errors.push(
+          'Group ' + (record.meta.name || 'Tab group') + ': ' + message,
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      outcome.errors.push(
+        'Failed to restore group ' +
+          (record.meta.name || 'Tab group') +
+          ': ' +
+          message,
+      );
+    }
+  }
+
+  return outcome;
 }
 
 /**
@@ -1466,21 +1870,22 @@ function buildProjectItemPayload(tab, context, collectionId) {
 function parseProjectItemMetadata(item) {
   const excerpt = typeof item?.excerpt === 'string' ? item.excerpt : '';
   if (!excerpt) {
-    return { tabIndex: undefined, group: undefined };
+    return { tabIndex: undefined, group: undefined, pinned: false };
   }
 
   try {
     const parsed = JSON.parse(excerpt);
     if (!parsed || typeof parsed !== 'object') {
-      return { tabIndex: undefined, group: undefined };
+      return { tabIndex: undefined, group: undefined, pinned: false };
     }
 
     const tabIndexValue = Number(parsed?.tab?.index);
     const tabIndex = Number.isFinite(tabIndexValue) ? tabIndexValue : undefined;
+    const pinned = Boolean(parsed?.tab?.pinned);
 
     const groupValue = parsed?.group;
     if (!groupValue || typeof groupValue !== 'object') {
-      return { tabIndex, group: undefined };
+      return { tabIndex, group: undefined, pinned };
     }
 
     const groupName =
@@ -1497,9 +1902,10 @@ function parseProjectItemMetadata(item) {
         color: groupColor,
         index: groupIndex,
       },
+      pinned,
     };
   } catch (error) {
-    return { tabIndex: undefined, group: undefined };
+    return { tabIndex: undefined, group: undefined, pinned: false };
   }
 }
 
@@ -1615,6 +2021,122 @@ async function tabGroupsGet(groupId) {
         return;
       }
       resolve(group);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabs.create.
+ * @param {chrome.tabs.CreateProperties} createProperties
+ * @returns {Promise<chrome.tabs.Tab>}
+ */
+async function tabsCreate(createProperties) {
+  try {
+    const maybe = chrome.tabs.create(createProperties);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.create(createProperties, (tab) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(tab);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabs.group.
+ * @param {chrome.tabs.GroupOptions} groupOptions
+ * @returns {Promise<number>}
+ */
+async function tabsGroup(groupOptions) {
+  if (!chrome.tabs || typeof chrome.tabs.group !== 'function') {
+    throw new Error('Tab groups API unavailable.');
+  }
+
+  try {
+    const maybe = chrome.tabs.group(groupOptions);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabs.group(groupOptions, (groupId) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(groupId);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.tabGroups.update.
+ * @param {number} groupId
+ * @param {chrome.tabGroups.UpdateProperties} updateProperties
+ * @returns {Promise<chrome.tabGroups.TabGroup>}
+ */
+async function tabGroupsUpdate(groupId, updateProperties) {
+  if (!chrome.tabGroups || typeof chrome.tabGroups.update !== 'function') {
+    throw new Error('Tab groups API unavailable.');
+  }
+
+  try {
+    const maybe = chrome.tabGroups.update(groupId, updateProperties);
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.tabGroups.update(groupId, updateProperties, (group) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(group);
+    });
+  });
+}
+
+/**
+ * Promise wrapper for chrome.windows.getCurrent.
+ * @returns {Promise<chrome.windows.Window>}
+ */
+async function windowsGetCurrent() {
+  try {
+    const maybe = chrome.windows.getCurrent();
+    if (isPromiseLike(maybe)) {
+      return await maybe;
+    }
+  } catch (error) {
+    // Fall through to callback variant.
+  }
+
+  return new Promise((resolve, reject) => {
+    chrome.windows.getCurrent((window) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(window);
     });
   });
 }
