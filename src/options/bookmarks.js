@@ -3,6 +3,8 @@
 import { resetMirrorState } from '../background/mirror.js';
 import { clearAllProjectData } from '../background/projects.js';
 import { updateNotificationSectionsVisibility } from './notifications.js';
+import { setBackupConnectionState, refreshBackupStatus } from './backup.js';
+import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
 
 /**
  * @typedef {Object} ToastifyOptions
@@ -1206,6 +1208,8 @@ async function handleDisconnectClick() {
     await clearAllProjectData();
     
     renderProviderState();
+    setBackupConnectionState(false);
+    await refreshBackupStatus();
     showToast('Disconnected from ' + currentProvider.name + '. All local data has been cleared.', 'info');
   } catch (error) {
     console.error('[bookmarks] Error during logout:', error);
@@ -1238,7 +1242,19 @@ async function processOAuthSuccess(message) {
     renderProviderState();
   }
 
+  setBackupConnectionState(true);
   showToast('Connected to ' + provider.name + '.', 'success');
+  
+  try {
+    await sendRuntimeMessage({ type: OPTIONS_BACKUP_MESSAGES.RESTORE_AFTER_LOGIN });
+  } catch (error) {
+    console.warn(
+      '[bookmarks] Failed to restore options after login:',
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  await refreshBackupStatus();
   
   // Automatically start pulling when user logs in
   try {
