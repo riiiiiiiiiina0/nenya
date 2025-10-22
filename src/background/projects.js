@@ -115,6 +115,9 @@ const FETCH_PAGE_SIZE = 100;
 const CACHED_PROJECTS_KEY = 'cachedProjects';
 const CACHED_PROJECTS_TIMESTAMP_KEY = 'cachedProjectsTimestamp';
 
+// Animation sequences
+const CLOCK_SEQUENCE = ['🕛', '🕑', '🕒', '🕓', '🕧', '🕗', '🕘', '🕙'];
+
 /**
  * Cache the projects list to local storage.
  * @param {any[]} projects
@@ -318,7 +321,7 @@ export function handleRestoreProjectTabsMessage(message, sendResponse) {
  * @returns {Promise<SaveProjectResult>}
  */
 export async function saveTabsAsProject(projectName, rawTabs) {
-  const badgeAnimation = animateActionBadge(['🗂️', '📁']);
+  const badgeAnimation = animateActionBadge(CLOCK_SEQUENCE);
   /** @type {SaveProjectResult} */
   const summary = {
     ok: false,
@@ -441,7 +444,7 @@ export async function saveTabsAsProject(projectName, rawTabs) {
  * @returns {Promise<SaveProjectResult>}
  */
 export async function addTabsToProject(projectId, rawTabs) {
-  const badgeAnimation = animateActionBadge(['🗂️', '➕']);
+  const badgeAnimation = animateActionBadge(CLOCK_SEQUENCE);
   /** @type {SaveProjectResult} */
   const summary = {
     ok: false,
@@ -648,7 +651,7 @@ export async function addTabsToProject(projectId, rawTabs) {
  * @returns {Promise<SaveProjectResult>}
  */
 export async function replaceProjectItems(projectId, rawTabs) {
-  const badgeAnimation = animateActionBadge(['🗂️', '♻️']);
+  const badgeAnimation = animateActionBadge(CLOCK_SEQUENCE);
   /** @type {SaveProjectResult} */
   const summary = {
     ok: false,
@@ -820,7 +823,7 @@ export async function replaceProjectItems(projectId, rawTabs) {
  * @returns {Promise<{ ok: boolean, error?: string }>}
  */
 export async function deleteProject(projectId) {
-  const badgeAnimation = animateActionBadge(['🗑️', '💥']);
+  const badgeAnimation = animateActionBadge(CLOCK_SEQUENCE);
   
   try {
     const normalizedId = Number(projectId);

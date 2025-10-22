@@ -128,6 +128,9 @@ const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const FETCH_PAGE_SIZE = 100;
 const DEFAULT_BADGE_ANIMATION_DELAY = 300;
 
+const ANIMATION_DOWN_SEQUENCE = ['🔽', '⏬'];
+const ANIMATION_UP_SEQUENCE = ['🔼', '⏫'];
+
 let syncInProgress = false;
 /** @type {BadgeAnimationHandle | null} */
 let currentBadgeAnimationHandle = null;
@@ -810,7 +813,7 @@ export async function runMirrorPull(trigger) {
   }
 
   syncInProgress = true;
-  const badgeAnimation = animateActionBadge(['🔽', '⏬']);
+  const badgeAnimation = animateActionBadge(ANIMATION_DOWN_SEQUENCE);
   let finalBadge = '❌';
   try {
     const pullResult = await performMirrorPull(trigger);
@@ -845,7 +848,7 @@ export async function resetAndPull() {
   }
 
   syncInProgress = true;
-  const badgeAnimation = animateActionBadge(['🔽', '⏬']);
+  const badgeAnimation = animateActionBadge(ANIMATION_DOWN_SEQUENCE);
   let finalBadge = '❌';
   try {
     const settingsData = await loadRootFolderSettings();
@@ -875,7 +878,7 @@ export async function resetAndPull() {
  * @returns {Promise<SaveUnsortedResult>}
  */
 export async function saveUrlsToUnsorted(entries) {
-  const badgeAnimation = animateActionBadge(['⬆️', '🔼']);
+  const badgeAnimation = animateActionBadge(ANIMATION_UP_SEQUENCE);
   /** @type {SaveUnsortedResult} */
   const summary = {
     ok: false,

@@ -240,7 +240,7 @@ function renderProjectRow(project) {
   const renderCoverIcon = () => {
     iconElement.dataset.state = 'cover';
     iconElement.className =
-      'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded';
+      'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded';
     iconElement.innerHTML = '';
     iconElement.removeAttribute('role');
     iconElement.removeAttribute('tabindex');
@@ -250,7 +250,7 @@ function renderProjectRow(project) {
       const img = document.createElement('img');
       img.src = cover;
       img.alt = title + ' icon';
-      img.className = 'w-6 h-6 object-cover rounded';
+      img.className = 'w-4 h-4 object-cover rounded';
       img.onerror = () => {
         iconElement.innerHTML = '';
         renderDefaultIcon();
@@ -267,7 +267,7 @@ function renderProjectRow(project) {
     }
     iconElement.dataset.state = 'link';
     iconElement.className =
-      'btn btn-ghost btn-xs btn-square flex-shrink-0';
+      'btn btn-ghost btn-xs btn-square flex-shrink-0 -ml-2';
     iconElement.textContent = '↗️';
     iconElement.setAttribute('role', 'button');
     iconElement.setAttribute('tabindex', '0');
