@@ -89,4 +89,26 @@ Save as "Replace items in a project", but instead of highlight tabs or active ta
 
 ### Open a saved project
 
-TODO
+1. Let the user pick an existing project from the popup list.
+2. Fetch all Raindrop items from the selected project collection.
+3. Parse the JSON metadata from each item's description to extract tab group and tab information.
+4. Group the items by their tab group metadata (items without group metadata are treated as ungrouped).
+5. For each tab group:
+   - Create a new tab group in the browser window with the group's name and color.
+   - Create tabs within the group in the order specified by their tab index.
+   - Set pinned status for tabs that were originally pinned.
+6. For ungrouped items:
+   - Create tabs in the main window area in the order specified by their tab index.
+   - Set pinned status for tabs that were originally pinned.
+
+### Rename tab title
+
+1. **Add rename functionality to popup**: Add a "Rename Tab" button below the "Save tabs as project" button in the popup page.
+2. **Prompt for custom title**: When clicked, display a prompt for the user to enter a custom title, with the current page title as the default value.
+3. **Apply and persist custom title**: 
+   - Set the custom title as the active tab's title
+   - Persist the custom title across page reloads
+   - Use a content script to override the `document.title` setter, preventing the page from modifying the title
+4. **Integrate with project system**: 
+   - When saving a tab to a project, include the custom title in the tab's metadata if one exists
+   - When opening a saved project, restore any custom titles that were previously set
