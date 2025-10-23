@@ -75,8 +75,7 @@ export function showLoginMessage(statusMessage, openOptionsButton) {
   loginMessage.innerHTML = `
     <div class="card-body gap-4">
       <div class="text-center space-y-2">
-        <h2 class="text-xl font-semibold text-base-content">🔖 Mirror Cloud Bookmarks</h2>
-        <p class="text-sm text-base-content/70">Connect to a cloud bookmark provider to sync your bookmarks.</p>
+        <p class="text-sm text-base-content/70">Connect to a cloud bookmark provider to sync your bookmarks, saved projects, and options.</p>
         <button id="goToOptionsButton" class="btn btn-primary w-full" type="button">
           Go to Options to Connect
         </button>

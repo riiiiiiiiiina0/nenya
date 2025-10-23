@@ -222,13 +222,13 @@ function renderProjectRow(project) {
 
   const container = document.createElement('div');
   container.className =
-    'flex items-center w-full border border-base-content/10 rounded-md p-1';
+    'flex items-center w-full border border-base-content/10 rounded-md p-1 my-2';
   container.setAttribute('role', 'listitem');
 
   const openButton = document.createElement('button');
   openButton.type = 'button';
   openButton.className =
-    'btn btn-ghost btn-xs flex-1 justify-between gap-2 min-w-0';
+    'btn btn-ghost btn-sm flex-1 justify-between gap-3 min-w-0 py-2';
 
   // Create icon element with hover affordance for Raindrop link
   const iconElement = document.createElement('div');
@@ -236,12 +236,13 @@ function renderProjectRow(project) {
 
   const renderDefaultIcon = () => {
     iconElement.textContent = '📁';
+    iconElement.className = 'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-lg';
   };
 
   const renderCoverIcon = () => {
     iconElement.dataset.state = 'cover';
     iconElement.className =
-      'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded';
+      'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded';
     iconElement.innerHTML = '';
     iconElement.removeAttribute('role');
     iconElement.removeAttribute('tabindex');
@@ -251,7 +252,7 @@ function renderProjectRow(project) {
       const img = document.createElement('img');
       img.src = cover;
       img.alt = title + ' icon';
-      img.className = 'w-4 h-4 object-cover rounded';
+      img.className = 'w-6 h-6 object-cover rounded';
       img.onerror = () => {
         iconElement.innerHTML = '';
         renderDefaultIcon();
@@ -268,7 +269,7 @@ function renderProjectRow(project) {
     }
     iconElement.dataset.state = 'link';
     iconElement.className =
-      'btn btn-ghost btn-xs btn-square flex-shrink-0 -ml-2';
+      'btn btn-ghost btn-sm btn-square flex-shrink-0 -ml-2';
     iconElement.textContent = '↗️';
     iconElement.setAttribute('role', 'button');
     iconElement.setAttribute('tabindex', '0');
@@ -321,13 +322,13 @@ function renderProjectRow(project) {
 
   // Create title element with truncation
   const titleElement = document.createElement('span');
-  titleElement.className = 'text-left truncate flex-1 min-w-0';
+  titleElement.className = 'text-left truncate flex-1 min-w-0 text-base font-medium';
   titleElement.textContent = title;
   titleElement.title = title; // Show full title on hover
 
   // Create count badge
   const countBadge = document.createElement('span');
-  countBadge.className = 'badge badge-ghost badge-xs flex-shrink-0';
+  countBadge.className = 'badge badge-ghost badge-sm flex-shrink-0';
   countBadge.textContent =
     Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
@@ -343,7 +344,7 @@ function renderProjectRow(project) {
   // add tabs to project button
   const addButton = document.createElement('button');
   addButton.type = 'button';
-  addButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
+  addButton.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
   addButton.textContent = '➕';
   const addLabel = 'Add current tabs to ' + title;
   addButton.setAttribute('aria-label', addLabel);
@@ -357,7 +358,7 @@ function renderProjectRow(project) {
   // replace project items with highlighted/active tabs button
   const replaceButton = document.createElement('button');
   replaceButton.type = 'button';
-  replaceButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
+  replaceButton.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
   replaceButton.textContent = '🔼';
   const replaceLabel = 'Replace items in ' + title + ' with highlighted tabs';
   replaceButton.setAttribute('aria-label', replaceLabel);
@@ -372,7 +373,7 @@ function renderProjectRow(project) {
   const replaceWindowButton = document.createElement('button');
   replaceWindowButton.type = 'button';
   replaceWindowButton.className =
-    'btn btn-ghost btn-xs btn-square flex-shrink-0';
+    'btn btn-ghost btn-sm btn-square flex-shrink-0';
   replaceWindowButton.textContent = '⏫';
   const replaceWindowLabel =
     'Replace items in ' + title + ' with current window tabs';

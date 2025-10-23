@@ -633,7 +633,7 @@ async function evaluateTab(tabId, url) {
  * Evaluate all open tabs.
  * @returns {Promise<void>}
  */
-async function evaluateAllTabs() {
+export async function evaluateAllTabs() {
   if (!chrome?.tabs || typeof chrome.tabs.query !== 'function') {
     return;
   }
