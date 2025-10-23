@@ -4,6 +4,7 @@ import {
   resetAndPull,
   runMirrorPull,
   saveUrlsToUnsorted,
+  normalizeHttpUrl,
 } from './mirror.js';
 import {
   SAVE_PROJECT_MESSAGE,
@@ -32,6 +33,7 @@ import {
   getActiveAutoReloadStatus,
   evaluateAllTabs,
 } from './auto-reload.js';
+import { saveTabsAsProject } from './projects.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -88,6 +90,209 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
+});
+
+/**
+ * Handle keyboard shortcuts (commands).
+ * @param {string} command
+ * @returns {void}
+ */
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'pull-raindrop') {
+    void runMirrorPull('manual').catch((error) => {
+      console.warn('[commands] Pull failed:', error);
+    });
+    return;
+  }
+
+  if (command === 'save-to-unsorted') {
+    void (async () => {
+      try {
+        /** @type {chrome.tabs.Tab[]} */
+        let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+        if (!tabs || tabs.length === 0) {
+          tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+        }
+        const seen = new Set();
+        /** @type {{ url: string, title?: string }[]} */
+        const entries = [];
+        tabs.forEach((tab) => {
+          const normalized = normalizeHttpUrl(typeof tab.url === 'string' ? tab.url : '');
+          if (!normalized || seen.has(normalized)) {
+            return;
+          }
+          seen.add(normalized);
+          entries.push({ url: normalized, title: typeof tab.title === 'string' ? tab.title : '' });
+        });
+        if (entries.length > 0) {
+          await saveUrlsToUnsorted(entries);
+        }
+      } catch (error) {
+        console.warn('[commands] Save to Unsorted failed:', error);
+      }
+    })();
+    return;
+  }
+
+  if (command === 'save-project') {
+    void (async () => {
+      try {
+        /** @type {chrome.tabs.Tab[]} */
+        let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+        if (!tabs || tabs.length === 0) {
+          tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+        }
+        const descriptors = [];
+        const seen = new Set();
+        tabs.forEach((tab) => {
+          if (!tab || typeof tab.id !== 'number') {
+            return;
+          }
+          const normalized = normalizeHttpUrl(typeof tab.url === 'string' ? tab.url : '');
+          if (!normalized || seen.has(normalized)) {
+            return;
+          }
+          seen.add(normalized);
+          descriptors.push({
+            id: tab.id,
+            windowId: typeof tab.windowId === 'number' ? tab.windowId : (chrome.windows?.WINDOW_ID_NONE ?? -1),
+            index: typeof tab.index === 'number' ? tab.index : -1,
+            groupId: typeof tab.groupId === 'number' ? tab.groupId : (chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1),
+            pinned: Boolean(tab.pinned),
+            url: normalized,
+            title: typeof tab.title === 'string' ? tab.title : '',
+          });
+        });
+        if (descriptors.length === 0) {
+          return;
+        }
+
+        // Prompt user for project name in the active tab
+        let projectName = '';
+        try {
+          const activeTabs = await chrome.tabs.query({ currentWindow: true, active: true });
+          const active = activeTabs && activeTabs[0];
+          if (active && typeof active.id === 'number') {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: active.id },
+              func: () => {
+                const base = document.title || (typeof location?.href === 'string' ? (() => { try { return new URL(location.href).hostname; } catch { return 'project'; } })() : 'project');
+                const input = window.prompt('Project name', base);
+                return input && input.trim() ? input.trim() : null;
+              },
+              world: 'ISOLATED',
+            });
+            const value = Array.isArray(results) && results[0] ? results[0].result : null;
+            if (!value) {
+              return;
+            }
+            projectName = String(value);
+          }
+        } catch (e) {
+          // Fallback: derive a name if prompt was not possible
+          const first = tabs[0];
+          if (first && typeof first.title === 'string' && first.title.trim()) {
+            projectName = first.title.trim();
+          } else if (first && typeof first.url === 'string') {
+            try {
+              projectName = new URL(first.url).hostname;
+            } catch {
+              projectName = 'project';
+            }
+          } else {
+            projectName = 'project';
+          }
+        }
+
+        if (!projectName) {
+          return;
+        }
+
+        await saveTabsAsProject(projectName, descriptors);
+      } catch (error) {
+        console.warn('[commands] Save project failed:', error);
+      }
+    })();
+    return;
+  }
+
+  if (command === 'rename-tab') {
+    void (async () => {
+      try {
+        const tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+        const active = tabs && tabs[0];
+        if (!active || typeof active.id !== 'number') {
+          return;
+        }
+
+        // Attempt to prompt in-page for a title
+        let newTitle = null;
+        try {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: active.id },
+            func: () => {
+              const current = document.title || '';
+              const input = window.prompt('Enter custom title for this tab:', current);
+              return input && input.trim() ? input.trim() : null;
+            },
+            world: 'ISOLATED',
+          });
+          newTitle = Array.isArray(results) && results[0] ? results[0].result : null;
+        } catch (e) {
+          newTitle = null;
+        }
+
+        if (!newTitle) {
+          return;
+        }
+
+        // Persist the title
+        try {
+          await chrome.storage.local.set({
+            ['customTitle_' + active.id]: {
+              tabId: active.id,
+              url: active.url,
+              title: newTitle,
+              updatedAt: Date.now(),
+            },
+          });
+        } catch (e) {
+          // ignore storage errors
+        }
+
+        // Apply via content script if available
+        try {
+          await chrome.tabs.sendMessage(active.id, { type: 'renameTab', title: newTitle });
+        } catch (e) {
+          // Fallback: apply directly in the page
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId: active.id },
+              func: (title) => {
+                try {
+                  document.title = title;
+                } catch {}
+                const el = document.querySelector('title');
+                if (el) {
+                  el.textContent = title;
+                } else {
+                  const t = document.createElement('title');
+                  t.textContent = title;
+                  (document.head || document.documentElement).appendChild(t);
+                }
+              },
+              args: [newTitle],
+              world: 'ISOLATED',
+            });
+          } catch (err) {
+            // ignore
+          }
+        }
+      } catch (error) {
+        console.warn('[commands] Rename tab failed:', error);
+      }
+    })();
+  }
 });
 
 void initializeAutoReloadFeature().catch((error) => {

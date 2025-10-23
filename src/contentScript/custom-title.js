@@ -370,6 +370,42 @@
       overrideTitle(request.title);
       setTitleElementMultipleTimes();
       sendResponse({ success: true });
+      return true;
+    }
+    if (request.type === 'promptRenameTab') {
+      try {
+        const currentTitle = document.title || '';
+        const next = window.prompt('Enter custom title for this tab:', currentTitle);
+        if (next && next.trim() !== '') {
+          overrideTitle(next.trim());
+          setTitleElementMultipleTimes();
+          // Save to storage asynchronously without blocking
+          void (async () => {
+            try {
+              if (!currentTabId) {
+                currentTabId = await getCurrentTabId();
+              }
+              if (currentTabId) {
+                const storageKey = `customTitle_${currentTabId}`;
+                await chrome.storage.local.set({
+                  [storageKey]: {
+                    tabId: currentTabId,
+                    url: window.location.href,
+                    title: next.trim(),
+                    updatedAt: Date.now()
+                  }
+                });
+              }
+            } catch (e) {
+              // ignore storage errors in prompt path
+            }
+          })();
+        }
+        sendResponse({ success: true });
+      } catch (error) {
+        sendResponse({ success: false, error: String(error) });
+      }
+      return true;
     }
   });
 

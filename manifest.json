@@ -30,7 +30,9 @@
     "tabGroups",
     "notifications",
     "contextMenus",
-    "alarms"
+    "alarms",
+    "scripting",
+    "activeTab"
   ],
   "externally_connectable": {
     "matches": [
@@ -46,5 +48,31 @@
       "js": ["src/contentScript/custom-title.js"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+R"
+      },
+      "description": "Open popup"
+    },
+    "pull-raindrop": {
+      "description": "Pull from Raindrop now"
+    },
+    "save-to-unsorted": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "Save to Unsorted"
+    },
+    "save-project": {
+      "description": "Save as project"
+    },
+    "rename-tab": {
+      "suggested_key": {
+        "default": "Alt+T"
+      },
+      "description": "Rename current tab"
+    }
+  }
 }
