@@ -793,6 +793,26 @@ async function handleAutoReloadAlarmInternal(alarm) {
 }
 
 /**
+ * Retrieve the auto reload status for the active tab.
+ * @returns {{ tabId: number, intervalSeconds: number, remainingMs: number } | null}
+ */
+export function getActiveAutoReloadStatus() {
+  if (activeTabId === null) {
+    return null;
+  }
+  const schedule = scheduledTabs.get(activeTabId);
+  if (!schedule) {
+    return null;
+  }
+  const remainingMs = Math.max(0, schedule.nextRunAt - Date.now());
+  return {
+    tabId: activeTabId,
+    intervalSeconds: schedule.intervalSeconds,
+    remainingMs,
+  };
+}
+
+/**
  * Initialize storage, listeners, and existing schedules.
  * @returns {Promise<void>}
  */

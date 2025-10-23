@@ -29,6 +29,7 @@ import {
 import {
   initializeAutoReloadFeature,
   handleAutoReloadAlarm,
+  getActiveAutoReloadStatus,
 } from './auto-reload.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
@@ -37,6 +38,7 @@ const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
 const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
+const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 
 /**
  * Ensure the repeating alarm is scheduled.
@@ -121,6 +123,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (handleOptionsBackupMessage(message, sendResponse)) {
+    return true;
+  }
+
+  if (message.type === GET_AUTO_RELOAD_STATUS_MESSAGE) {
+    const status = getActiveAutoReloadStatus();
+    sendResponse({ status });
     return true;
   }
 
