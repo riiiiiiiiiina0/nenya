@@ -31,6 +31,10 @@ import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
  */
 
 /**
+ * @typedef {function(number|Date|string): {format: function(string): string}} DayjsFunction
+ */
+
+/**
  * @typedef {Object} ProviderDefinition
  * @property {string} id
  * @property {string} name
@@ -1088,16 +1092,16 @@ function getProviderStatus(storedTokens) {
 
   const now = Date.now();
   const isActive = storedTokens.expiresAt > now;
-  const expiresInMs = storedTokens.expiresAt - now;
   if (isActive) {
-    const minutes = Math.max(1, Math.floor(expiresInMs / 60000));
+    // @ts-ignore - dayjs is loaded globally via script tag
+    const formattedDate = dayjs(storedTokens.expiresAt).format('YYYY-MM-DD HH:mm');
     return {
       message:
         'Connected to ' +
         currentProvider.name +
-        '. Token expires in approximately ' +
-        minutes +
-        ' minute(s).',
+        '. Token expires at ' +
+        formattedDate +
+        '.',
       statusClass: 'text-success',
     };
   }
