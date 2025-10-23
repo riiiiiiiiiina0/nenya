@@ -209,13 +209,13 @@
     try {
       // Get current tab ID
       currentTabId = await getCurrentTabId();
-      if (!currentTabId) {
-        return;
-      }
 
       // First, check for stored custom title by tab ID (existing behavior)
-      const result = await chrome.storage.local.get([`customTitle_${currentTabId}`]);
-      const storedTitleData = result[`customTitle_${currentTabId}`];
+      let storedTitleData = undefined;
+      if (typeof currentTabId === 'number') {
+        const result = await chrome.storage.local.get([`customTitle_${currentTabId}`]);
+        storedTitleData = result[`customTitle_${currentTabId}`];
+      }
       
       // Handle both old string format and new object format for backward compatibility
       let customTitle = '';
@@ -263,13 +263,14 @@
             overrideTitle(value.title.trim());
             setTitleElementMultipleTimes();
             
-            // Update the record with current tab ID
+            // Update the record with current tab ID if available
             const updatedRecord = {
               ...value,
-              tabId: currentTabId,
               updatedAt: Date.now()
             };
-            
+            if (typeof currentTabId === 'number') {
+              updatedRecord.tabId = currentTabId;
+            }
             await chrome.storage.local.set({ [key]: updatedRecord });
             console.log('Updated custom title record with current tab ID:', currentTabId);
             
@@ -406,6 +407,55 @@
         sendResponse({ success: false, error: String(error) });
       }
       return true;
+    }
+  });
+
+  // React to storage updates to apply titles immediately when saved elsewhere
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'local') {
+      return;
+    }
+    try {
+      for (const [key, change] of Object.entries(changes)) {
+        if (!key.startsWith('customTitle_') || !change || !('newValue' in change)) {
+          continue;
+        }
+        const newValue = change.newValue;
+        if (!newValue) {
+          continue;
+        }
+
+        // Determine if this change is relevant to this page
+        let isRelevant = false;
+        if (typeof currentTabId === 'number' && key === `customTitle_${currentTabId}`) {
+          isRelevant = true;
+        } else if (newValue && typeof newValue === 'object' && typeof newValue.url === 'string') {
+          isRelevant = newValue.url === window.location.href;
+        }
+        if (!isRelevant) {
+          continue;
+        }
+
+        // Extract title
+        let newTitle = '';
+        if (typeof newValue === 'string' && newValue.trim() !== '') {
+          newTitle = newValue.trim();
+        } else if (
+          newValue &&
+          typeof newValue === 'object' &&
+          typeof newValue.title === 'string' &&
+          newValue.title.trim() !== ''
+        ) {
+          newTitle = newValue.title.trim();
+        }
+
+        if (newTitle) {
+          overrideTitle(newTitle);
+          setTitleElementMultipleTimes();
+        }
+      }
+    } catch (e) {
+      // ignore storage observer errors
     }
   });
 

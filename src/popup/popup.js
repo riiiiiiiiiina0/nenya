@@ -155,16 +155,39 @@ async function handleRenameTab() {
     try {
       await chrome.tabs.sendMessage(currentTab.id, {
         type: 'renameTab',
-        title: customTitle.trim()
+        title: customTitle.trim(),
       });
-      
       if (statusMessage) {
         concludeStatus('Tab renamed successfully!', 'success', 3000, statusMessage);
       }
     } catch (error) {
-      console.error('[popup] Failed to send rename message:', error);
-      if (statusMessage) {
-        concludeStatus('Failed to rename tab. Please refresh the page and try again.', 'error', 4000, statusMessage);
+      // Fallback: if the content script isn't ready yet, apply directly in the page
+      console.error('[popup] Failed to send rename message, applying fallback:', error);
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTab.id },
+          func: (title) => {
+            try { document.title = title; } catch (e) {}
+            const el = document.querySelector('title');
+            if (el) {
+              el.textContent = title;
+            } else {
+              const t = document.createElement('title');
+              t.textContent = title;
+              (document.head || document.documentElement).appendChild(t);
+            }
+          },
+          args: [customTitle.trim()],
+          world: 'ISOLATED',
+        });
+        if (statusMessage) {
+          concludeStatus('Tab renamed successfully!', 'success', 3000, statusMessage);
+        }
+      } catch (fallbackError) {
+        console.error('[popup] Fallback title apply failed:', fallbackError);
+        if (statusMessage) {
+          concludeStatus('Failed to rename tab. Please refresh the page and try again.', 'error', 4000, statusMessage);
+        }
       }
     }
   } catch (error) {
