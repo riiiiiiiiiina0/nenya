@@ -1332,4 +1332,51 @@ async function init() {
   renderProviderState();
 }
 
+/**
+ * Subscribe to storage changes for root folder settings to reflect imports/restores.
+ * When settings change, update UI controls and move/rename the existing root folder accordingly.
+ * @returns {void}
+ */
+function subscribeToRootFolderStorageChanges() {
+  if (!chrome?.storage?.onChanged) {
+    return;
+  }
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'sync' || !changes || !changes[ROOT_FOLDER_SETTINGS_KEY]) {
+      return;
+    }
+
+    /** @type {RootFolderSettingsMap | undefined} */
+    const newMap = /** @type {*} */ (changes[ROOT_FOLDER_SETTINGS_KEY].newValue) || {};
+
+    // Determine provider to apply (default to 'raindrop' if none selected yet)
+    const providerId = currentProvider ? currentProvider.id : 'raindrop';
+
+    /** @type {RootFolderSettings | undefined} */
+    const previous = rootFolderSettingsCache[providerId];
+    /** @type {RootFolderSettings | undefined} */
+    const next = /** @type {*} */ (newMap?.[providerId]);
+
+    // Update local caches
+    rootFolderSettingsCache = newMap || {};
+    if (next) {
+      pendingRootFolderSettings[providerId] = cloneRootFolderSettings(next);
+    }
+
+    // Apply folder move/rename if settings changed and we have both sides
+    if (previous && next && hasPendingRootFolderChanges(previous, next)) {
+      void applyRootFolderSettingsChange(previous, next).catch(() => {
+        // Ignore failures; UI will still reflect latest settings
+      });
+    }
+
+    // Refresh the Root bookmark folder section UI
+    const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
+    void updateRootFolderSection(storedTokens);
+  });
+}
+
+subscribeToRootFolderStorageChanges();
+
 void init();
