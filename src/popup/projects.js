@@ -326,15 +326,15 @@ function renderProjectRow(project) {
   titleElement.textContent = title;
   titleElement.title = title; // Show full title on hover
 
-  // Create count badge
-  const countBadge = document.createElement('span');
-  countBadge.className = 'badge badge-ghost badge-sm flex-shrink-0';
-  countBadge.textContent =
-    Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
+  // // Create count badge
+  // const countBadge = document.createElement('span');
+  // countBadge.className = 'badge badge-ghost badge-sm flex-shrink-0';
+  // countBadge.textContent =
+  //   Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
 
   openButton.appendChild(iconElement);
   openButton.appendChild(titleElement);
-  openButton.appendChild(countBadge);
+  // openButton.appendChild(countBadge);
 
   openButton.addEventListener('click', (event) => {
     event.preventDefault();
