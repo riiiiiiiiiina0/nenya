@@ -26,6 +26,12 @@ import {
   handleOptionsBackupLifecycle,
   handleOptionsBackupMessage,
 } from './options-backup.js';
+import {
+  initializeAutoReloadFeature,
+  handleAutoReloadAlarm,
+  getActiveAutoReloadStatus,
+  evaluateAllTabs,
+} from './auto-reload.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -33,6 +39,8 @@ const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
 const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
+const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
+const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 
 /**
  * Ensure the repeating alarm is scheduled.
@@ -53,7 +61,14 @@ function handleLifecycleEvent(trigger) {
   setupContextMenus();
   void scheduleMirrorAlarm();
   initializeOptionsBackupService();
-  void handleOptionsBackupLifecycle(trigger).catch((error) => {
+  void handleOptionsBackupLifecycle(trigger).then(async () => {
+    // Re-evaluate auto reload rules after options backup restore completes
+    try {
+      await evaluateAllTabs();
+    } catch (error) {
+      console.warn('[background] Failed to re-evaluate auto reload rules after options backup:', error);
+    }
+  }).catch((error) => {
     console.warn(
       '[options-backup] Lifecycle restore skipped:',
       error instanceof Error ? error.message : error,
@@ -75,6 +90,10 @@ chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
 });
 
+void initializeAutoReloadFeature().catch((error) => {
+  console.error('[auto-reload] Initialization failed:', error);
+});
+
 /**
  * Handle tab removal to clean up custom title records.
  * @param {number} tabId - The ID of the tab that was removed.
@@ -89,13 +108,22 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== MIRROR_ALARM_NAME) {
-    return;
-  }
+  void (async () => {
+    const handled = await handleAutoReloadAlarm(alarm);
+    if (handled) {
+      return;
+    }
 
-  void runMirrorPull('alarm').catch((error) => {
-    console.error('[mirror] Scheduled pull failed:', error);
-  });
+    if (alarm.name !== MIRROR_ALARM_NAME) {
+      return;
+    }
+
+    try {
+      await runMirrorPull('alarm');
+    } catch (error) {
+      console.error('[mirror] Scheduled pull failed:', error);
+    }
+  })();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -104,6 +132,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (handleOptionsBackupMessage(message, sendResponse)) {
+    return true;
+  }
+
+  if (message.type === GET_AUTO_RELOAD_STATUS_MESSAGE) {
+    const status = getActiveAutoReloadStatus();
+    sendResponse({ status });
+    return true;
+  }
+
+  if (message.type === AUTO_RELOAD_RE_EVALUATE_MESSAGE) {
+    void evaluateAllTabs().then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      console.warn('[background] Failed to re-evaluate auto reload rules:', error);
+      sendResponse({ success: false, error: error.message });
+    });
     return true;
   }
 

@@ -120,6 +120,79 @@
           </div>
         </div>
       </section>
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="auto-reload-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="auto-reload-heading" class="card-title text-3xl">🔁 Auto Reload Rules</h2>
+            <p class="text-base-content/70">Reload matching tabs on a schedule without writing scripts.</p>
+          </div>
+          <form id="autoReloadRuleForm" class="space-y-4" novalidate>
+            <div class="grid gap-4 md:grid-cols-2">
+              <label class="form-control w-full">
+                <span class="label">
+                  <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
+                </span>
+                <input id="autoReloadPatternInput" class="input input-bordered w-full font-mono text-sm"
+                  type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                  Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
+                </span>
+              </label>
+              <label class="form-control w-full">
+                <span class="label">
+                  <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Reload every</span>
+                </span>
+                <div class="join w-full">
+                  <input id="autoReloadIntervalInput" class="input input-bordered w-full join-item" type="number"
+                    min="0.08" step="0.01" required placeholder="5">
+                  <span class="btn btn-ghost no-animation join-item" aria-hidden="true">minutes</span>
+                </div>
+              </label>
+            </div>
+            <p id="autoReloadFormError" class="text-sm text-error" hidden></p>
+            <div class="flex flex-wrap gap-3">
+              <button id="autoReloadSaveButton" class="btn btn-primary" type="submit">
+                Add rule
+              </button>
+              <button id="autoReloadCancelEditButton" class="btn btn-outline" type="button" hidden>
+                Cancel edit
+              </button>
+            </div>
+          </form>
+          <div class="space-y-3">
+            <div>
+              <h3 class="text-lg font-semibold">Saved rules</h3>
+              <p class="text-sm text-base-content/70">Select a rule to view details or manage it.</p>
+            </div>
+            <div id="autoReloadRulesEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+              No auto reload rules yet. Add one above to start.
+            </div>
+            <div id="autoReloadRulesList" class="space-y-2" role="list"></div>
+          </div>
+          <div id="autoReloadRuleDetails" class="rounded-lg border border-base-300 p-4 space-y-3" hidden>
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-lg font-semibold">Rule details</h3>
+              <span id="autoReloadRuleIntervalSummary" class="badge badge-outline text-sm"></span>
+            </div>
+            <dl class="space-y-2 text-sm">
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Pattern</dt>
+                <dd id="autoReloadRulePatternDetail" class="font-mono break-words text-base-content"></dd>
+              </div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Created</dt>
+                  <dd id="autoReloadRuleCreatedDetail" class="text-base-content"></dd>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Last updated</dt>
+                  <dd id="autoReloadRuleUpdatedDetail" class="text-base-content"></dd>
+                </div>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="notifications-heading">
         <div class="card-body gap-6">
           <div class="space-y-1">

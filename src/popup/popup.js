@@ -28,6 +28,9 @@ const openOptionsButton = /** @type {HTMLButtonElement | null} */ (
 const statusMessage = /** @type {HTMLDivElement | null} */ (
   document.getElementById('statusMessage')
 );
+const autoReloadStatusElement = /** @type {HTMLSpanElement | null} */ (
+  document.getElementById('autoReloadStatus')
+);
 const projectsContainer = /** @type {HTMLDivElement | null} */ (
   document.getElementById('projectsContainer')
 );
@@ -198,6 +201,87 @@ async function initializePopup() {
 
 // Initialize the popup when the script loads
 void initializePopup();
+
+const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
+const AUTO_RELOAD_STATUS_REFRESH_INTERVAL = 1000;
+let autoReloadStatusTimer = null;
+
+/**
+ * Format remaining milliseconds into a human-friendly countdown.
+ * @param {number} remainingMs
+ * @returns {string}
+ */
+function formatRemainingCountdown(remainingMs) {
+  const safeMs = Math.max(0, Number(remainingMs) || 0);
+  if (safeMs === 0) {
+    return 'Reload in 0 seconds';
+  }
+  if (safeMs >= 60000) {
+    const minutes = Math.max(1, Math.ceil(safeMs / 60000));
+    return 'Reload in ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
+  }
+  const seconds = Math.max(1, Math.ceil(safeMs / 1000));
+  return 'Reload in ' + seconds + (seconds === 1 ? ' second' : ' seconds');
+}
+
+/**
+ * Update the auto reload status indicator from background state.
+ * @returns {Promise<void>}
+ */
+async function updateAutoReloadStatus() {
+  if (!autoReloadStatusElement) {
+    return;
+  }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: GET_AUTO_RELOAD_STATUS_MESSAGE,
+    });
+    const status = response?.status;
+    if (
+      !status ||
+      typeof status.remainingMs !== 'number' ||
+      status.tabId === undefined
+    ) {
+      autoReloadStatusElement.hidden = true;
+      autoReloadStatusElement.textContent = '';
+      return;
+    }
+    autoReloadStatusElement.hidden = false;
+    autoReloadStatusElement.textContent = formatRemainingCountdown(
+      status.remainingMs,
+    );
+  } catch (error) {
+    autoReloadStatusElement.hidden = true;
+    autoReloadStatusElement.textContent = '';
+    console.warn('[popup] Failed to read auto reload status:', error);
+  }
+}
+
+/**
+ * Start polling for auto reload countdown updates while popup is open.
+ * @returns {void}
+ */
+function startAutoReloadStatusUpdates() {
+  if (!autoReloadStatusElement) {
+    return;
+  }
+  void updateAutoReloadStatus();
+  if (autoReloadStatusTimer !== null) {
+    clearInterval(autoReloadStatusTimer);
+  }
+  autoReloadStatusTimer = setInterval(() => {
+    void updateAutoReloadStatus();
+  }, AUTO_RELOAD_STATUS_REFRESH_INTERVAL);
+}
+
+startAutoReloadStatusUpdates();
+
+window.addEventListener('unload', () => {
+  if (autoReloadStatusTimer !== null) {
+    clearInterval(autoReloadStatusTimer);
+    autoReloadStatusTimer = null;
+  }
+});
 
 // Listen for storage changes to update popup when user logs in/out
 chrome.storage.onChanged.addListener((changes, namespace) => {

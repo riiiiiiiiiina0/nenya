@@ -13,8 +13,9 @@
 
 <body class="bg-base-200">
   <div class="navbar bg-base-100 shadow-sm">
-    <div class="flex-1">
+    <div class="flex-1 flex items-center gap-3">
       <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
+      <span id="autoReloadStatus" class="text-sm text-base-content/70" hidden></span>
     </div>
     <div class="flex-none">
       <button id="openOptionsButton" class="btn btn-square btn-ghost" type="button" aria-label="Open options">
@@ -23,22 +24,6 @@
     </div>
   </div>
   <main class="min-w-[480px] p-5 space-y-4">
-    <!-- cloud bookmarks -->
-    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
-      <div class="card-body gap-2">
-        <header class="space-y-1">
-          <h1 class="text-xl font-semibold text-base-content">🔖 Cloud Bookmarks</h1>
-          <p class="text-sm text-base-content/70">Pull your Raindrop collections to local bookmarks.</p>
-        </header>
-        <button id="pullButton" class="btn btn-primary w-full" type="button">
-          Pull now
-        </button>
-        <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
-          Save to Unsorted
-        </button>
-
-      </div>
-    </article>
 
     <!-- saved projects -->
     <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">
@@ -46,7 +31,7 @@
         <header class="space-y-1">
           <div class="flex flex-row items-center justify-between">
             <h1 class="text-xl font-semibold text-base-content">📚 Saved Projects</h1>
-            <button id="refreshProjectsButton" class="btn btn-ghost btn-sm" type="button" aria-label="Refresh projects">
+            <button id="refreshProjectsButton" class="btn btn-ghost btn-sm hidden" type="button" aria-label="Refresh projects">
               🔄️
             </button>
           </div>
@@ -61,6 +46,22 @@
         <section class="space-y-2 mt-2">
           <div id="projectsContainer" class="space-y-2" role="list"></div>
         </section>
+      </div>
+    </article>
+
+    <!-- cloud bookmarks -->
+    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
+      <div class="card-body gap-2">
+        <header class="space-y-1">
+          <h1 class="text-xl font-semibold text-base-content">🔖 Cloud Bookmarks</h1>
+          <p class="text-sm text-base-content/70">Pull your Raindrop collections to local bookmarks.</p>
+        </header>
+        <button id="pullButton" class="btn btn-primary w-full" type="button">
+          Pull now
+        </button>
+        <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
+          Save to Unsorted
+        </button>
       </div>
     </article>
   </main>
