@@ -416,6 +416,23 @@ export function updateNotificationSectionsVisibility(isLoggedIn) {
   }
 }
 
+// Reflect imported/restored preference changes live in the controls
+if (chrome?.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== 'sync') {
+      return;
+    }
+
+    const detail = changes[NOTIFICATION_PREFERENCES_KEY];
+    if (!detail) {
+      return;
+    }
+
+    preferences = normalizePreferences(detail.newValue);
+    applyPreferencesToUI();
+  });
+}
+
 attachEventListeners();
 subscribeToStorageChanges();
 void initializeNotificationControls();

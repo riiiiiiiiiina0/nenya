@@ -7,6 +7,10 @@ import {
   pushNotification,
   getNotificationPreferences,
 } from './mirror.js';
+import {
+  getBookmarkFolderPath,
+  ensureBookmarkFolderPath,
+} from '../shared/bookmarkFolders.js';
 import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
 
 /**
@@ -20,6 +24,13 @@ import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
  * @typedef {Object} RootFolderSettings
  * @property {string} parentFolderId
  * @property {string} rootFolderName
+ */
+
+/**
+ * @typedef {Object} RootFolderBackupSettings
+ * @property {string} rootFolderName
+ * @property {string} parentFolderPath
+ * @property {string} [parentFolderId]
  */
 
 /**
@@ -57,7 +68,7 @@ import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
  * @typedef {Object} AuthProviderBackupPayload
  * @property {'auth-provider-settings'} kind
  * @property {string} provider
- * @property {RootFolderSettings} mirrorRootFolderSettings
+ * @property {RootFolderBackupSettings} mirrorRootFolderSettings
  * @property {BackupMetadata} metadata
  */
 
@@ -99,6 +110,7 @@ const AUTO_NOTIFICATION_COOLDOWN_MS = 15 * 60 * 1000;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const DEFAULT_PARENT_FOLDER_ID = '1';
+const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 const DEFAULT_ROOT_FOLDER_NAME = 'Raindrop';
 const DEFAULT_NOTIFICATION_PREFERENCES = {
   enabled: true,
@@ -546,15 +558,43 @@ async function collectRootFolderSettings() {
 
 /**
  * Apply root folder settings to storage.
- * @param {RootFolderSettings} settings
+ * @param {RootFolderBackupSettings | RootFolderSettings} settings
  * @returns {Promise<void>}
  */
 async function applyRootFolderSettings(settings) {
-  const sanitized = {
-    parentFolderId:
+  let parentFolderId = '';
+  const desiredPath =
+    typeof settings?.parentFolderPath === 'string'
+      ? settings.parentFolderPath.trim()
+      : '';
+
+  if (desiredPath) {
+    try {
+      const ensuredId = await ensureBookmarkFolderPath(desiredPath);
+      if (ensuredId) {
+        parentFolderId = ensuredId;
+      }
+    } catch (error) {
+      console.warn(
+        '[options-backup] Failed to ensure parent folder path during restore:',
+        error,
+      );
+    }
+  }
+
+  if (!parentFolderId) {
+    parentFolderId =
       typeof settings.parentFolderId === 'string' && settings.parentFolderId
         ? settings.parentFolderId
-        : DEFAULT_PARENT_FOLDER_ID,
+        : '';
+  }
+
+  if (!parentFolderId) {
+    parentFolderId = DEFAULT_PARENT_FOLDER_ID;
+  }
+
+  const sanitized = {
+    parentFolderId,
     rootFolderName:
       typeof settings.rootFolderName === 'string' && settings.rootFolderName
         ? settings.rootFolderName
@@ -592,11 +632,28 @@ async function applyNotificationPreferences(preferences) {
  */
 async function buildAuthProviderPayload(trigger) {
   const settings = await collectRootFolderSettings();
+  let parentFolderPath = '';
+  try {
+    parentFolderPath = await getBookmarkFolderPath(settings.parentFolderId);
+  } catch (error) {
+    console.warn(
+      '[options-backup] Failed to resolve parent folder path for backup:',
+      error,
+    );
+  }
+  if (!parentFolderPath) {
+    parentFolderPath = DEFAULT_PARENT_PATH;
+  }
+
   const metadata = await buildMetadata(trigger);
   return {
     kind: 'auth-provider-settings',
     provider: PROVIDER_ID,
-    mirrorRootFolderSettings: settings,
+    mirrorRootFolderSettings: {
+      rootFolderName: settings.rootFolderName,
+      parentFolderPath,
+      parentFolderId: settings.parentFolderId,
+    },
     metadata,
   };
 }
@@ -640,6 +697,11 @@ function parseAuthProviderItem(item) {
           ? parsed.provider
           : PROVIDER_ID,
       mirrorRootFolderSettings: {
+        parentFolderPath:
+          typeof parsed?.mirrorRootFolderSettings?.parentFolderPath === 'string' &&
+          parsed.mirrorRootFolderSettings.parentFolderPath
+            ? parsed.mirrorRootFolderSettings.parentFolderPath
+            : '',
         parentFolderId:
           typeof parsed?.mirrorRootFolderSettings?.parentFolderId === 'string' &&
           parsed.mirrorRootFolderSettings.parentFolderId
