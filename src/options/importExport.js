@@ -23,6 +23,15 @@ import {
  */
 
 /**
+ * @typedef {Object} AutoReloadRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {number} intervalSeconds
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} NotificationBookmarkSettings
  * @property {boolean} enabled
  * @property {boolean} pullFinished
@@ -50,6 +59,7 @@ import {
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
  * @property {NotificationPreferences} notificationPreferences
+ * @property {AutoReloadRuleSettings[]} autoReloadRules
  */
 
 /**
@@ -59,9 +69,11 @@ import {
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
+const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
+const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
 const importButton = /** @type {HTMLButtonElement | null} */ (
@@ -136,6 +148,96 @@ function clonePreferences(value) {
 }
 
 /**
+ * Generate a stable identifier for auto reload rules lacking one.
+ * @returns {string}
+ */
+function generateRuleId() {
+  if (typeof crypto?.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const random = Math.random().toString(36).slice(2);
+  return 'rule-' + Date.now().toString(36) + '-' + random;
+}
+
+/**
+ * Sort rules in a stable order for exports.
+ * @param {AutoReloadRuleSettings[]} rules
+ * @returns {AutoReloadRuleSettings[]}
+ */
+function sortAutoReloadRules(rules) {
+  return [...rules].sort((a, b) => {
+    const patternCompare = a.pattern.localeCompare(b.pattern);
+    if (patternCompare !== 0) {
+      return patternCompare;
+    }
+    return a.intervalSeconds - b.intervalSeconds;
+  });
+}
+
+/**
+ * Normalize auto reload rules read from storage or input.
+ * @param {unknown} value
+ * @returns {AutoReloadRuleSettings[]}
+ */
+function normalizeAutoReloadRules(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {AutoReloadRuleSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw = /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+    const pattern =
+      typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    if (!pattern) {
+      return;
+    }
+
+    try {
+      // Throws if invalid
+      // eslint-disable-next-line no-new
+      new URLPattern(pattern);
+    } catch (error) {
+      console.warn('[importExport:autoReload] Ignoring invalid pattern:', pattern, error);
+      return;
+    }
+
+    const intervalCandidate = Math.floor(Number(raw.intervalSeconds));
+    const intervalSeconds =
+      Number.isFinite(intervalCandidate) && intervalCandidate > 0
+        ? Math.max(MIN_RULE_INTERVAL_SECONDS, intervalCandidate)
+        : MIN_RULE_INTERVAL_SECONDS;
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    const normalized = {
+      id,
+      pattern,
+      intervalSeconds,
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sortAutoReloadRules(sanitized);
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -180,9 +282,10 @@ function normalizePreferences(value) {
  * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences }>}
  */
 async function readCurrentOptions() {
-  const [rootResp, notifResp] = await Promise.all([
+  const [rootResp, notifResp, reloadResp] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
+    chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -217,8 +320,13 @@ async function readCurrentOptions() {
     rootFolderName,
   };
 
-  const notifications = normalizePreferences(notifResp?.[NOTIFICATION_PREFERENCES_KEY]);
-  return { rootFolder, notifications };
+  const notifications = normalizePreferences(
+    notifResp?.[NOTIFICATION_PREFERENCES_KEY],
+  );
+  const autoReloadRules = normalizeAutoReloadRules(
+    reloadResp?.[AUTO_RELOAD_RULES_KEY],
+  );
+  return { rootFolder, notifications, autoReloadRules };
 }
 
 /**
@@ -246,7 +354,7 @@ function downloadJson(data, filename) {
  */
 async function handleExportClick() {
   try {
-    const { rootFolder, notifications } = await readCurrentOptions();
+    const { rootFolder, notifications, autoReloadRules } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
       version: EXPORT_VERSION,
@@ -254,6 +362,7 @@ async function handleExportClick() {
         provider: PROVIDER_ID,
         mirrorRootFolderSettings: rootFolder,
         notificationPreferences: notifications,
+        autoReloadRules,
       },
     };
     const now = new Date();
@@ -277,7 +386,7 @@ async function handleExportClick() {
  * @param {NotificationPreferences} notifications
  * @returns {Promise<void>}
  */
-async function applyImportedOptions(rootFolder, notifications) {
+async function applyImportedOptions(rootFolder, notifications, autoReloadRules) {
   let parentFolderId = '';
   const desiredPath =
     typeof rootFolder?.parentFolderPath === 'string'
@@ -316,6 +425,7 @@ async function applyImportedOptions(rootFolder, notifications) {
     rootFolderName: typeof rootFolder?.rootFolderName === 'string' && rootFolder.rootFolderName ? rootFolder.rootFolderName : 'Raindrop',
   };
   const sanitizedNotifications = normalizePreferences(notifications);
+  const sanitizedRules = normalizeAutoReloadRules(autoReloadRules);
 
   // Read existing map to preserve other providers if any
   const existing = await chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY);
@@ -327,6 +437,7 @@ async function applyImportedOptions(rootFolder, notifications) {
   await chrome.storage.sync.set({
     [ROOT_FOLDER_SETTINGS_KEY]: map,
     [NOTIFICATION_PREFERENCES_KEY]: sanitizedNotifications,
+    [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
   });
 }
 
@@ -359,8 +470,11 @@ async function handleFileChosen() {
     const notifications = /** @type {NotificationPreferences} */ (
       data.notificationPreferences
     );
+    const autoReloadRules = /** @type {AutoReloadRuleSettings[]} */ (
+      data.autoReloadRules
+    );
 
-    await applyImportedOptions(root, notifications);
+    await applyImportedOptions(root, notifications, autoReloadRules);
     showToast('Options imported successfully.', 'success');
   } catch (error) {
     console.warn('[importExport] Import failed:', error);

@@ -26,6 +26,10 @@ import {
   handleOptionsBackupLifecycle,
   handleOptionsBackupMessage,
 } from './options-backup.js';
+import {
+  initializeAutoReloadFeature,
+  handleAutoReloadAlarm,
+} from './auto-reload.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -75,6 +79,10 @@ chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
 });
 
+void initializeAutoReloadFeature().catch((error) => {
+  console.error('[auto-reload] Initialization failed:', error);
+});
+
 /**
  * Handle tab removal to clean up custom title records.
  * @param {number} tabId - The ID of the tab that was removed.
@@ -89,13 +97,22 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name !== MIRROR_ALARM_NAME) {
-    return;
-  }
+  void (async () => {
+    const handled = await handleAutoReloadAlarm(alarm);
+    if (handled) {
+      return;
+    }
 
-  void runMirrorPull('alarm').catch((error) => {
-    console.error('[mirror] Scheduled pull failed:', error);
-  });
+    if (alarm.name !== MIRROR_ALARM_NAME) {
+      return;
+    }
+
+    try {
+      await runMirrorPull('alarm');
+    } catch (error) {
+      console.error('[mirror] Scheduled pull failed:', error);
+    }
+  })();
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
