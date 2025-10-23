@@ -11,6 +11,7 @@
 
 const STORAGE_KEY = 'autoReloadRules';
 const MIN_INTERVAL_SECONDS = 5;
+const MIN_INTERVAL_MINUTES = MIN_INTERVAL_SECONDS / 60;
 
 const form = /** @type {HTMLFormElement | null} */ (
   document.getElementById('autoReloadRuleForm')
@@ -255,6 +256,9 @@ function resetForm() {
   if (form) {
     form.reset();
   }
+  if (intervalInput) {
+    intervalInput.value = '';
+  }
   if (saveButton) {
     saveButton.textContent = 'Add rule';
   }
@@ -366,7 +370,7 @@ function renderList() {
         patternInput.value = rule.pattern;
       }
       if (intervalInput) {
-        intervalInput.value = String(rule.intervalSeconds);
+        intervalInput.value = formatMinutesValue(rule.intervalSeconds);
       }
       if (saveButton) {
         saveButton.textContent = 'Save changes';
@@ -445,13 +449,16 @@ function handleFormSubmit(event) {
     return;
   }
 
-  const intervalValue = Math.floor(Number(intervalInput.value));
-  if (!Number.isFinite(intervalValue) || intervalValue < MIN_INTERVAL_SECONDS) {
-    showFormError('Interval must be at least ' + MIN_INTERVAL_SECONDS + ' seconds.');
+  const minutesValue = Number.parseFloat(intervalInput.value);
+  if (!Number.isFinite(minutesValue) || minutesValue <= 0) {
+    showFormError('Enter a positive number of minutes.');
     return;
   }
 
-  const normalizedInterval = Math.max(MIN_INTERVAL_SECONDS, intervalValue);
+  const normalizedInterval = Math.max(
+    MIN_INTERVAL_SECONDS,
+    Math.round(minutesValue * 60)
+  );
   const now = new Date().toISOString();
 
   if (editingRuleId) {
@@ -535,3 +542,15 @@ function init() {
 }
 
 init();
+
+/**
+ * Convert seconds to a string suitable for the minutes input.
+ * @param {number} seconds
+ * @returns {string}
+ */
+function formatMinutesValue(seconds) {
+  const minutes = Math.max(seconds / 60, MIN_INTERVAL_MINUTES);
+  const precision = minutes < 10 ? 2 : 1;
+  const rounded = Number(minutes.toFixed(precision));
+  return String(rounded);
+}
