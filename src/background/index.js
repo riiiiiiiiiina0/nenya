@@ -26,6 +26,7 @@ import {
   handleOptionsBackupLifecycle,
   handleOptionsBackupMessage,
 } from './options-backup.js';
+import { initializeAutoReload } from './auto-reload.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -53,6 +54,7 @@ function handleLifecycleEvent(trigger) {
   setupContextMenus();
   void scheduleMirrorAlarm();
   initializeOptionsBackupService();
+  initializeAutoReload();
   void handleOptionsBackupLifecycle(trigger).catch((error) => {
     console.warn(
       '[options-backup] Lifecycle restore skipped:',
