@@ -1,12 +1,20 @@
 /* global chrome */
 
 /**
+ * @typedef {[number, number, number, number]} ColorArray
+ */
+
+/**
+ * @typedef {any} URLPattern
+ */
+
+/**
  * @typedef {Object} AutoReloadRule
  * @property {string} id
  * @property {string} pattern
  * @property {number} intervalSeconds
- * @property {string | undefined} createdAt
- * @property {string | undefined} updatedAt
+ * @property {string | undefined} [createdAt]
+ * @property {string | undefined} [updatedAt]
  */
 
 /**
@@ -74,6 +82,7 @@ function isPositiveInteger(value) {
  * @returns {URLPattern | null}
  */
 function compilePattern(value) {
+  // @ts-ignore - URLPattern is a browser API that may not be available in all environments
   if (typeof URLPattern !== 'function') {
     console.warn('[auto-reload] URLPattern API is unavailable.');
     return null;
@@ -85,6 +94,7 @@ function compilePattern(value) {
   }
 
   try {
+    // @ts-ignore - URLPattern is a browser API
     return new URLPattern(trimmed);
   } catch (error) {
     console.warn('[auto-reload] Invalid URL pattern skipped:', trimmed, error);
@@ -138,6 +148,8 @@ function normalizeStoredRules(value) {
         id,
         pattern,
         intervalSeconds: interval,
+        createdAt: undefined,
+        updatedAt: undefined,
       };
 
       if (typeof raw.createdAt === 'string') {
@@ -363,7 +375,7 @@ async function setBadgeAppearance(text, backgroundColor, textColor) {
 
   try {
     if (backgroundColor && typeof chrome.action.setBadgeBackgroundColor === 'function') {
-      await chrome.action.setBadgeBackgroundColor({ color: backgroundColor });
+      await chrome.action.setBadgeBackgroundColor({ color: /** @type {string | chrome.extensionTypes.ColorArray} */ (backgroundColor) });
     }
   } catch (error) {
     console.warn('[auto-reload] Failed to set badge background color:', error);
@@ -371,7 +383,7 @@ async function setBadgeAppearance(text, backgroundColor, textColor) {
 
   try {
     if (textColor && typeof chrome.action.setBadgeTextColor === 'function') {
-      await chrome.action.setBadgeTextColor({ color: textColor });
+      await chrome.action.setBadgeTextColor({ color: /** @type {string | chrome.extensionTypes.ColorArray} */ (textColor) });
     }
   } catch (error) {
     // Some Chrome versions might not support this API; ignore failures.
@@ -413,7 +425,7 @@ async function releaseBadge() {
       typeof chrome.action.setBadgeBackgroundColor === 'function'
     ) {
       await chrome.action.setBadgeBackgroundColor({
-        color: badgeState.previousBackground,
+        color: /** @type {string | chrome.extensionTypes.ColorArray} */ (badgeState.previousBackground),
       });
     }
   } catch (error) {
@@ -426,7 +438,7 @@ async function releaseBadge() {
       typeof chrome.action.setBadgeTextColor === 'function'
     ) {
       await chrome.action.setBadgeTextColor({
-        color: badgeState.previousTextColor,
+        color: /** @type {string | chrome.extensionTypes.ColorArray} */ (badgeState.previousTextColor),
       });
     }
   } catch (error) {
@@ -604,8 +616,8 @@ async function evaluateTab(tabId, url) {
   }
 
   const existing = scheduledTabs.get(tabId);
+  const alarmName = buildAlarmName(tabId);
   if (existing) {
-    const alarmName = buildAlarmName(tabId);
     try {
       const alarm = await chrome.alarms.get(alarmName);
       if (
@@ -624,6 +636,23 @@ async function evaluateTab(tabId, url) {
     } catch (error) {
       console.warn('[auto-reload] Failed to read existing alarm:', error);
     }
+  }
+
+  // Rehydrate schedule from persisted alarm even if in-memory state was lost
+  try {
+    const alarm = await chrome.alarms.get(alarmName);
+    if (alarm) {
+      scheduledTabs.set(tabId, {
+        intervalSeconds: rule.intervalSeconds,
+        nextRunAt: alarm.scheduledTime,
+      });
+      if (tabId === activeTabId) {
+        await startCountdown(tabId);
+      }
+      return;
+    }
+  } catch (error) {
+    console.warn('[auto-reload] Failed to read alarm during rehydrate:', error);
   }
 
   await scheduleTabReload(tabId, rule.intervalSeconds);
@@ -698,7 +727,20 @@ function handleTabUpdated(tabId, changeInfo, tab) {
  */
 function handleTabActivated(tabId) {
   activeTabId = Number.isFinite(tabId) ? tabId : null;
-  void refreshActiveCountdown();
+  if (!chrome?.tabs || typeof chrome.tabs.get !== 'function' || activeTabId === null) {
+    void refreshActiveCountdown();
+    return;
+  }
+  void chrome.tabs
+    .get(activeTabId)
+    .then((tab) => {
+      const url = typeof tab?.url === 'string' ? tab.url : undefined;
+      return evaluateTab(activeTabId, url);
+    })
+    .catch(() => {})
+    .finally(() => {
+      void refreshActiveCountdown();
+    });
 }
 
 /**
@@ -724,6 +766,9 @@ function handleWindowFocusChanged(windowId) {
         const tab = tabs[0];
         if (typeof tab?.id === 'number') {
           activeTabId = tab.id;
+          const url = typeof tab?.url === 'string' ? tab.url : undefined;
+          // Re-evaluate to rehydrate from alarms after focus restores the service worker
+          void evaluateTab(activeTabId, url);
         }
       }
     })
@@ -866,6 +911,9 @@ export async function initializeAutoReloadFeature() {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tabs.length > 0 && typeof tabs[0]?.id === 'number') {
         activeTabId = tabs[0].id;
+        const url = typeof tabs[0]?.url === 'string' ? tabs[0].url : undefined;
+        // Re-evaluate to rehydrate from alarms after service worker start
+        await evaluateTab(activeTabId, url);
       }
     } catch (error) {
       activeTabId = null;
