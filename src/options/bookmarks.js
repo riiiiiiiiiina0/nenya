@@ -1342,38 +1342,84 @@ function subscribeToRootFolderStorageChanges() {
     return;
   }
 
+  /** @type {boolean} */
+  let suppressOnce = false;
+
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== 'sync' || !changes || !changes[ROOT_FOLDER_SETTINGS_KEY]) {
       return;
     }
 
-    /** @type {RootFolderSettingsMap | undefined} */
-    const newMap = /** @type {*} */ (changes[ROOT_FOLDER_SETTINGS_KEY].newValue) || {};
-
-    // Determine provider to apply (default to 'raindrop' if none selected yet)
-    const providerId = currentProvider ? currentProvider.id : 'raindrop';
-
-    /** @type {RootFolderSettings | undefined} */
-    const previous = rootFolderSettingsCache[providerId];
-    /** @type {RootFolderSettings | undefined} */
-    const next = /** @type {*} */ (newMap?.[providerId]);
-
-    // Update local caches
-    rootFolderSettingsCache = newMap || {};
-    if (next) {
-      pendingRootFolderSettings[providerId] = cloneRootFolderSettings(next);
+    if (suppressOnce) {
+      suppressOnce = false;
+      return;
     }
 
-    // Apply folder move/rename if settings changed and we have both sides
-    if (previous && next && hasPendingRootFolderChanges(previous, next)) {
-      void applyRootFolderSettingsChange(previous, next).catch(() => {
-        // Ignore failures; UI will still reflect latest settings
-      });
-    }
+    void (async () => {
+      /** @type {RootFolderSettingsMap | undefined} */
+      const newMap = /** @type {*} */ (changes[ROOT_FOLDER_SETTINGS_KEY].newValue) || {};
 
-    // Refresh the Root bookmark folder section UI
-    const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
-    void updateRootFolderSection(storedTokens);
+      // Determine provider to apply (default to 'raindrop' if none selected yet)
+      const providerId = currentProvider ? currentProvider.id : 'raindrop';
+
+      /** @type {RootFolderSettings | undefined} */
+      const previous = rootFolderSettingsCache[providerId];
+      /** @type {RootFolderSettings | undefined} */
+      const rawNext = /** @type {*} */ (newMap?.[providerId]);
+
+      // Update local caches immediately
+      rootFolderSettingsCache = newMap || {};
+      if (rawNext) {
+        pendingRootFolderSettings[providerId] = cloneRootFolderSettings(rawNext);
+      }
+
+      /**
+       * Validate parent folder existence.
+       * @param {string} parentId
+       * @returns {Promise<boolean>}
+       */
+      async function parentFolderExists(parentId) {
+        try {
+          await getBookmarkChildren(parentId);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+
+      /** @type {RootFolderSettings | undefined} */
+      let next = rawNext ? cloneRootFolderSettings(rawNext) : undefined;
+
+      if (next) {
+        const exists = await parentFolderExists(next.parentFolderId);
+        if (!exists) {
+          next.parentFolderId = DEFAULT_PARENT_FOLDER_ID;
+
+          // Persist sanitized parent id to storage to avoid invalid state
+          const sanitizedMap = { ...(newMap || {}) };
+          sanitizedMap[providerId] = next;
+          suppressOnce = true;
+          await chrome.storage.sync.set({ [ROOT_FOLDER_SETTINGS_KEY]: sanitizedMap });
+
+          // Update caches to sanitized values
+          rootFolderSettingsCache = sanitizedMap;
+          pendingRootFolderSettings[providerId] = cloneRootFolderSettings(next);
+        }
+      }
+
+      // Apply folder move/rename if settings changed and we have both sides
+      if (previous && next && hasPendingRootFolderChanges(previous, next)) {
+        try {
+          await applyRootFolderSettingsChange(previous, next);
+        } catch (error) {
+          // Ignore failures; UI will still reflect latest settings
+        }
+      }
+
+      // Refresh the Root bookmark folder section UI
+      const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
+      await updateRootFolderSection(storedTokens);
+    })();
   });
 }
 
