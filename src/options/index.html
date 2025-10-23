@@ -110,6 +110,13 @@
             <button id="optionsBackupResetButton" class="btn btn-outline" type="button">
               Reset to defaults
             </button>
+            <input id="optionsImportFileInput" type="file" accept="application/json" class="hidden" />
+            <button id="optionsExportButton" class="btn btn-outline" type="button">
+              Export options
+            </button>
+            <button id="optionsImportButton" class="btn btn-outline" type="button">
+              Import options
+            </button>
           </div>
         </div>
       </section>
@@ -191,23 +198,7 @@
           </div>
         </div>
       </section>
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="import-export-heading">
-        <div class="card-body gap-6">
-          <div class="space-y-1">
-            <h2 id="import-export-heading" class="card-title text-3xl">📦 Import/Export</h2>
-            <p class="text-base-content/70">Import or export your options as a JSON file.</p>
-          </div>
-          <div class="card-actions justify-end gap-3 flex-wrap">
-            <input id="optionsImportFileInput" type="file" accept="application/json" class="hidden" />
-            <button id="optionsExportButton" class="btn btn-outline" type="button">
-              Export options
-            </button>
-            <button id="optionsImportButton" class="btn btn-outline" type="button">
-              Import options
-            </button>
-          </div>
-        </div>
-      </section>
+      
     </div>
   </main>
   <script src="./options.js" type="module"></script>

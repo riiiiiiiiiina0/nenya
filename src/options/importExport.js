@@ -219,8 +219,15 @@ async function handleExportClick() {
         notificationPreferences: notifications,
       },
     };
-    downloadJson(payload, 'nenya-options.json');
-    showToast('Exported options to nenya-options.json', 'success');
+    const now = new Date();
+    const YYYY = String(now.getFullYear());
+    const MM = String(now.getMonth() + 1).padStart(2, '0');
+    const DD = String(now.getDate()).padStart(2, '0');
+    const HH = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    const filename = 'nenya-options-' + YYYY + MM + DD + '-' + HH + mm + '.json';
+    downloadJson(payload, filename);
+    showToast('Exported options to ' + filename, 'success');
   } catch (error) {
     console.warn('[importExport] Export failed:', error);
     showToast('Failed to export options.', 'error');
