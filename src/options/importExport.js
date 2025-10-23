@@ -1,9 +1,25 @@
 /* global chrome */
 
+import {
+  getBookmarkFolderPath,
+  ensureBookmarkFolderPath,
+} from '../shared/bookmarkFolders.js';
+
 /**
  * @typedef {Object} RootFolderSettings
  * @property {string} parentFolderId
  * @property {string} rootFolderName
+ */
+
+/**
+ * @typedef {Object} RootFolderBackupSettings
+ * @property {string} rootFolderName
+ * @property {string} parentFolderPath
+ * @property {string} [parentFolderId]
+ */
+
+/**
+ * @typedef {RootFolderBackupSettings} RootFolderImportSettings
  */
 
 /**
@@ -30,19 +46,23 @@
  */
 
 /**
+ * @typedef {Object} ExportPayload
+ * @property {string} provider
+ * @property {RootFolderBackupSettings} mirrorRootFolderSettings
+ * @property {NotificationPreferences} notificationPreferences
+ */
+
+/**
  * @typedef {Object} ExportFile
  * @property {number} version
- * @property {{
- *   provider: string,
- *   mirrorRootFolderSettings: RootFolderSettings,
- *   notificationPreferences: NotificationPreferences
- * }} data
+ * @property {ExportPayload} data
  */
 
 const PROVIDER_ID = 'raindrop';
 const EXPORT_VERSION = 1;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
+const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
 const importButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('optionsImportButton')
@@ -157,7 +177,7 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderSettings, notifications: NotificationPreferences }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences }>}
  */
 async function readCurrentOptions() {
   const [rootResp, notifResp] = await Promise.all([
@@ -168,16 +188,33 @@ async function readCurrentOptions() {
   /** @type {Record<string, RootFolderSettings> | undefined} */
   const rootMap = /** @type {*} */ (rootResp?.[ROOT_FOLDER_SETTINGS_KEY]);
   const rootCandidate = rootMap?.[PROVIDER_ID];
-  /** @type {RootFolderSettings} */
+  const parentFolderId =
+    typeof rootCandidate?.parentFolderId === 'string' && rootCandidate.parentFolderId
+      ? rootCandidate.parentFolderId
+      : '1';
+  const rootFolderName =
+    typeof rootCandidate?.rootFolderName === 'string' && rootCandidate.rootFolderName
+      ? rootCandidate.rootFolderName
+      : 'Raindrop';
+
+  let parentFolderPath = '';
+  try {
+    parentFolderPath = await getBookmarkFolderPath(parentFolderId);
+  } catch (error) {
+    console.warn(
+      '[importExport] Failed to resolve parent folder path for export:',
+      error,
+    );
+  }
+  if (!parentFolderPath) {
+    parentFolderPath = DEFAULT_PARENT_PATH;
+  }
+
+  /** @type {RootFolderBackupSettings} */
   const rootFolder = {
-    parentFolderId:
-      typeof rootCandidate?.parentFolderId === 'string' && rootCandidate.parentFolderId
-        ? rootCandidate.parentFolderId
-        : '1',
-    rootFolderName:
-      typeof rootCandidate?.rootFolderName === 'string' && rootCandidate.rootFolderName
-        ? rootCandidate.rootFolderName
-        : 'Raindrop',
+    parentFolderId,
+    parentFolderPath,
+    rootFolderName,
   };
 
   const notifications = normalizePreferences(notifResp?.[NOTIFICATION_PREFERENCES_KEY]);
@@ -236,14 +273,46 @@ async function handleExportClick() {
 
 /**
  * Apply imported settings to storage.
- * @param {RootFolderSettings} rootFolder
+ * @param {RootFolderImportSettings} rootFolder
  * @param {NotificationPreferences} notifications
  * @returns {Promise<void>}
  */
 async function applyImportedOptions(rootFolder, notifications) {
+  let parentFolderId = '';
+  const desiredPath =
+    typeof rootFolder?.parentFolderPath === 'string'
+      ? rootFolder.parentFolderPath.trim()
+      : '';
+
+  if (desiredPath) {
+    try {
+      const ensuredId = await ensureBookmarkFolderPath(desiredPath);
+      if (ensuredId) {
+        parentFolderId = ensuredId;
+      }
+    } catch (error) {
+      console.warn(
+        '[importExport] Failed to ensure parent folder path during import:',
+        error,
+      );
+    }
+  }
+
+  if (!parentFolderId) {
+    parentFolderId =
+      typeof rootFolder?.parentFolderId === 'string' &&
+      rootFolder.parentFolderId
+        ? rootFolder.parentFolderId
+        : '';
+  }
+
+  if (!parentFolderId) {
+    parentFolderId = '1';
+  }
+
   // Sanitize
   const sanitizedRoot = {
-    parentFolderId: typeof rootFolder?.parentFolderId === 'string' && rootFolder.parentFolderId ? rootFolder.parentFolderId : '1',
+    parentFolderId,
     rootFolderName: typeof rootFolder?.rootFolderName === 'string' && rootFolder.rootFolderName ? rootFolder.rootFolderName : 'Raindrop',
   };
   const sanitizedNotifications = normalizePreferences(notifications);
@@ -284,7 +353,9 @@ async function handleFileChosen() {
       throw new Error('Unsupported provider in file.');
     }
 
-    const root = /** @type {RootFolderSettings} */ (data.mirrorRootFolderSettings);
+    const root = /** @type {RootFolderImportSettings} */ (
+      data.mirrorRootFolderSettings
+    );
     const notifications = /** @type {NotificationPreferences} */ (
       data.notificationPreferences
     );

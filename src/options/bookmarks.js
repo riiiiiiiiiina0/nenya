@@ -1416,6 +1416,10 @@ function subscribeToRootFolderStorageChanges() {
         }
       }
 
+      // Clear cached folder option data so newly created folders appear.
+      bookmarkFolderOptions = [];
+      bookmarkFoldersLoadPromise = undefined;
+
       // Refresh the Root bookmark folder section UI
       const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
       await updateRootFolderSection(storedTokens);
