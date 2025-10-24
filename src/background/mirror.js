@@ -2514,6 +2514,66 @@ async function removeBookmarksByUrl(url, context, stats) {
 }
 
 /**
+ * Remove bookmarks in a folder that have the same title as the provided one,
+ * keeping only the bookmark with the specified URL. This addresses cases where
+ * a Raindrop item's URL changed but its title stayed the same, leaving an old
+ * bookmark behind with the previous URL.
+ * @param {string} folderId
+ * @param {string} title
+ * @param {string} keepUrl
+ * @param {MirrorContext} context
+ * @param {MirrorStats} stats
+ * @returns {Promise<void>}
+ */
+async function removeDuplicateBookmarksByTitleInFolderExceptUrl(
+  folderId,
+  title,
+  keepUrl,
+  context,
+  stats,
+) {
+  try {
+    const children = await bookmarksGetChildren(folderId);
+    const normalizedKeepTitle = typeof title === 'string' ? title : '';
+    for (const child of children) {
+      if (!child.url) {
+        continue;
+      }
+      const childNormalizedTitle = normalizeBookmarkTitle(
+        child.title,
+        child.url,
+      );
+      if (childNormalizedTitle !== normalizedKeepTitle) {
+        continue;
+      }
+      if (child.url === keepUrl) {
+        continue;
+      }
+
+      await bookmarksRemove(child.id);
+      stats.bookmarksDeleted += 1;
+
+      // Update index structures to reflect the removal
+      context.index.bookmarks.delete(child.id);
+      const list = context.index.bookmarksByUrl.get(child.url);
+      if (list) {
+        const filtered = list.filter((entry) => entry.id !== child.id);
+        if (filtered.length > 0) {
+          context.index.bookmarksByUrl.set(child.url, filtered);
+        } else {
+          context.index.bookmarksByUrl.delete(child.url);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(
+      '[mirror] Failed to clean up duplicate bookmarks by title:',
+      error,
+    );
+  }
+}
+
+/**
  * Generate a bookmark title, falling back to the URL when necessary.
  * @param {unknown} title
  * @param {string} url
@@ -2621,6 +2681,15 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
       existingEntries.push(updatedEntry);
     }
     context.index.bookmarksByUrl.set(url, existingEntries);
+
+    // Remove old duplicates with same title but different URL in this folder
+    await removeDuplicateBookmarksByTitleInFolderExceptUrl(
+      targetFolderId,
+      title,
+      url,
+      context,
+      stats,
+    );
     return;
   }
 
@@ -2651,6 +2720,14 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
       context.index.bookmarksByUrl.set(url, existingEntries);
     }
     bookmarkEntry.pathSegments = [...folderInfo.pathSegments];
+    // Remove old duplicates with same title but different URL in this folder
+    await removeDuplicateBookmarksByTitleInFolderExceptUrl(
+      targetFolderId,
+      title,
+      url,
+      context,
+      stats,
+    );
     return;
   }
 
@@ -2678,6 +2755,15 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
   if (urlList) {
     urlList.push(newEntry);
   }
+
+  // Remove old duplicates with same title but different URL in this folder
+  await removeDuplicateBookmarksByTitleInFolderExceptUrl(
+    targetFolderId,
+    title,
+    url,
+    context,
+    stats,
+  );
 }
 
 /**
