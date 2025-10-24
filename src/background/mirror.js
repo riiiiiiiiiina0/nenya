@@ -2573,6 +2573,71 @@ async function findExistingBookmarkInFolder(url, targetFolderId) {
 }
 
 /**
+ * Remove bookmarks in the target folder that share the same title but point to a different URL.
+ * This addresses the case where a Raindrop item's URL was changed and both the old and new
+ * bookmarks exist with the same title. We keep the bookmark for the new URL and delete others.
+ * @param {string} title
+ * @param {string} urlToKeep
+ * @param {string} targetFolderId
+ * @param {MirrorContext} context
+ * @param {MirrorStats} stats
+ * @returns {Promise<void>}
+ */
+async function removeDuplicateTitleBookmarksInFolder(
+  title,
+  urlToKeep,
+  targetFolderId,
+  context,
+  stats,
+) {
+  if (!title || !urlToKeep || !targetFolderId) {
+    return;
+  }
+
+  let children;
+  try {
+    children = await bookmarksGetChildren(targetFolderId);
+  } catch (error) {
+    console.warn('[dedupe] Failed to read folder children for dedupe:', error);
+    return;
+  }
+
+  const duplicates = children.filter((child) => {
+    if (!child.url) {
+      return false;
+    }
+    const childTitle = typeof child.title === 'string' ? child.title : '';
+    return childTitle === title && child.url !== urlToKeep;
+  });
+
+  if (duplicates.length === 0) {
+    return;
+  }
+
+  for (const dup of duplicates) {
+    try {
+      await bookmarksRemove(dup.id);
+      stats.bookmarksDeleted += 1;
+
+      // Update in-memory index maps
+      context.index.bookmarks.delete(dup.id);
+      const dupUrl = dup.url || '';
+      if (dupUrl) {
+        const list = context.index.bookmarksByUrl.get(dupUrl) || [];
+        const updated = list.filter((entry) => entry.id !== dup.id);
+        if (updated.length > 0) {
+          context.index.bookmarksByUrl.set(dupUrl, updated);
+        } else {
+          context.index.bookmarksByUrl.delete(dupUrl);
+        }
+      }
+    } catch (error) {
+      console.warn('[dedupe] Failed to remove duplicate bookmark:', error);
+    }
+  }
+}
+
+/**
  * Create or update a bookmark for the provided Raindrop item.
  * @param {string} url
  * @param {string} title
@@ -2621,6 +2686,9 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
       existingEntries.push(updatedEntry);
     }
     context.index.bookmarksByUrl.set(url, existingEntries);
+
+    // Remove same-title duplicates that point to a different URL in this folder
+    await removeDuplicateTitleBookmarksInFolder(title, url, targetFolderId, context, stats);
     return;
   }
 
@@ -2651,6 +2719,8 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
       context.index.bookmarksByUrl.set(url, existingEntries);
     }
     bookmarkEntry.pathSegments = [...folderInfo.pathSegments];
+    // Remove same-title duplicates that point to a different URL in this folder
+    await removeDuplicateTitleBookmarksInFolder(title, url, targetFolderId, context, stats);
     return;
   }
 
@@ -2678,6 +2748,9 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
   if (urlList) {
     urlList.push(newEntry);
   }
+
+  // Remove same-title duplicates that point to a different URL in this folder
+  await removeDuplicateTitleBookmarksInFolder(title, url, targetFolderId, context, stats);
 }
 
 /**
