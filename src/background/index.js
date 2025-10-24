@@ -38,6 +38,7 @@ import {
   setupClipboardContextMenus,
   handleClipboardContextMenuClick,
   updateClipboardContextMenuVisibility,
+  handleClipboardCommand,
 } from './clipboard.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
@@ -298,6 +299,16 @@ chrome.commands.onCommand.addListener((command) => {
         console.warn('[commands] Rename tab failed:', error);
       }
     })();
+    return;
+  }
+
+  // Handle clipboard commands
+  if (command === 'copy-title-url' || command === 'copy-title-dash-url' || 
+      command === 'copy-markdown-link' || command === 'copy-screenshot') {
+    void handleClipboardCommand(command).catch((error) => {
+      console.warn('[commands] Clipboard command failed:', error);
+    });
+    return;
   }
 });
 

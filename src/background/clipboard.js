@@ -330,6 +330,92 @@ export async function handleClipboardContextMenuClick(info, tab) {
 }
 
 /**
+ * Handle clipboard commands from keyboard shortcuts.
+ * @param {string} command - The command name.
+ * @returns {Promise<void>}
+ */
+export async function handleClipboardCommand(command) {
+  try {
+    // Get highlighted tabs first, then fall back to active tab
+    let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+    if (!tabs || tabs.length === 0) {
+      tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+    }
+
+    if (!tabs || tabs.length === 0) {
+      setCopyFailureBadge();
+      return;
+    }
+
+    let success = false;
+
+    if (command === 'copy-screenshot') {
+      // Screenshot only works with single tab
+      if (tabs.length === 1 && typeof tabs[0].id === 'number') {
+        success = await handleScreenshotCopy(tabs[0].id);
+      } else {
+        // Show notification for multiple tabs
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'assets/icons/icon-48x48.png',
+          title: 'Nenya',
+          message: 'Screenshot only works with single tab',
+        });
+        setCopyFailureBadge();
+        return;
+      }
+    } else {
+      // Handle text formats
+      let formatType = '';
+      switch (command) {
+        case 'copy-title-url':
+          formatType = 'title-url';
+          break;
+        case 'copy-title-dash-url':
+          formatType = 'title-dash-url';
+          break;
+        case 'copy-markdown-link':
+          formatType = 'markdown-link';
+          break;
+      }
+      
+      if (formatType) {
+        success = await handleMultiTabCopy(formatType, tabs);
+      }
+    }
+
+    // Set badge based on result
+    if (success) {
+      setCopySuccessBadge();
+      
+      // Show notification
+      const message = command === 'copy-screenshot' 
+        ? 'Screenshot copied to clipboard'
+        : `Copied ${tabs.length} tab${tabs.length > 1 ? 's' : ''} to clipboard`;
+      
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'assets/icons/icon-48x48.png',
+        title: 'Nenya',
+        message,
+      });
+    } else {
+      setCopyFailureBadge();
+      
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'assets/icons/icon-48x48.png',
+        title: 'Nenya',
+        message: 'Failed to copy to clipboard',
+      });
+    }
+  } catch (error) {
+    console.error('[clipboard] Command failed:', error);
+    setCopyFailureBadge();
+  }
+}
+
+/**
  * Update context menu visibility based on tab selection.
  * This function should be called when tab selection changes to hide/show
  * the screenshot option based on whether multiple tabs are selected.
