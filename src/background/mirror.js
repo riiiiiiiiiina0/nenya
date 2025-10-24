@@ -127,6 +127,7 @@ const STORAGE_KEY_TOKENS = 'cloudAuthTokens';
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const LOCAL_KEY_OLDEST_ITEM = 'OLDEST_RAINDROP_ITEM';
 const LOCAL_KEY_OLDEST_DELETED = 'OLDEST_DELETED_RAINDROP_ITEM';
+const ITEM_BOOKMARK_MAP_KEY = 'raindropItemBookmarkMap';
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_ROOT_FOLDER_NAME = 'Raindrop';
 const UNSORTED_TITLE = 'Unsorted';
@@ -154,6 +155,10 @@ let notificationPreferencesCache = createDefaultNotificationPreferences();
 let notificationPreferencesLoaded = false;
 /** @type {Promise<NotificationPreferences> | null} */
 let notificationPreferencesPromise = null;
+/** @type {Record<string, string> | null} */
+let itemBookmarkMapCache = null;
+/** @type {Promise<Record<string, string>> | null} */
+let itemBookmarkMapPromise = null;
 
 if (chrome && chrome.notifications) {
   chrome.notifications.onClicked.addListener((notificationId) => {
@@ -1228,6 +1233,33 @@ async function doesRaindropItemExist(tokens, url) {
     '/raindrops/0?' + params.toString(),
     tokens,
   );
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return items.some((item) => {
+    const itemUrl = typeof item?.link === 'string' ? item.link : '';
+    return normalizeHttpUrl(itemUrl) === normalized;
+  });
+}
+
+/**
+ * Check if any Raindrop item in a specific collection has the provided URL.
+ * @param {StoredProviderTokens} tokens
+ * @param {number} collectionId
+ * @param {string} url
+ * @returns {Promise<boolean>}
+ */
+async function doesRaindropItemExistInCollection(tokens, collectionId, url) {
+  const normalized = normalizeHttpUrl(url);
+  if (!normalized || !Number.isFinite(collectionId)) {
+    return false;
+  }
+
+  const params = new URLSearchParams({
+    perpage: '1',
+    page: '0',
+    search: 'link:"' + escapeSearchValue(normalized) + '"',
+  });
+  const path = '/raindrops/' + String(collectionId) + '?' + params.toString();
+  const data = await raindropRequest(path, tokens);
   const items = Array.isArray(data?.items) ? data.items : [];
   return items.some((item) => {
     const itemUrl = typeof item?.link === 'string' ? item.link : '';
@@ -2415,7 +2447,17 @@ async function processUpdatedItems(tokens, context, stats) {
       }
 
       const bookmarkTitle = normalizeBookmarkTitle(item?.title, url);
-      await upsertBookmark(url, bookmarkTitle, targetFolderId, context, stats);
+      const itemId = extractItemId(item);
+      await upsertBookmark(
+        tokens,
+        itemId,
+        url,
+        bookmarkTitle,
+        targetFolderId,
+        context,
+        stats,
+        collectionId,
+      );
     }
 
     if (!shouldContinue) {
@@ -2447,6 +2489,23 @@ function extractCollectionId(item) {
     item?.collection ??
     item?.collectionID;
 
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return parsed;
+}
+
+/**
+ * Extract the Raindrop item id from an item.
+ * @param {any} item
+ * @returns {number | undefined}
+ */
+function extractItemId(item) {
+  if (!item || typeof item !== 'object') {
+    return undefined;
+  }
+  const raw = item._id ?? item.id ?? item.ID;
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) {
     return undefined;
@@ -2508,6 +2567,7 @@ async function removeBookmarksByUrl(url, context, stats) {
     await bookmarksRemove(entry.id);
     stats.bookmarksDeleted += 1;
     context.index.bookmarks.delete(entry.id);
+    await removeMappingsByBookmarkId(entry.id);
   }
 
   context.index.bookmarksByUrl.delete(url);
@@ -2584,6 +2644,8 @@ async function findExistingBookmarkInFolder(url, targetFolderId) {
  * @returns {Promise<void>}
  */
 async function removeDuplicateTitleBookmarksInFolder(
+  tokens,
+  collectionId,
   title,
   urlToKeep,
   targetFolderId,
@@ -2616,12 +2678,20 @@ async function removeDuplicateTitleBookmarksInFolder(
 
   for (const dup of duplicates) {
     try {
+      const dupUrl = dup.url || '';
+      // Verify dup URL does not belong to any item in this collection
+      if (
+        typeof collectionId === 'number' &&
+        await doesRaindropItemExistInCollection(tokens, collectionId, dupUrl)
+      ) {
+        continue;
+      }
+
       await bookmarksRemove(dup.id);
       stats.bookmarksDeleted += 1;
 
       // Update in-memory index maps
       context.index.bookmarks.delete(dup.id);
-      const dupUrl = dup.url || '';
       if (dupUrl) {
         const list = context.index.bookmarksByUrl.get(dupUrl) || [];
         const updated = list.filter((entry) => entry.id !== dup.id);
@@ -2631,6 +2701,9 @@ async function removeDuplicateTitleBookmarksInFolder(
           context.index.bookmarksByUrl.delete(dupUrl);
         }
       }
+
+      // Remove any stale mappings pointing to this bookmark
+      await removeMappingsByBookmarkId(dup.id);
     } catch (error) {
       console.warn('[dedupe] Failed to remove duplicate bookmark:', error);
     }
@@ -2638,18 +2711,229 @@ async function removeDuplicateTitleBookmarksInFolder(
 }
 
 /**
+ * Load the mapping of Raindrop item id -> Chrome bookmark id from local storage.
+ * Cached per runtime to reduce storage calls.
+ * @returns {Promise<Record<string, string>>}
+ */
+async function loadItemBookmarkMap() {
+  if (itemBookmarkMapCache) {
+    return itemBookmarkMapCache;
+  }
+  if (!itemBookmarkMapPromise) {
+    itemBookmarkMapPromise = (async () => {
+      try {
+        const result = await chrome.storage.local.get(ITEM_BOOKMARK_MAP_KEY);
+        const raw = result?.[ITEM_BOOKMARK_MAP_KEY];
+        if (raw && typeof raw === 'object') {
+          itemBookmarkMapCache = { ...raw };
+        } else {
+          itemBookmarkMapCache = {};
+        }
+      } catch (error) {
+        itemBookmarkMapCache = {};
+      }
+      return itemBookmarkMapCache;
+    })();
+  }
+  return itemBookmarkMapPromise;
+}
+
+/**
+ * Persist the current cached item->bookmark map.
+ * @returns {Promise<void>}
+ */
+async function persistItemBookmarkMap() {
+  if (!itemBookmarkMapCache) {
+    await loadItemBookmarkMap();
+  }
+  await chrome.storage.local.set({
+    [ITEM_BOOKMARK_MAP_KEY]: itemBookmarkMapCache ?? {},
+  });
+}
+
+/**
+ * Get the mapped bookmark id for a given raindrop item id.
+ * @param {number | undefined} itemId
+ * @returns {Promise<string | undefined>}
+ */
+async function getMappedBookmarkId(itemId) {
+  if (!Number.isFinite(itemId)) {
+    return undefined;
+  }
+  const map = await loadItemBookmarkMap();
+  const key = String(itemId);
+  const value = map[key];
+  return typeof value === 'string' && value ? value : undefined;
+}
+
+/**
+ * Update the mapping for a raindrop item id.
+ * @param {number | undefined} itemId
+ * @param {string} bookmarkId
+ * @returns {Promise<void>}
+ */
+async function setMappedBookmarkId(itemId, bookmarkId) {
+  if (!Number.isFinite(itemId) || !bookmarkId) {
+    return;
+  }
+  const map = await loadItemBookmarkMap();
+  map[String(itemId)] = String(bookmarkId);
+  await persistItemBookmarkMap();
+}
+
+/**
+ * Remove a mapping by item id if present.
+ * @param {number | undefined} itemId
+ * @returns {Promise<void>}
+ */
+async function deleteMappedBookmarkId(itemId) {
+  if (!Number.isFinite(itemId)) {
+    return;
+  }
+  const map = await loadItemBookmarkMap();
+  const key = String(itemId);
+  if (key in map) {
+    delete map[key];
+    await persistItemBookmarkMap();
+  }
+}
+
+/**
+ * Remove any mapping entries that point to a specific bookmark id.
+ * @param {string} bookmarkId
+ * @returns {Promise<void>}
+ */
+async function removeMappingsByBookmarkId(bookmarkId) {
+  if (!bookmarkId) {
+    return;
+  }
+  const map = await loadItemBookmarkMap();
+  let changed = false;
+  for (const [key, value] of Object.entries(map)) {
+    if (value === bookmarkId) {
+      delete map[key];
+      changed = true;
+    }
+  }
+  if (changed) {
+    await persistItemBookmarkMap();
+  }
+}
+
+/**
  * Create or update a bookmark for the provided Raindrop item.
+ * Prefers updating the previously mapped bookmark (by item id) to the new URL to avoid duplicates.
+ * Falls back to URL-based detection, then creation.
+ * @param {StoredProviderTokens} tokens
+ * @param {number | undefined} itemId
  * @param {string} url
  * @param {string} title
  * @param {string} targetFolderId
  * @param {MirrorContext} context
  * @param {MirrorStats} stats
+ * @param {number | undefined} collectionId
  * @returns {Promise<void>}
  */
-async function upsertBookmark(url, title, targetFolderId, context, stats) {
+async function upsertBookmark(
+  tokens,
+  itemId,
+  url,
+  title,
+  targetFolderId,
+  context,
+  stats,
+  collectionId,
+) {
   const folderInfo = context.index.folders.get(targetFolderId);
   if (!folderInfo) {
     return;
+  }
+
+  // First, if we know the Raindrop item id, try to update the previously mapped bookmark in-place.
+  if (Number.isFinite(itemId)) {
+    try {
+      const mappedId = await getMappedBookmarkId(itemId);
+      if (mappedId) {
+        const nodes = await bookmarksGet(mappedId);
+        const node = Array.isArray(nodes) && nodes.length > 0 ? nodes[0] : undefined;
+        if (node && node.id) {
+          const changes = {};
+          let didUpdate = false;
+          const oldUrl = typeof node.url === 'string' ? node.url : '';
+
+          if (node.title !== title) {
+            /** @type {{ title?: string, url?: string }} */
+            (changes).title = title;
+            didUpdate = true;
+          }
+          if (oldUrl !== url) {
+            /** @type {{ title?: string, url?: string }} */
+            (changes).url = url;
+            didUpdate = true;
+          }
+
+          if (didUpdate) {
+            await bookmarksUpdate(node.id, changes);
+            stats.bookmarksUpdated += 1;
+
+            // Update index: remove oldUrl mapping if URL changed, and add new
+            const existingEntry = context.index.bookmarks.get(node.id) || {
+              id: node.id,
+              parentId: node.parentId ?? targetFolderId,
+              title,
+              url,
+              pathSegments: [...folderInfo.pathSegments],
+            };
+
+            if (oldUrl && oldUrl !== url) {
+              const list = context.index.bookmarksByUrl.get(oldUrl) || [];
+              const updated = list.filter((entry) => entry.id !== node.id);
+              if (updated.length > 0) {
+                context.index.bookmarksByUrl.set(oldUrl, updated);
+              } else {
+                context.index.bookmarksByUrl.delete(oldUrl);
+              }
+            }
+
+            existingEntry.title = title;
+            existingEntry.url = url;
+            context.index.bookmarks.set(node.id, existingEntry);
+            const newList = context.index.bookmarksByUrl.get(url) || [];
+            const idx = newList.findIndex((entry) => entry.id === node.id);
+            if (idx >= 0) {
+              newList[idx] = existingEntry;
+            } else {
+              newList.push(existingEntry);
+            }
+            context.index.bookmarksByUrl.set(url, newList);
+          }
+
+          if (node.parentId !== targetFolderId) {
+            await bookmarksMove(node.id, { parentId: targetFolderId });
+            stats.bookmarksMoved += 1;
+          }
+
+          // Ensure mapping is set
+          await setMappedBookmarkId(itemId, node.id);
+
+          // Remove same-title duplicates that point to a different URL in this folder
+          await removeDuplicateTitleBookmarksInFolder(
+            tokens,
+            collectionId,
+            title,
+            url,
+            targetFolderId,
+            context,
+            stats,
+          );
+          return;
+        }
+        // Stale mapping
+        await deleteMappedBookmarkId(itemId);
+      }
+    } catch (error) {
+      // Ignore and fall back to URL-based logic
+    }
   }
 
   // First, check if a bookmark with this URL already exists in the target folder
@@ -2687,8 +2971,19 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
     }
     context.index.bookmarksByUrl.set(url, existingEntries);
 
+    // Record mapping for this item -> bookmark
+    await setMappedBookmarkId(itemId, existingBookmark.id);
+
     // Remove same-title duplicates that point to a different URL in this folder
-    await removeDuplicateTitleBookmarksInFolder(title, url, targetFolderId, context, stats);
+    await removeDuplicateTitleBookmarksInFolder(
+      tokens,
+      collectionId,
+      title,
+      url,
+      targetFolderId,
+      context,
+      stats,
+    );
     return;
   }
 
@@ -2719,8 +3014,17 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
       context.index.bookmarksByUrl.set(url, existingEntries);
     }
     bookmarkEntry.pathSegments = [...folderInfo.pathSegments];
+    await setMappedBookmarkId(itemId, bookmarkEntry.id);
     // Remove same-title duplicates that point to a different URL in this folder
-    await removeDuplicateTitleBookmarksInFolder(title, url, targetFolderId, context, stats);
+    await removeDuplicateTitleBookmarksInFolder(
+      tokens,
+      collectionId,
+      title,
+      url,
+      targetFolderId,
+      context,
+      stats,
+    );
     return;
   }
 
@@ -2749,8 +3053,17 @@ async function upsertBookmark(url, title, targetFolderId, context, stats) {
     urlList.push(newEntry);
   }
 
+  await setMappedBookmarkId(itemId, newEntry.id);
   // Remove same-title duplicates that point to a different URL in this folder
-  await removeDuplicateTitleBookmarksInFolder(title, url, targetFolderId, context, stats);
+  await removeDuplicateTitleBookmarksInFolder(
+    tokens,
+    collectionId,
+    title,
+    url,
+    targetFolderId,
+    context,
+    stats,
+  );
 }
 
 /**
