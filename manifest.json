@@ -32,7 +32,8 @@
     "contextMenus",
     "alarms",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "clipboardWrite"
   ],
   "externally_connectable": {
     "matches": [

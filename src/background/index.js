@@ -34,6 +34,11 @@ import {
   evaluateAllTabs,
 } from './auto-reload.js';
 import { saveTabsAsProject } from './projects.js';
+import {
+  setupClipboardContextMenus,
+  handleClipboardContextMenuClick,
+  updateClipboardContextMenuVisibility,
+} from './clipboard.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -61,6 +66,7 @@ async function scheduleMirrorAlarm() {
  */
 function handleLifecycleEvent(trigger) {
   setupContextMenus();
+  setupClipboardContextMenus();
   void scheduleMirrorAlarm();
   initializeOptionsBackupService();
   void handleOptionsBackupLifecycle(trigger).then(async () => {
@@ -312,6 +318,10 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   });
 });
 
+chrome.tabs.onHighlighted.addListener(() => {
+  void updateClipboardContextMenuVisibility();
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   void (async () => {
     const handled = await handleAutoReloadAlarm(alarm);
@@ -517,6 +527,12 @@ if (chrome.contextMenus) {
       void saveUrlsToUnsorted([{ url, title }]).catch((error) => {
         console.error('[contextMenu] Failed to save link:', error);
       });
+      return;
+    }
+
+    // Handle clipboard context menu clicks
+    if (tab) {
+      void handleClipboardContextMenuClick(info, tab);
     }
   });
 }
