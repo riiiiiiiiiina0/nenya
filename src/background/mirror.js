@@ -111,6 +111,7 @@ export const MIRROR_PULL_INTERVAL_MINUTES = 10;
 // Export functions needed by projects.js
 export {
   concludeActionBadge,
+  setActionBadge,
   raindropRequest,
   loadValidProviderTokens,
   normalizeFolderTitle,
@@ -211,6 +212,29 @@ function setActionBadgeText(text) {
     }
   } catch (error) {
     console.warn('[badge] Failed to set badge text:', error);
+  }
+}
+
+/**
+ * Set the extension action badge text and color.
+ * @param {string} text
+ * @param {string} color
+ * @param {number} [clearDelayMs=0]
+ * @returns {void}
+ */
+function setActionBadge(text, color, clearDelayMs = 0) {
+  if (!chrome?.action) {
+    return;
+  }
+
+  chrome.action.setBadgeBackgroundColor({ color });
+  chrome.action.setBadgeText({ text });
+
+  if (clearDelayMs > 0) {
+    setTimeout(() => {
+      chrome.action.setBadgeBackgroundColor({ color: '' });
+      chrome.action.setBadgeText({ text: '' });
+    }, clearDelayMs);
   }
 }
 

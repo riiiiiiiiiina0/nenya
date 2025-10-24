@@ -2,6 +2,11 @@
  * Clipboard context menu functionality for copying tab data.
  */
 
+import {
+  setActionBadge,
+  animateActionBadge,
+} from './mirror.js';
+
 /**
  * Context menu IDs for clipboard operations.
  */
@@ -12,6 +17,14 @@ export const CLIPBOARD_CONTEXT_MENU_IDS = {
   COPY_SCREENSHOT: 'nenya-copy-screenshot',
 };
 
+function setCopySuccessBadge() {
+  setActionBadge('📋', '#00FF00', 2000);
+}
+
+function setCopyFailureBadge() {
+  setActionBadge('❌', '#ffffff', 2000);
+}
+
 /**
  * Copy text to clipboard using Chrome extension API.
  * @param {string} text - The text to copy to clipboard.
@@ -19,13 +32,7 @@ export const CLIPBOARD_CONTEXT_MENU_IDS = {
  */
 async function copyToClipboard(text) {
   try {
-    // Use Chrome extension's clipboard API if available
-    if (chrome.clipboard && chrome.clipboard.writeText) {
-      await chrome.clipboard.writeText(text);
-      return true;
-    }
-    
-    // Fallback: inject script into active tab to use navigator.clipboard
+    // Inject script into active tab to use navigator.clipboard
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tabs && tabs[0] && typeof tabs[0].id === 'number') {
       await chrome.scripting.executeScript({
@@ -52,7 +59,11 @@ async function copyToClipboard(text) {
  */
 async function captureTabScreenshot(tabId) {
   try {
-    const dataUrl = await chrome.tabs.captureVisibleTab(null, {
+    // Get the window ID for the tab
+    const tab = await chrome.tabs.get(tabId);
+    const windowId = tab.windowId;
+    
+    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
       format: 'png',
       quality: 100,
     });
@@ -73,7 +84,7 @@ function getTabData(tabs) {
     .filter(tab => tab && typeof tab.url === 'string' && tab.url.startsWith('http'))
     .map(tab => ({
       title: typeof tab.title === 'string' ? tab.title : '',
-      url: tab.url,
+      url: tab.url || '',
     }));
 }
 
@@ -155,22 +166,7 @@ async function handleScreenshotCopy(tabId) {
   }
 
   try {
-    // Use Chrome extension's clipboard API if available
-    if (chrome.clipboard && chrome.clipboard.write) {
-      // Convert data URL to blob
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      
-      // Copy blob to clipboard
-      await chrome.clipboard.write([
-        new ClipboardItem({
-          [blob.type]: blob,
-        }),
-      ]);
-      return true;
-    }
-    
-    // Fallback: inject script into the tab to use navigator.clipboard
+    // Inject script into the tab to use navigator.clipboard
     await chrome.scripting.executeScript({
       target: { tabId },
       func: (dataUrl) => {
@@ -199,46 +195,52 @@ async function handleScreenshotCopy(tabId) {
  */
 export function setupClipboardContextMenus() {
   if (!chrome.contextMenus) {
+    console.warn('[clipboard] Context menus not available');
     return;
   }
-
-  // Create parent menu for clipboard operations
-  chrome.contextMenus.create({
-    id: 'nenya-clipboard-parent',
-    title: 'Copy to Clipboard',
-    contexts: ['page'],
-  });
 
   // Title\nURL format
   chrome.contextMenus.create({
     id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_URL,
-    parentId: 'nenya-clipboard-parent',
-    title: 'Title\\nURL',
-    contexts: ['page'],
+    title: 'Copy Title\\nURL',
+    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
+  }, (error) => {
+    if (error) {
+      console.warn('[clipboard] Failed to create Title\\nURL context menu:', error);
+    }
   });
 
   // Title - URL format
   chrome.contextMenus.create({
     id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_DASH_URL,
-    parentId: 'nenya-clipboard-parent',
-    title: 'Title - URL',
-    contexts: ['page'],
+    title: 'Copy Title - URL',
+    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
+  }, (error) => {
+    if (error) {
+      console.warn('[clipboard] Failed to create Title - URL context menu:', error);
+    }
   });
 
   // Markdown link format
   chrome.contextMenus.create({
     id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_MARKDOWN_LINK,
-    parentId: 'nenya-clipboard-parent',
-    title: '[Title](URL)',
-    contexts: ['page'],
+    title: 'Copy [Title](URL)',
+    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
+  }, (error) => {
+    if (error) {
+      console.warn('[clipboard] Failed to create Markdown link context menu:', error);
+    }
   });
 
   // Screenshot (only for single tab)
   chrome.contextMenus.create({
     id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT,
-    parentId: 'nenya-clipboard-parent',
-    title: 'Screenshot',
-    contexts: ['page'],
+    title: 'Copy Screenshot',
+    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
+  }, (error) => {
+    if (error) {
+      console.warn('[clipboard] Failed to create Screenshot context menu:', error);
+    }
   });
 }
 
@@ -251,7 +253,7 @@ export function setupClipboardContextMenus() {
 export async function handleClipboardContextMenuClick(info, tab) {
   const { menuItemId } = info;
   
-  if (!Object.values(CLIPBOARD_CONTEXT_MENU_IDS).includes(menuItemId)) {
+  if (!Object.values(CLIPBOARD_CONTEXT_MENU_IDS).includes(String(menuItemId))) {
     return;
   }
 
@@ -263,6 +265,7 @@ export async function handleClipboardContextMenuClick(info, tab) {
     }
 
     if (!tabs || tabs.length === 0) {
+      setCopyFailureBadge();
       return;
     }
 
@@ -293,6 +296,13 @@ export async function handleClipboardContextMenuClick(info, tab) {
       }
     }
 
+    // Conclude badge animation with success/failure emoji
+    if (success) {
+      setCopySuccessBadge();
+    } else {
+      setCopyFailureBadge();
+    }
+
     // Show notification based on result
     if (success) {
       const message = menuItemId === CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT 
@@ -315,6 +325,7 @@ export async function handleClipboardContextMenuClick(info, tab) {
     }
   } catch (error) {
     console.error('[clipboard] Context menu click failed:', error);
+    setCopyFailureBadge();
   }
 }
 

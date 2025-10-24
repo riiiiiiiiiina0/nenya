@@ -41,7 +41,8 @@
     ]
   },
   "host_permissions": [
-    "https://api.raindrop.io/*"
+    "https://api.raindrop.io/*",
+    "<all_urls>"
   ],
   "content_scripts": [
     {

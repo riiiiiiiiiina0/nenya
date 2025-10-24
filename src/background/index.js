@@ -469,7 +469,13 @@ function setupContextMenus() {
       {
         id: CONTEXT_MENU_SAVE_PAGE_ID,
         title: 'Save to Raindrop Unsorted',
-        contexts: ['page'],
+        contexts: [
+          'page',
+          'frame',
+          'selection',
+          'editable',
+          'image',
+        ],
       },
       () => {
         const createError = chrome.runtime.lastError;
