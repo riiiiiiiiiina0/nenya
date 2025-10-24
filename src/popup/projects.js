@@ -236,13 +236,13 @@ function renderProjectRow(project) {
 
   const renderDefaultIcon = () => {
     iconElement.textContent = '📁';
-    iconElement.className = 'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-lg';
+    iconElement.className = 'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-lg';
   };
 
   const renderCoverIcon = () => {
     iconElement.dataset.state = 'cover';
     iconElement.className =
-      'flex-shrink-0 w-6 h-6 flex items-center justify-center rounded';
+      'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded';
     iconElement.innerHTML = '';
     iconElement.removeAttribute('role');
     iconElement.removeAttribute('tabindex');
@@ -252,7 +252,7 @@ function renderProjectRow(project) {
       const img = document.createElement('img');
       img.src = cover;
       img.alt = title + ' icon';
-      img.className = 'w-6 h-6 object-cover rounded';
+      img.className = 'w-4 h-4 object-cover rounded';
       img.onerror = () => {
         iconElement.innerHTML = '';
         renderDefaultIcon();
@@ -269,7 +269,7 @@ function renderProjectRow(project) {
     }
     iconElement.dataset.state = 'link';
     iconElement.className =
-      'btn btn-ghost btn-sm btn-square flex-shrink-0 -ml-2';
+      'btn btn-ghost btn-sm btn-square flex-shrink-0 -mx-2 border-none shadow-none bg-transparent';
     iconElement.textContent = '↗️';
     iconElement.setAttribute('role', 'button');
     iconElement.setAttribute('tabindex', '0');
@@ -322,7 +322,7 @@ function renderProjectRow(project) {
 
   // Create title element with truncation
   const titleElement = document.createElement('span');
-  titleElement.className = 'text-left truncate flex-1 min-w-0 text-base font-medium';
+  titleElement.className = 'text-left truncate flex-1 min-w-0 text-sm font-normal';
   titleElement.textContent = title;
   titleElement.title = title; // Show full title on hover
 
