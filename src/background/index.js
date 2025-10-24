@@ -34,6 +34,12 @@ import {
   evaluateAllTabs,
 } from './auto-reload.js';
 import { saveTabsAsProject } from './projects.js';
+import {
+  setupClipboardContextMenus,
+  handleClipboardContextMenuClick,
+  updateClipboardContextMenuVisibility,
+  handleClipboardCommand,
+} from './clipboard.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -61,6 +67,7 @@ async function scheduleMirrorAlarm() {
  */
 function handleLifecycleEvent(trigger) {
   setupContextMenus();
+  setupClipboardContextMenus();
   void scheduleMirrorAlarm();
   initializeOptionsBackupService();
   void handleOptionsBackupLifecycle(trigger).then(async () => {
@@ -292,6 +299,16 @@ chrome.commands.onCommand.addListener((command) => {
         console.warn('[commands] Rename tab failed:', error);
       }
     })();
+    return;
+  }
+
+  // Handle clipboard commands
+  if (command === 'copy-title-url' || command === 'copy-title-dash-url' || 
+      command === 'copy-markdown-link' || command === 'copy-screenshot') {
+    void handleClipboardCommand(command).catch((error) => {
+      console.warn('[commands] Clipboard command failed:', error);
+    });
+    return;
   }
 });
 
@@ -310,6 +327,10 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   void chrome.storage.local.remove([`customTitle_${tabId}`]).catch((error) => {
     console.warn('[background] Failed to clean up custom title for tab:', tabId, error);
   });
+});
+
+chrome.tabs.onHighlighted.addListener(() => {
+  void updateClipboardContextMenuVisibility();
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -459,7 +480,13 @@ function setupContextMenus() {
       {
         id: CONTEXT_MENU_SAVE_PAGE_ID,
         title: 'Save to Raindrop Unsorted',
-        contexts: ['page'],
+        contexts: [
+          'page',
+          'frame',
+          'selection',
+          'editable',
+          'image',
+        ],
       },
       () => {
         const createError = chrome.runtime.lastError;
@@ -517,6 +544,12 @@ if (chrome.contextMenus) {
       void saveUrlsToUnsorted([{ url, title }]).catch((error) => {
         console.error('[contextMenu] Failed to save link:', error);
       });
+      return;
+    }
+
+    // Handle clipboard context menu clicks
+    if (tab) {
+      void handleClipboardContextMenuClick(info, tab);
     }
   });
 }

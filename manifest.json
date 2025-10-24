@@ -32,7 +32,8 @@
     "contextMenus",
     "alarms",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "clipboardWrite"
   ],
   "externally_connectable": {
     "matches": [
@@ -40,7 +41,8 @@
     ]
   },
   "host_permissions": [
-    "https://api.raindrop.io/*"
+    "https://api.raindrop.io/*",
+    "<all_urls>"
   ],
   "content_scripts": [
     {
@@ -73,6 +75,18 @@
         "default": "Alt+T"
       },
       "description": "Rename current tab"
+    },
+    "copy-title-url": {
+      "description": "Copy Title\\nURL"
+    },
+    "copy-title-dash-url": {
+      "description": "Copy Title - URL"
+    },
+    "copy-markdown-link": {
+      "description": "Copy [Title](URL)"
+    },
+    "copy-screenshot": {
+      "description": "Copy Screenshot"
     }
   }
 }
