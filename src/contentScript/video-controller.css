@@ -1,0 +1,26 @@
+.video-controller-container {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 9999;
+  display: flex;
+  gap: 5px;
+}
+
+.video-controller-button {
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.video-controller-button:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.video-fullscreen {
+  /* Fullscreen styles are now applied directly via JavaScript */
+  /* This class is kept for identification purposes */
+}

@@ -49,22 +49,22 @@
       "matches": ["<all_urls>"],
       "js": ["src/contentScript/custom-title.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/contentScript/video-controller.js"],
+      "css": ["src/contentScript/video-controller.css"],
+      "run_at": "document_idle"
     }
   ],
   "commands": {
     "_execute_action": {
-      "suggested_key": {
-        "default": "Alt+R"
-      },
       "description": "Open popup"
     },
     "pull-raindrop": {
       "description": "Pull from Raindrop now"
     },
     "save-to-unsorted": {
-      "suggested_key": {
-        "default": "Alt+Shift+R"
-      },
       "description": "Save to Unsorted"
     },
     "save-project": {
@@ -85,16 +85,16 @@
     "copy-screenshot": {
       "description": "Copy Screenshot"
     },
-    "activate-left-tab": {
+    "quit-pip": {
       "suggested_key": {
-        "default": "Alt+Left"
+        "default": "Alt+Q"
       },
+      "description": "Quit Picture-in-Picture"
+	  },
+    "activate-left-tab": {
       "description": "Activate left tab"
     },
     "activate-right-tab": {
-      "suggested_key": {
-        "default": "Alt+Right"
-      },
       "description": "Activate right tab"
     }
   }
