@@ -18,6 +18,12 @@
       <span id="autoReloadStatus" class="text-sm text-base-content/70" hidden></span>
     </div>
     <div class="flex-none">
+      <button id="pullButton" class="btn btn-square btn-ghost" type="button" aria-label="Pull from raindrop">
+        📥
+      </button>
+      <button id="saveUnsortedButton" class="btn btn-square btn-ghost" type="button" aria-label="Save to unsorted">
+        💾
+      </button>
       <button id="openOptionsButton" class="btn btn-square btn-ghost" type="button" aria-label="Open options">
         ⚙️
       </button>
@@ -46,22 +52,6 @@
         <section class="space-y-2 mt-2">
           <div id="projectsContainer" class="space-y-2" role="list"></div>
         </section>
-      </div>
-    </article>
-
-    <!-- cloud bookmarks -->
-    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
-      <div class="card-body gap-2">
-        <header class="space-y-1">
-          <h1 class="text-xl font-semibold text-base-content">🔖 Cloud Bookmarks</h1>
-          <p class="text-sm text-base-content/70">Pull your cloud bookmarks to your browser.</p>
-        </header>
-        <button id="pullButton" class="btn btn-primary w-full" type="button">
-          Pull now
-        </button>
-        <button id="saveUnsortedButton" class="btn btn-secondary w-full" type="button">
-          Save to Unsorted
-        </button>
       </div>
     </article>
   </main>
