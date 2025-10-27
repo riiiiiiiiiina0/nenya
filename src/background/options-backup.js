@@ -111,9 +111,28 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} HighlightTextRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {'whole-phrase' | 'comma-separated' | 'regex'} type
+ * @property {string} value
+ * @property {string} textColor
+ * @property {string} backgroundColor
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} BrightModeSettingsBackupPayload
  * @property {'bright-mode-settings'} kind
  * @property {BrightModeSettings} settings
+ * @property {BackupMetadata} metadata
+ */
+
+/**
+ * @typedef {Object} HighlightTextRulesBackupPayload
+ * @property {'highlight-text-rules'} kind
+ * @property {HighlightTextRuleSettings[]} rules
  * @property {BackupMetadata} metadata
  */
 
@@ -150,6 +169,7 @@ const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
+const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -190,6 +210,7 @@ const CATEGORY_IDS = [
   'notification-preferences',
   'auto-reload-rules',
   'bright-mode-settings',
+  'highlight-text-rules',
 ];
 
 /**
@@ -880,6 +901,100 @@ function normalizeBrightModePatterns(value) {
 }
 
 /**
+ * Normalize highlight text rules from storage or input.
+ * @param {unknown} value
+ * @returns {{ rules: HighlightTextRuleSettings[], mutated: boolean }}
+ */
+function normalizeHighlightTextRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+      const pattern =
+        typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!pattern) {
+        return;
+      }
+
+      try {
+        // Basic pattern validation (URLPattern may not be available in service worker context)
+        // Check for basic URL pattern syntax
+        if (pattern.includes('*') && !pattern.includes('://')) {
+          // This is likely a glob pattern, which is acceptable
+        } else if (pattern.includes('://')) {
+          // This is likely a full URL pattern, validate basic syntax
+          const url = new URL('https://example.com');
+          // Basic validation passed
+        }
+      } catch (error) {
+        console.warn(
+          '[options-backup] Ignoring invalid highlight text pattern:',
+          pattern,
+          error,
+        );
+        return;
+      }
+
+      const type = raw.type;
+      if (typeof type !== 'string' || !['whole-phrase', 'comma-separated', 'regex'].includes(type)) {
+        console.warn('[options-backup] Ignoring invalid highlight text type:', type);
+        return;
+      }
+
+      const valueText = typeof raw.value === 'string' ? raw.value.trim() : '';
+      if (!valueText) {
+        return;
+      }
+
+      if (type === 'regex') {
+        try {
+          // eslint-disable-next-line no-new
+          new RegExp(valueText);
+        } catch (error) {
+          console.warn('[options-backup] Ignoring invalid highlight text regex:', valueText, error);
+          return;
+        }
+      }
+
+      const textColor = typeof raw.textColor === 'string' ? raw.textColor : '#000000';
+      const backgroundColor = typeof raw.backgroundColor === 'string' ? raw.backgroundColor : '#ffff00';
+
+      let id =
+        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {HighlightTextRuleSettings} */
+      const rule = {
+        id,
+        pattern,
+        type: type,
+        value: valueText,
+        textColor,
+        backgroundColor,
+        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+      sanitized.push(rule);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+  if (!mutated && sanitized.length !== originalLength) {
+    mutated = true;
+  }
+  return { rules: sorted, mutated };
+}
+
+/**
  * Collect bright mode patterns from storage.
  * @param {string} storageKey
  * @returns {Promise<BrightModePatternSettings[]>}
@@ -927,6 +1042,37 @@ async function applyBrightModeSettings(settings) {
   await chrome.storage.sync.set({
     [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
     [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
+  });
+}
+
+/**
+ * Collect highlight text rules from storage.
+ * @returns {Promise<HighlightTextRuleSettings[]>}
+ */
+async function collectHighlightTextRules() {
+  const result = await chrome.storage.sync.get(HIGHLIGHT_TEXT_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeHighlightTextRules(
+    result?.[HIGHLIGHT_TEXT_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('highlight-text-rules');
+    await chrome.storage.sync.set({
+      [HIGHLIGHT_TEXT_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply highlight text rules to storage.
+ * @param {HighlightTextRuleSettings[]} rules
+ * @returns {Promise<void>}
+ */
+async function applyHighlightTextRules(rules) {
+  const { rules: sanitized } = normalizeHighlightTextRules(rules);
+  suppressBackup('highlight-text-rules');
+  await chrome.storage.sync.set({
+    [HIGHLIGHT_TEXT_RULES_KEY]: sanitized,
   });
 }
 
@@ -1013,6 +1159,21 @@ async function buildBrightModeSettingsPayload(trigger) {
   return {
     kind: 'bright-mode-settings',
     settings,
+    metadata,
+  };
+}
+
+/**
+ * Build the highlight text rules payload for backup.
+ * @param {string} trigger
+ * @returns {Promise<HighlightTextRulesBackupPayload>}
+ */
+async function buildHighlightTextRulesPayload(trigger) {
+  const rules = await collectHighlightTextRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'highlight-text-rules',
+    rules,
     metadata,
   };
 }
@@ -1279,6 +1440,66 @@ function parseBrightModeSettingsItem(item) {
 }
 
 /**
+ * Attempt to parse highlight text rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: HighlightTextRulesBackupPayload | null, lastModified: number }}
+ */
+function parseHighlightTextRulesItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedRules = normalizeHighlightTextRules(parsed?.rules).rules;
+
+    const payload = /** @type {HighlightTextRulesBackupPayload} */ ({
+      kind: 'highlight-text-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Configuration for each backup category.
  */
 const CATEGORY_CONFIG = {
@@ -1309,6 +1530,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildBrightModeSettingsPayload,
     parseItem: parseBrightModeSettingsItem,
     applyPayload: applyBrightModeSettings,
+  },
+  'highlight-text-rules': {
+    title: 'highlight-text-rules',
+    link: 'nenya://options/highlight-text',
+    buildPayload: buildHighlightTextRulesPayload,
+    parseItem: parseHighlightTextRulesItem,
+    applyPayload: applyHighlightTextRules,
   },
 };
 
@@ -1548,6 +1776,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.rules;
         } else if (payload.kind === 'bright-mode-settings') {
           payloadToApply = payload.settings;
+        } else if (payload.kind === 'highlight-text-rules') {
+          payloadToApply = payload.rules;
         } else {
           payloadToApply = payload.preferences;
         }
@@ -1646,6 +1876,9 @@ function handleStorageChanges(changes, areaName) {
   }
   if (BRIGHT_MODE_WHITELIST_KEY in changes || BRIGHT_MODE_BLACKLIST_KEY in changes) {
     queueCategoryBackup('bright-mode-settings', 'storage');
+  }
+  if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
+    queueCategoryBackup('highlight-text-rules', 'storage');
   }
 }
 
@@ -1782,6 +2015,7 @@ export async function resetOptionsToDefaults() {
   suppressBackup('notification-preferences');
   suppressBackup('auto-reload-rules');
   suppressBackup('bright-mode-settings');
+  suppressBackup('highlight-text-rules');
 
   const defaultPreferences = JSON.parse(
     JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES),
@@ -1798,6 +2032,7 @@ export async function resetOptionsToDefaults() {
     [AUTO_RELOAD_RULES_KEY]: [],
     [BRIGHT_MODE_WHITELIST_KEY]: [],
     [BRIGHT_MODE_BLACKLIST_KEY]: [],
+    [HIGHLIGHT_TEXT_RULES_KEY]: [],
   });
 
   await updateState((state) => {

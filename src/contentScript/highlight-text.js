@@ -1,0 +1,423 @@
+/* global chrome */
+
+/**
+ * @typedef {Object} HighlightTextRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {'whole-phrase' | 'comma-separated' | 'regex'} type
+ * @property {string} value
+ * @property {string} textColor
+ * @property {string} backgroundColor
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
+const HIGHLIGHT_CLASS_PREFIX = 'nenya-highlight-';
+
+/** @type {HighlightTextRuleSettings[]} */
+let rules = [];
+/** @type {Map<string, HTMLElement[]>} */
+let highlightedElements = new Map();
+
+/**
+ * Check if a URL matches a pattern.
+ * @param {string} url
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function matchesUrlPattern(url, pattern) {
+  try {
+    const urlPattern = new URLPattern(pattern);
+    return urlPattern.test(url);
+  } catch (error) {
+    // Fallback to simple pattern matching for basic cases
+    if (pattern.includes('*')) {
+      const regexPattern = pattern
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\\\*/g, '.*');
+      const regex = new RegExp('^' + regexPattern + '$');
+      return regex.test(url);
+    }
+    return url.includes(pattern);
+  }
+}
+
+/**
+ * Check if text matches a rule.
+ * @param {string} text
+ * @param {HighlightTextRuleSettings} rule
+ * @returns {boolean}
+ */
+function matchesText(text, rule) {
+  const lowerText = text.toLowerCase();
+  const lowerValue = rule.value.toLowerCase();
+
+  switch (rule.type) {
+    case 'whole-phrase':
+      return lowerText.includes(lowerValue);
+    case 'comma-separated':
+      return rule.value.split(',').some(word => 
+        lowerText.includes(word.trim().toLowerCase())
+      );
+    case 'regex':
+      try {
+        const regex = new RegExp(rule.value, 'gi');
+        return regex.test(text);
+      } catch (error) {
+        console.warn('[highlight-text] Invalid regex pattern:', rule.value, error);
+        return false;
+      }
+    default:
+      return false;
+  }
+}
+
+/**
+ * Create a highlight element.
+ * @param {string} text
+ * @param {HighlightTextRuleSettings} rule
+ * @returns {HTMLElement}
+ */
+function createHighlightElement(text, rule) {
+  const span = document.createElement('span');
+  span.className = HIGHLIGHT_CLASS_PREFIX + rule.id;
+  span.style.color = rule.textColor;
+  span.style.backgroundColor = rule.backgroundColor;
+  span.style.padding = '1px 2px';
+  span.style.borderRadius = '2px';
+  span.textContent = text;
+  return span;
+}
+
+/**
+ * Highlight text in a text node.
+ * @param {Text} textNode
+ * @param {HighlightTextRuleSettings} rule
+ * @returns {boolean} Whether any highlighting was applied
+ */
+function highlightTextNode(textNode, rule) {
+  const text = textNode.textContent;
+  if (!text || text.trim().length === 0) {
+    return false;
+  }
+
+  let highlighted = false;
+  const parent = textNode.parentNode;
+  if (!parent) return false;
+
+  switch (rule.type) {
+    case 'whole-phrase': {
+      const lowerText = text.toLowerCase();
+      const lowerValue = rule.value.toLowerCase();
+      const index = lowerText.indexOf(lowerValue);
+      if (index !== -1) {
+        const beforeText = text.substring(0, index);
+        const matchText = text.substring(index, index + rule.value.length);
+        const afterText = text.substring(index + rule.value.length);
+
+        const fragment = document.createDocumentFragment();
+        if (beforeText) {
+          fragment.appendChild(document.createTextNode(beforeText));
+        }
+        fragment.appendChild(createHighlightElement(matchText, rule));
+        if (afterText) {
+          fragment.appendChild(document.createTextNode(afterText));
+        }
+
+        parent.replaceChild(fragment, textNode);
+        highlighted = true;
+      }
+      break;
+    }
+    case 'comma-separated': {
+      const words = rule.value.split(',').map(w => w.trim()).filter(w => w.length > 0);
+      let currentText = text;
+      let hasMatches = false;
+
+      for (const word of words) {
+        const lowerText = currentText.toLowerCase();
+        const lowerWord = word.toLowerCase();
+        const index = lowerText.indexOf(lowerWord);
+        if (index !== -1) {
+          hasMatches = true;
+          const beforeText = currentText.substring(0, index);
+          const matchText = currentText.substring(index, index + word.length);
+          const afterText = currentText.substring(index + word.length);
+
+          const fragment = document.createDocumentFragment();
+          if (beforeText) {
+            fragment.appendChild(document.createTextNode(beforeText));
+          }
+          fragment.appendChild(createHighlightElement(matchText, rule));
+          if (afterText) {
+            fragment.appendChild(document.createTextNode(afterText));
+          }
+
+          parent.replaceChild(fragment, textNode);
+          highlighted = true;
+          break;
+        }
+      }
+      break;
+    }
+    case 'regex': {
+      try {
+        const regex = new RegExp(rule.value, 'gi');
+        const matches = [...text.matchAll(regex)];
+        if (matches.length > 0) {
+          let lastIndex = 0;
+          const fragment = document.createDocumentFragment();
+
+          for (const match of matches) {
+            if (match.index !== undefined) {
+              // Add text before match
+              if (match.index > lastIndex) {
+                fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+              }
+              // Add highlighted match
+              fragment.appendChild(createHighlightElement(match[0], rule));
+              lastIndex = match.index + match[0].length;
+            }
+          }
+
+          // Add remaining text
+          if (lastIndex < text.length) {
+            fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+          }
+
+          parent.replaceChild(fragment, textNode);
+          highlighted = true;
+        }
+      } catch (error) {
+        console.warn('[highlight-text] Invalid regex pattern:', rule.value, error);
+      }
+      break;
+    }
+  }
+
+  return highlighted;
+}
+
+/**
+ * Process a node for highlighting.
+ * @param {Node} node
+ * @returns {void}
+ */
+function processNode(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    // Process text nodes
+    for (const rule of rules) {
+      if (highlightTextNode(/** @type {Text} */ (node), rule)) {
+        // If highlighting was applied, the text node was replaced
+        // so we need to stop processing this node
+        break;
+      }
+    }
+  } else if (node.nodeType === Node.ELEMENT_NODE) {
+    const element = /** @type {HTMLElement} */ (node);
+    
+    // Skip certain elements that shouldn't be highlighted
+    const tagName = element.tagName.toLowerCase();
+    if (['script', 'style', 'code', 'pre', 'textarea', 'input'].includes(tagName)) {
+      return;
+    }
+
+    // Skip if already highlighted
+    if (element.classList.toString().includes(HIGHLIGHT_CLASS_PREFIX)) {
+      return;
+    }
+
+    // Process child nodes
+    const childNodes = Array.from(element.childNodes);
+    for (const childNode of childNodes) {
+      processNode(childNode);
+    }
+  }
+}
+
+/**
+ * Remove existing highlights for a rule.
+ * @param {string} ruleId
+ * @returns {void}
+ */
+function removeHighlights(ruleId) {
+  const className = HIGHLIGHT_CLASS_PREFIX + ruleId;
+  const elements = document.querySelectorAll('.' + className);
+  
+  for (const element of elements) {
+    const parent = element.parentNode;
+    if (parent) {
+      // Replace highlighted element with just its text content
+      parent.replaceChild(document.createTextNode(element.textContent), element);
+      // Normalize adjacent text nodes
+      parent.normalize();
+    }
+  }
+}
+
+/**
+ * Apply highlighting to the page.
+ * @returns {void}
+ */
+function applyHighlighting() {
+  // Remove existing highlights
+  for (const ruleId of highlightedElements.keys()) {
+    removeHighlights(ruleId);
+  }
+  highlightedElements.clear();
+
+  // Check if current URL matches any rules
+  const currentUrl = window.location.href;
+  const applicableRules = rules.filter(rule => matchesUrlPattern(currentUrl, rule.pattern));
+
+  if (applicableRules.length === 0) {
+    return;
+  }
+
+  // Process the document body
+  const walker = document.createTreeWalker(
+    document.body,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+    {
+      acceptNode: (node) => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const element = /** @type {HTMLElement} */ (node);
+          const tagName = element.tagName.toLowerCase();
+          // Skip certain elements
+          if (['script', 'style', 'code', 'pre', 'textarea', 'input'].includes(tagName)) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          // Skip if already highlighted
+          if (element.classList.toString().includes(HIGHLIGHT_CLASS_PREFIX)) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return NodeFilter.FILTER_ACCEPT;
+        }
+        return NodeFilter.FILTER_REJECT;
+      }
+    }
+  );
+
+  const nodesToProcess = [];
+  let node;
+  while (node = walker.nextNode()) {
+    nodesToProcess.push(node);
+  }
+
+  // Process text nodes for highlighting
+  for (const node of nodesToProcess) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      for (const rule of applicableRules) {
+        if (highlightTextNode(/** @type {Text} */ (node), rule)) {
+          // If highlighting was applied, the text node was replaced
+          // so we need to stop processing this node
+          break;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Load rules from storage.
+ * @returns {Promise<void>}
+ */
+async function loadRules() {
+  try {
+    const result = await chrome.storage.sync.get(HIGHLIGHT_TEXT_RULES_KEY);
+    const storedRules = result[HIGHLIGHT_TEXT_RULES_KEY];
+    
+    if (!Array.isArray(storedRules)) {
+      rules = [];
+      return;
+    }
+
+    // Validate and normalize rules
+    rules = storedRules.filter(rule => {
+      return rule &&
+        typeof rule === 'object' &&
+        typeof rule.id === 'string' &&
+        typeof rule.pattern === 'string' &&
+        typeof rule.type === 'string' &&
+        typeof rule.value === 'string' &&
+        typeof rule.textColor === 'string' &&
+        typeof rule.backgroundColor === 'string' &&
+        ['whole-phrase', 'comma-separated', 'regex'].includes(rule.type);
+    });
+  } catch (error) {
+    console.warn('[highlight-text] Failed to load rules:', error);
+    rules = [];
+  }
+}
+
+/**
+ * Initialize the highlight text functionality.
+ * @returns {Promise<void>}
+ */
+async function initHighlightText() {
+  await loadRules();
+  applyHighlighting();
+
+  // Listen for storage changes
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'sync' && changes[HIGHLIGHT_TEXT_RULES_KEY]) {
+      loadRules().then(() => {
+        applyHighlighting();
+      });
+    }
+  });
+
+  // Track current URL to re-apply highlighting on navigation
+  let currentUrl = window.location.href;
+  
+  // Re-apply highlighting when DOM changes (for dynamic content)
+  const observer = new MutationObserver((mutations) => {
+    let shouldReapply = false;
+    
+    // Check if URL changed (for single-page applications)
+    if (window.location.href !== currentUrl) {
+      currentUrl = window.location.href;
+      shouldReapply = true;
+    }
+    
+    // Check for new content
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+        // Check if any added nodes contain text
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.TEXT_NODE || 
+              (node.nodeType === Node.ELEMENT_NODE && node.textContent)) {
+            shouldReapply = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (shouldReapply) {
+      // Debounce reapplication
+      setTimeout(applyHighlighting, 100);
+    }
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+  });
+
+  // Also listen for popstate events (back/forward navigation)
+  window.addEventListener('popstate', () => {
+    setTimeout(applyHighlighting, 100);
+  });
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initHighlightText);
+} else {
+  initHighlightText();
+}

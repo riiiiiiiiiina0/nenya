@@ -5,6 +5,7 @@ import './notifications.js';
 import './importExport.js';
 import './autoReload.js';
 import './brightMode.js';
+import './highlightText.js';
 
 /**
  * Navigation functionality for the options page
