@@ -384,35 +384,40 @@
                 For comma-separated words, enter words separated by commas. For regex, use valid JavaScript regex syntax.
               </span>
             </label>
-            <div class="grid gap-4 sm:grid-cols-2">
-              <label class="form-control">
-                <span class="label">
-                  <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Text color</span>
-                </span>
-                <input id="highlightTextColorInput" class="input input-bordered w-full" type="color" value="#000000">
-              </label>
-              <label class="form-control">
-                <span class="label">
-                  <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Background color</span>
-                </span>
-                <input id="highlightTextBackgroundInput" class="input input-bordered w-full" type="color" value="#ffff00">
-              </label>
-            </div>
             <div class="space-y-3">
-              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Text styling</span>
+              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Appearance</span>
               <div class="flex flex-wrap gap-4">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input id="highlightTextBoldInput" class="checkbox checkbox-sm" type="checkbox">
-                  <span class="text-sm font-bold">Bold</span>
+                <label class="form-control flex-1 min-w-32">
+                  <span class="label">
+                    <span class="label-text text-xs text-base-content/60">Text color</span>
+                  </span>
+                  <input id="highlightTextColorInput" class="input input-bordered w-full h-10" type="color" value="#000000">
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input id="highlightTextItalicInput" class="checkbox checkbox-sm" type="checkbox">
-                  <span class="text-sm italic">Italic</span>
+                <label class="form-control flex-1 min-w-32">
+                  <span class="label">
+                    <span class="label-text text-xs text-base-content/60">Background color</span>
+                  </span>
+                  <input id="highlightTextBackgroundInput" class="input input-bordered w-full h-10" type="color" value="#ffff00">
                 </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input id="highlightTextUnderlineInput" class="checkbox checkbox-sm" type="checkbox">
-                  <span class="text-sm underline">Underline</span>
-                </label>
+                <div class="form-control">
+                  <span class="label">
+                    <span class="label-text text-xs text-base-content/60">Text styling</span>
+                  </span>
+                  <div class="flex gap-3">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="highlightTextBoldInput" class="checkbox checkbox-sm" type="checkbox">
+                      <span class="text-sm font-bold">Bold</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="highlightTextItalicInput" class="checkbox checkbox-sm" type="checkbox">
+                      <span class="text-sm italic">Italic</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="highlightTextUnderlineInput" class="checkbox checkbox-sm" type="checkbox">
+                      <span class="text-sm underline">Underline</span>
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
             <p id="highlightTextFormError" class="text-sm text-error" hidden></p>
