@@ -81,6 +81,7 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  * @property {boolean} bold
  * @property {boolean} italic
  * @property {boolean} underline
+ * @property {boolean} ignoreCase
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -344,7 +345,7 @@ function normalizeHighlightTextRules(value) {
     if (!entry || typeof entry !== 'object') {
       return;
     }
-    const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+    const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
     const pattern =
       typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
     if (!pattern) {
@@ -382,6 +383,7 @@ function normalizeHighlightTextRules(value) {
     const bold = typeof raw.bold === 'boolean' ? raw.bold : false;
     const italic = typeof raw.italic === 'boolean' ? raw.italic : false;
     const underline = typeof raw.underline === 'boolean' ? raw.underline : false;
+    const ignoreCase = typeof raw.ignoreCase === 'boolean' ? raw.ignoreCase : false;
 
     const id =
       typeof raw.id === 'string' && raw.id.trim()
@@ -399,6 +401,7 @@ function normalizeHighlightTextRules(value) {
       bold,
       italic,
       underline,
+      ignoreCase,
     };
 
     if (typeof raw.createdAt === 'string') {

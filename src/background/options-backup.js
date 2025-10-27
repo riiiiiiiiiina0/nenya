@@ -121,6 +121,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {boolean} bold
  * @property {boolean} italic
  * @property {boolean} underline
+ * @property {boolean} ignoreCase
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -918,7 +919,7 @@ function normalizeHighlightTextRules(value) {
       if (!entry || typeof entry !== 'object') {
         return;
       }
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+      const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
       const pattern =
         typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       if (!pattern) {
@@ -970,6 +971,7 @@ function normalizeHighlightTextRules(value) {
       const bold = typeof raw.bold === 'boolean' ? raw.bold : false;
       const italic = typeof raw.italic === 'boolean' ? raw.italic : false;
       const underline = typeof raw.underline === 'boolean' ? raw.underline : false;
+      const ignoreCase = typeof raw.ignoreCase === 'boolean' ? raw.ignoreCase : false;
 
       let id =
         typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
@@ -989,6 +991,7 @@ function normalizeHighlightTextRules(value) {
         bold,
         italic,
         underline,
+        ignoreCase,
         createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
       };

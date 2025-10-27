@@ -11,11 +11,14 @@
  * @property {boolean} bold
  * @property {boolean} italic
  * @property {boolean} underline
+ * @property {boolean} ignoreCase
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
 
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
+const DEFAULT_TEXT_COLOR = '#000000';
+const DEFAULT_BACKGROUND_COLOR = '#ffff00';
 
 const form = /** @type {HTMLFormElement | null} */ (
   document.getElementById('highlightTextRuleForm')
@@ -32,8 +35,20 @@ const valueInput = /** @type {HTMLTextAreaElement | null} */ (
 const textColorInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('highlightTextColorInput')
 );
+const textColorAlphaInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('highlightTextColorAlphaInput')
+);
+const textColorAlphaLabel = /** @type {HTMLSpanElement | null} */ (
+  document.getElementById('highlightTextColorAlphaLabel')
+);
 const backgroundColorInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('highlightTextBackgroundInput')
+);
+const backgroundColorAlphaInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('highlightTextBackgroundAlphaInput')
+);
+const backgroundColorAlphaLabel = /** @type {HTMLSpanElement | null} */ (
+  document.getElementById('highlightTextBackgroundAlphaLabel')
 );
 const boldInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('highlightTextBoldInput')
@@ -43,6 +58,9 @@ const italicInput = /** @type {HTMLInputElement | null} */ (
 );
 const underlineInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('highlightTextUnderlineInput')
+);
+const ignoreCaseInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('highlightTextIgnoreCaseInput')
 );
 const formError = /** @type {HTMLParagraphElement | null} */ (
   document.getElementById('highlightTextFormError')
@@ -61,6 +79,9 @@ const rulesList = /** @type {HTMLDivElement | null} */ (
 );
 const ruleDetails = /** @type {HTMLDivElement | null} */ (
   document.getElementById('highlightTextRuleDetails')
+);
+const ignoreCaseDetail = /** @type {HTMLElement | null} */ (
+  document.getElementById('highlightTextRuleIgnoreCaseDetail')
 );
 const boldPreview = /** @type {HTMLSpanElement | null} */ (
   document.getElementById('highlightTextRuleBoldPreview')
@@ -120,6 +141,175 @@ function isValidRegex(pattern) {
 }
 
 /**
+ * Clamp a number between min and max.
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
+function clamp(value, min, max) {
+  const number = Number(value);
+  if (Number.isNaN(number)) {
+    return min;
+  }
+  return Math.min(Math.max(number, min), max);
+}
+
+/**
+ * Normalize hexadecimal color strings to #rrggbb format.
+ * @param {string} color
+ * @param {string} fallback
+ * @returns {string}
+ */
+function expandHexColor(color, fallback = DEFAULT_TEXT_COLOR) {
+  if (typeof color !== 'string') {
+    return fallback;
+  }
+
+  const value = color.trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/i.test(value)) {
+    return value;
+  }
+  if (/^#[0-9a-f]{3}$/i.test(value)) {
+    const r = value[1];
+    const g = value[2];
+    const b = value[3];
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  if (/^#[0-9a-f]{8}$/i.test(value)) {
+    return `#${value.slice(1, 7)}`;
+  }
+  if (/^#[0-9a-f]{4}$/i.test(value)) {
+    const r = value[1];
+    const g = value[2];
+    const b = value[3];
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return fallback;
+}
+
+/**
+ * Parse a stored color string that may include alpha information.
+ * @param {string} colorValue
+ * @param {string} fallbackHex
+ * @returns {{hex: string, alpha: number}}
+ */
+function parseColorWithAlpha(colorValue, fallbackHex = DEFAULT_TEXT_COLOR) {
+  const fallback = {
+    hex: expandHexColor(fallbackHex),
+    alpha: 1,
+  };
+
+  if (typeof colorValue !== 'string') {
+    return fallback;
+  }
+
+  const value = colorValue.trim().toLowerCase();
+  if (!value) {
+    return fallback;
+  }
+
+  if (/^#[0-9a-f]{6}$/i.test(value) || /^#[0-9a-f]{3}$/i.test(value)) {
+    return {
+      hex: expandHexColor(value, fallback.hex),
+      alpha: 1,
+    };
+  }
+
+  if (/^#[0-9a-f]{8}$/i.test(value)) {
+    const hex = `#${value.slice(1, 7)}`;
+    const alpha = clamp(parseInt(value.slice(7), 16) / 255, 0, 1);
+    return { hex, alpha };
+  }
+
+  if (/^#[0-9a-f]{4}$/i.test(value)) {
+    const hex = expandHexColor(value, fallback.hex);
+    const alphaComponent = value[4] + value[4];
+    const alpha = clamp(parseInt(alphaComponent, 16) / 255, 0, 1);
+    return { hex, alpha };
+  }
+
+  const rgbaMatch = value.match(/rgba?\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(\d*\.?\d+))?\s*\)/i);
+  if (rgbaMatch) {
+    const r = clamp(parseInt(rgbaMatch[1], 10), 0, 255);
+    const g = clamp(parseInt(rgbaMatch[2], 10), 0, 255);
+    const b = clamp(parseInt(rgbaMatch[3], 10), 0, 255);
+    const a = rgbaMatch[4] !== undefined ? clamp(parseFloat(rgbaMatch[4]), 0, 1) : 1;
+    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+    return { hex, alpha: a };
+  }
+
+  return fallback;
+}
+
+/**
+ * Build a CSS color string with optional alpha component.
+ * @param {string} hexColor
+ * @param {number} alpha
+ * @returns {string}
+ */
+function formatColorWithAlpha(hexColor, alpha) {
+  const normalizedHex = expandHexColor(hexColor);
+  const normalizedAlpha = clamp(alpha, 0, 1);
+
+  if (normalizedAlpha >= 0.999) {
+    return normalizedHex;
+  }
+
+  const r = parseInt(normalizedHex.slice(1, 3), 16);
+  const g = parseInt(normalizedHex.slice(3, 5), 16);
+  const b = parseInt(normalizedHex.slice(5, 7), 16);
+  const alphaRounded = Math.round(normalizedAlpha * 100) / 100;
+
+  return `rgba(${r}, ${g}, ${b}, ${alphaRounded})`;
+}
+
+/**
+ * Apply a color string to UI controls.
+ * @param {HTMLInputElement | null} colorInputEl
+ * @param {HTMLInputElement | null} alphaInputEl
+ * @param {HTMLSpanElement | null} alphaLabelEl
+ * @param {string} colorValue
+ * @param {string} fallbackHex
+ */
+function applyColorToInputs(colorInputEl, alphaInputEl, alphaLabelEl, colorValue, fallbackHex) {
+  const { hex, alpha } = parseColorWithAlpha(colorValue, fallbackHex);
+  if (colorInputEl) {
+    colorInputEl.value = hex;
+  }
+  if (alphaInputEl) {
+    alphaInputEl.value = String(Math.round(alpha * 100));
+  }
+  updateAlphaLabel(alphaInputEl, alphaLabelEl);
+}
+
+/**
+ * Combine color and alpha inputs into a CSS color string.
+ * @param {HTMLInputElement | null} colorInputEl
+ * @param {HTMLInputElement | null} alphaInputEl
+ * @param {string} fallbackHex
+ * @returns {string}
+ */
+function getColorFromInputs(colorInputEl, alphaInputEl, fallbackHex) {
+  const hex = colorInputEl ? colorInputEl.value : fallbackHex;
+  const alphaPercent = alphaInputEl ? clamp(Number(alphaInputEl.value), 0, 100) : 100;
+  return formatColorWithAlpha(hex, alphaPercent / 100);
+}
+
+/**
+ * Update alpha percentage label next to a slider.
+ * @param {HTMLInputElement | null} alphaInputEl
+ * @param {HTMLSpanElement | null} labelEl
+ */
+function updateAlphaLabel(alphaInputEl, labelEl) {
+  if (!alphaInputEl || !labelEl) {
+    return;
+  }
+  const percent = clamp(Number(alphaInputEl.value), 0, 100);
+  labelEl.textContent = `${percent}%`;
+}
+
+/**
  * Validate form data.
  * @returns {string | null} Error message or null if valid
  */
@@ -158,11 +348,18 @@ function clearForm() {
   if (patternInput) patternInput.value = '';
   if (typeSelect) typeSelect.value = 'whole-phrase';
   if (valueInput) valueInput.value = '';
-  if (textColorInput) textColorInput.value = '#000000';
-  if (backgroundColorInput) backgroundColorInput.value = '#ffff00';
+  applyColorToInputs(textColorInput, textColorAlphaInput, textColorAlphaLabel, DEFAULT_TEXT_COLOR, DEFAULT_TEXT_COLOR);
+  applyColorToInputs(
+    backgroundColorInput,
+    backgroundColorAlphaInput,
+    backgroundColorAlphaLabel,
+    DEFAULT_BACKGROUND_COLOR,
+    DEFAULT_BACKGROUND_COLOR
+  );
   if (boldInput) boldInput.checked = false;
   if (italicInput) italicInput.checked = false;
   if (underlineInput) underlineInput.checked = false;
+  if (ignoreCaseInput) ignoreCaseInput.checked = false;
   if (formError) {
     formError.textContent = '';
     formError.hidden = true;
@@ -203,6 +400,7 @@ async function loadRules() {
       bold: typeof rule.bold === 'boolean' ? rule.bold : false,
       italic: typeof rule.italic === 'boolean' ? rule.italic : false,
       underline: typeof rule.underline === 'boolean' ? rule.underline : false,
+      ignoreCase: typeof rule.ignoreCase === 'boolean' ? rule.ignoreCase : false,
     }));
   } catch (error) {
     console.warn('[highlightText] Failed to load rules:', error);
@@ -280,6 +478,7 @@ function renderRulesList() {
             <p class="text-xs text-base-content/70 truncate">${rule.value}</p>
             <div class="flex items-center gap-2 mt-1">
               <span class="badge badge-outline badge-sm">${getTypeDisplayName(rule.type)}</span>
+              ${rule.ignoreCase ? '<span class="badge badge-sm badge-ghost">Aa</span>' : ''}
               <div class="flex gap-1">
                 <div class="w-3 h-3 rounded border border-base-300" style="background-color: ${rule.textColor}"></div>
                 <div class="w-3 h-3 rounded border border-base-300" style="background-color: ${rule.backgroundColor}"></div>
@@ -353,6 +552,7 @@ function showRuleDetails(ruleId) {
   if (boldPreview) boldPreview.hidden = !rule.bold;
   if (italicPreview) italicPreview.hidden = !rule.italic;
   if (underlinePreview) underlinePreview.hidden = !rule.underline;
+  if (ignoreCaseDetail) ignoreCaseDetail.textContent = rule.ignoreCase ? 'Yes' : 'No';
   if (createdDetail) createdDetail.textContent = formatDate(rule.createdAt);
   if (updatedDetail) updatedDetail.textContent = formatDate(rule.updatedAt);
 
@@ -370,11 +570,24 @@ function editRule(ruleId) {
   if (patternInput) patternInput.value = rule.pattern;
   if (typeSelect) typeSelect.value = rule.type;
   if (valueInput) valueInput.value = rule.value;
-  if (textColorInput) textColorInput.value = rule.textColor;
-  if (backgroundColorInput) backgroundColorInput.value = rule.backgroundColor;
+  applyColorToInputs(
+    textColorInput,
+    textColorAlphaInput,
+    textColorAlphaLabel,
+    rule.textColor,
+    DEFAULT_TEXT_COLOR
+  );
+  applyColorToInputs(
+    backgroundColorInput,
+    backgroundColorAlphaInput,
+    backgroundColorAlphaLabel,
+    rule.backgroundColor,
+    DEFAULT_BACKGROUND_COLOR
+  );
   if (boldInput) boldInput.checked = rule.bold || false;
   if (italicInput) italicInput.checked = rule.italic || false;
   if (underlineInput) underlineInput.checked = rule.underline || false;
+  if (ignoreCaseInput) ignoreCaseInput.checked = rule.ignoreCase || false;
 
   if (saveButton) saveButton.textContent = 'Update rule';
   if (cancelEditButton) cancelEditButton.hidden = false;
@@ -428,7 +641,7 @@ async function handleFormSubmit(event) {
     return;
   }
 
-  if (!patternInput || !typeSelect || !valueInput || !textColorInput || !backgroundColorInput || !boldInput || !italicInput || !underlineInput) {
+  if (!patternInput || !typeSelect || !valueInput || !textColorInput || !backgroundColorInput || !boldInput || !italicInput || !underlineInput || !ignoreCaseInput) {
     return;
   }
 
@@ -436,11 +649,16 @@ async function handleFormSubmit(event) {
     pattern: patternInput.value.trim(),
     type: typeSelect.value,
     value: valueInput.value.trim(),
-    textColor: textColorInput.value,
-    backgroundColor: backgroundColorInput.value,
+    textColor: getColorFromInputs(textColorInput, textColorAlphaInput, DEFAULT_TEXT_COLOR),
+    backgroundColor: getColorFromInputs(
+      backgroundColorInput,
+      backgroundColorAlphaInput,
+      DEFAULT_BACKGROUND_COLOR
+    ),
     bold: boldInput.checked,
     italic: italicInput.checked,
     underline: underlineInput.checked,
+    ignoreCase: ignoreCaseInput.checked,
   };
 
   try {
@@ -495,8 +713,35 @@ async function initHighlightText() {
     });
   }
 
+  if (textColorAlphaInput) {
+    textColorAlphaInput.addEventListener('input', () => {
+      updateAlphaLabel(textColorAlphaInput, textColorAlphaLabel);
+    });
+  }
+
+  if (backgroundColorAlphaInput) {
+    backgroundColorAlphaInput.addEventListener('input', () => {
+      updateAlphaLabel(backgroundColorAlphaInput, backgroundColorAlphaLabel);
+    });
+  }
+
+  updateAlphaLabel(textColorAlphaInput, textColorAlphaLabel);
+  updateAlphaLabel(backgroundColorAlphaInput, backgroundColorAlphaLabel);
+
   // Clear form error when user starts typing
-  [patternInput, typeSelect, valueInput, boldInput, italicInput, underlineInput].forEach(element => {
+  [
+    patternInput,
+    typeSelect,
+    valueInput,
+    textColorInput,
+    backgroundColorInput,
+    textColorAlphaInput,
+    backgroundColorAlphaInput,
+    boldInput,
+    italicInput,
+    underlineInput,
+    ignoreCaseInput,
+  ].forEach(element => {
     if (element) {
       element.addEventListener('input', () => {
         if (formError) {

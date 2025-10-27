@@ -11,6 +11,7 @@
  * @property {boolean} bold
  * @property {boolean} italic
  * @property {boolean} underline
+ * @property {boolean} ignoreCase
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -53,19 +54,23 @@ function matchesUrlPattern(url, pattern) {
  * @returns {boolean}
  */
 function matchesText(text, rule) {
-  const lowerText = text.toLowerCase();
-  const lowerValue = rule.value.toLowerCase();
+  const haystack = rule.ignoreCase ? text.toLowerCase() : text;
 
   switch (rule.type) {
     case 'whole-phrase':
-      return lowerText.includes(lowerValue);
-    case 'comma-separated':
-      return rule.value.split(',').some(word => 
-        lowerText.includes(word.trim().toLowerCase())
-      );
+      if (!rule.value) return false;
+      return haystack.includes(rule.ignoreCase ? rule.value.toLowerCase() : rule.value);
+    case 'comma-separated': {
+      const words = rule.value
+        .split(',')
+        .map(word => word.trim())
+        .filter(word => word.length > 0);
+      return words.some(word => haystack.includes(rule.ignoreCase ? word.toLowerCase() : word));
+    }
     case 'regex':
       try {
-        const regex = new RegExp(rule.value, 'gi');
+        const flags = rule.ignoreCase ? 'gi' : 'g';
+        const regex = new RegExp(rule.value, flags);
         return regex.test(text);
       } catch (error) {
         console.warn('[highlight-text] Invalid regex pattern:', rule.value, error);
@@ -123,9 +128,12 @@ function highlightTextNode(textNode, rule) {
 
   switch (rule.type) {
     case 'whole-phrase': {
-      const lowerText = text.toLowerCase();
-      const lowerValue = rule.value.toLowerCase();
-      const index = lowerText.indexOf(lowerValue);
+      const searchText = rule.ignoreCase ? text.toLowerCase() : text;
+      const searchValue = rule.ignoreCase ? rule.value.toLowerCase() : rule.value;
+      if (!searchValue) {
+        break;
+      }
+      const index = searchText.indexOf(searchValue);
       if (index !== -1) {
         const beforeText = text.substring(0, index);
         const matchText = text.substring(index, index + rule.value.length);
@@ -147,18 +155,16 @@ function highlightTextNode(textNode, rule) {
     }
     case 'comma-separated': {
       const words = rule.value.split(',').map(w => w.trim()).filter(w => w.length > 0);
-      let currentText = text;
-      let hasMatches = false;
+      const searchText = rule.ignoreCase ? text.toLowerCase() : text;
 
       for (const word of words) {
-        const lowerText = currentText.toLowerCase();
-        const lowerWord = word.toLowerCase();
-        const index = lowerText.indexOf(lowerWord);
+        const searchWord = rule.ignoreCase ? word.toLowerCase() : word;
+        if (!searchWord) continue;
+        const index = searchText.indexOf(searchWord);
         if (index !== -1) {
-          hasMatches = true;
-          const beforeText = currentText.substring(0, index);
-          const matchText = currentText.substring(index, index + word.length);
-          const afterText = currentText.substring(index + word.length);
+          const beforeText = text.substring(0, index);
+          const matchText = text.substring(index, index + word.length);
+          const afterText = text.substring(index + word.length);
 
           const fragment = document.createDocumentFragment();
           if (beforeText) {
@@ -178,7 +184,8 @@ function highlightTextNode(textNode, rule) {
     }
     case 'regex': {
       try {
-        const regex = new RegExp(rule.value, 'gi');
+        const flags = rule.ignoreCase ? 'gi' : 'g';
+        const regex = new RegExp(rule.value, flags);
         const matches = [...text.matchAll(regex)];
         if (matches.length > 0) {
           let lastIndex = 0;
@@ -384,6 +391,7 @@ async function loadRules() {
       bold: typeof rule.bold === 'boolean' ? rule.bold : false,
       italic: typeof rule.italic === 'boolean' ? rule.italic : false,
       underline: typeof rule.underline === 'boolean' ? rule.underline : false,
+      ignoreCase: typeof rule.ignoreCase === 'boolean' ? rule.ignoreCase : false,
     }));
   } catch (error) {
     console.warn('[highlight-text] Failed to load rules:', error);

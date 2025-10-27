@@ -384,26 +384,42 @@
                 For comma-separated words, enter words separated by commas. For regex, use valid JavaScript regex syntax.
               </span>
             </label>
+            <label class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2">
+              <input id="highlightTextIgnoreCaseInput" class="checkbox checkbox-sm" type="checkbox">
+              <span class="text-sm text-base-content">Ignore case when matching</span>
+            </label>
             <div class="space-y-3">
               <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Appearance</span>
               <div class="flex flex-wrap gap-4">
-                <label class="form-control flex-1 min-w-32">
+                <label class="form-control flex-1 min-w-40">
                   <span class="label">
                     <span class="label-text text-xs text-base-content/60">Text color</span>
                   </span>
-                  <input id="highlightTextColorInput" class="input input-bordered w-full h-10" type="color" value="#000000">
+                  <div class="flex items-center gap-3">
+                    <input id="highlightTextColorInput" class="input input-bordered h-10 w-16" type="color" value="#000000">
+                    <div class="flex items-center gap-2 flex-1">
+                      <input id="highlightTextColorAlphaInput" class="range range-sm flex-1" type="range" min="0" max="100" value="100">
+                      <span id="highlightTextColorAlphaLabel" class="text-xs text-base-content/60 w-10 text-right">100%</span>
+                    </div>
+                  </div>
                 </label>
-                <label class="form-control flex-1 min-w-32">
+                <label class="form-control flex-1 min-w-40">
                   <span class="label">
                     <span class="label-text text-xs text-base-content/60">Background color</span>
                   </span>
-                  <input id="highlightTextBackgroundInput" class="input input-bordered w-full h-10" type="color" value="#ffff00">
+                  <div class="flex items-center gap-3">
+                    <input id="highlightTextBackgroundInput" class="input input-bordered h-10 w-16" type="color" value="#ffff00">
+                    <div class="flex items-center gap-2 flex-1">
+                      <input id="highlightTextBackgroundAlphaInput" class="range range-sm flex-1" type="range" min="0" max="100" value="100">
+                      <span id="highlightTextBackgroundAlphaLabel" class="text-xs text-base-content/60 w-10 text-right">100%</span>
+                    </div>
+                  </div>
                 </label>
                 <div class="form-control">
                   <span class="label">
                     <span class="label-text text-xs text-base-content/60">Text styling</span>
                   </span>
-                  <div class="flex gap-3">
+                  <div class="flex gap-3 mt-[10px]">
                     <label class="flex items-center gap-2 cursor-pointer">
                       <input id="highlightTextBoldInput" class="checkbox checkbox-sm" type="checkbox">
                       <span class="text-sm font-bold">Bold</span>
@@ -464,6 +480,10 @@
               <div class="flex flex-col gap-1">
                 <dt class="text-base-content/70 uppercase tracking-wide text-xs">Value</dt>
                 <dd id="highlightTextRuleValueDetail" class="font-mono break-words text-base-content"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Ignore case</dt>
+                <dd id="highlightTextRuleIgnoreCaseDetail" class="text-base-content"></dd>
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="flex flex-col gap-1">
