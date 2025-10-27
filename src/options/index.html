@@ -18,8 +18,50 @@
   <div class="navbar bg-base-100 shadow-sm sticky top-0 z-10">
     <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
   </div>
-  <main class="min-h-screen flex flex-col items-center p-6">
+  
+  <!-- Vertical Navigation Sidebar -->
+  <nav class="fixed left-0 top-16 w-64 h-[calc(100vh-4rem)] z-20 overflow-y-auto">
+    <div class="p-4">
+      <ul class="space-y-2">
+        <li>
+          <a href="#mirror-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔖</span>
+            <span class="text-sm">Cloud Bookmarks</span>
+          </a>
+        </li>
+        <li>
+          <a href="#backup-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🗃️</span>
+            <span class="text-sm">Options Backup</span>
+          </a>
+        </li>
+        <li>
+          <a href="#auto-reload-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔁</span>
+            <span class="text-sm">Auto Reload Rules</span>
+          </a>
+        </li>
+        <li>
+          <a href="#bright-mode-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">☀️</span>
+            <span class="text-sm">Bright Mode</span>
+          </a>
+        </li>
+        <li>
+          <a href="#notifications-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔔</span>
+            <span class="text-sm">Notifications</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- sections -->
+  <main class="min-h-screen flex flex-col items-center p-6 ml-64">
     <div class="w-full max-w-4xl flex flex-col items-center gap-6">
+      
+      <!-- Bookmarks section -->
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
         <div class="card-body gap-6">
           <header class="space-y-2">
@@ -85,6 +127,8 @@
           </div>
         </div>
       </section>
+
+      <!-- Options backup section -->
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="backup-heading">
         <div class="card-body gap-6">
           <div class="space-y-1">
@@ -125,6 +169,8 @@
           </div>
         </div>
       </section>
+
+      <!-- Auto reload rules section -->
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="auto-reload-heading">
         <div class="card-body gap-6">
           <div class="space-y-1">
@@ -132,8 +178,8 @@
             <p class="text-base-content/70">Reload matching tabs on a schedule without writing scripts.</p>
           </div>
           <form id="autoReloadRuleForm" class="space-y-4" novalidate>
-            <div class="grid gap-4 md:grid-cols-2">
-              <label class="form-control w-full">
+            <div class="flex flex-row gap-2">
+              <label class="form-control flex-1">
                 <span class="label">
                   <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
                 </span>
@@ -143,7 +189,7 @@
                   Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
                 </span>
               </label>
-              <label class="form-control w-full">
+              <label class="form-control w-40">
                 <span class="label">
                   <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Reload every</span>
                 </span>
@@ -198,6 +244,101 @@
           </div>
         </div>
       </section>
+
+      <!-- Bright mode section -->
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="bright-mode-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="bright-mode-heading" class="card-title text-3xl">☀️ Bright Mode</h2>
+            <p class="text-base-content/70">Configure URL patterns for bright mode display. Whitelist patterns will always use bright mode, while blacklist patterns will never use bright mode.</p>
+          </div>
+          <div class="space-y-6">
+            <!-- Whitelist Section -->
+            <div class="space-y-4">
+              <div class="space-y-1">
+                <h3 class="text-lg font-semibold">Whitelist Patterns</h3>
+                <p class="text-sm text-base-content/70">URLs matching these patterns will always use bright mode.</p>
+              </div>
+              <form id="brightModeWhitelistForm" class="space-y-4" novalidate>
+                <div class="flex flex-row gap-2">
+                  <label class="form-control flex-1">
+                    <span class="label">
+                      <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
+                    </span>
+                    <div class="flex gap-2">
+                      <input id="brightModeWhitelistPatternInput" class="input input-bordered w-full font-mono text-sm"
+                        type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                      <button id="brightModeWhitelistSaveButton" class="btn btn-square btn-success" type="submit">
+                        ➕
+                      </button>
+                      <button id="brightModeWhitelistCancelEditButton" class="btn btn-square btn-outline" type="button" hidden>
+                        ❌
+                      </button>
+                    </div>
+                    <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                      Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
+                    </span>
+                  </label>
+                </div>
+                <p id="brightModeWhitelistFormError" class="text-sm text-error" hidden></p>
+              </form>
+              <div class="space-y-3">
+                <div>
+                  <h4 class="text-md font-semibold">Whitelist patterns</h4>
+                  <p class="text-sm text-base-content/70">Select a pattern to view details or manage it.</p>
+                </div>
+                <div id="brightModeWhitelistEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+                  No whitelist patterns yet. Add one above to start.
+                </div>
+                <div id="brightModeWhitelistList" class="space-y-2" role="list"></div>
+              </div>
+            </div>
+
+            <!-- Blacklist Section -->
+            <div class="space-y-4 border-t border-base-200 pt-6">
+              <div class="space-y-1">
+                <h3 class="text-lg font-semibold">Blacklist Patterns</h3>
+                <p class="text-sm text-base-content/70">URLs matching these patterns will never use bright mode.</p>
+              </div>
+              <form id="brightModeBlacklistForm" class="space-y-4" novalidate>
+                <div class="flex flex-row gap-2">
+                  <label class="form-control flex-1">
+                    <span class="label">
+                      <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
+                    </span>
+                    <div class="flex gap-2">
+                      <input id="brightModeBlacklistPatternInput" class="input input-bordered w-full font-mono text-sm"
+                        type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                      <button id="brightModeBlacklistSaveButton" class="btn btn-square btn-success" type="submit">
+                        ➕
+                      </button>
+                      <button id="brightModeBlacklistCancelEditButton" class="btn btn-square btn-outline" type="button" hidden>
+                        ❌
+                      </button>
+                    </div>
+                    <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                      Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
+                    </span>
+                  </label>
+                </div>
+                <p id="brightModeBlacklistFormError" class="text-sm text-error" hidden></p>
+              </form>
+              <div class="space-y-3">
+                <div>
+                  <h4 class="text-md font-semibold">Blacklist patterns</h4>
+                  <p class="text-sm text-base-content/70">Select a pattern to view details or manage it.</p>
+                </div>
+                <div id="brightModeBlacklistEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+                  No blacklist patterns yet. Add one above to start.
+                </div>
+                <div id="brightModeBlacklistList" class="space-y-2" role="list"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Notifications section -->
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="notifications-heading">
         <div class="card-body gap-6">
           <div class="space-y-1">
@@ -205,23 +346,19 @@
             <p class="text-base-content/70">Decide which alerts the extension should show.</p>
           </div>
           <div class="space-y-4">
-            <section class="rounded-lg border border-base-300 p-4 space-y-4"
-              aria-labelledby="notifications-global-heading">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4" aria-labelledby="notifications-global-heading">
               <h3 id="notifications-global-heading" class="text-lg font-semibold">Global</h3>
-              <label
-                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+              <label class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                 <span class="text-base-content font-medium">Enable all notifications</span>
                 <input id="notificationGlobalToggle" class="toggle toggle-primary ml-auto" type="checkbox">
               </label>
             </section>
-            <section class="rounded-lg border border-base-300 p-4 space-y-4"
-              aria-labelledby="notifications-bookmark-heading">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4" aria-labelledby="notifications-bookmark-heading">
               <div class="space-y-1">
                 <h3 id="notifications-bookmark-heading" class="text-lg font-semibold">Bookmark management</h3>
                 <p class="text-sm text-base-content/70">Control sync and save notifications.</p>
               </div>
-              <label
-                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+              <label class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                 <span class="text-base-content font-medium">Enable bookmark notifications</span>
                 <input id="notificationBookmarkToggle" class="toggle toggle-primary ml-auto" type="checkbox">
               </label>
@@ -234,19 +371,16 @@
                 <label
                   class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                   <span class="text-base-content">Saved to Unsorted</span>
-                  <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-secondary ml-auto"
-                    type="checkbox">
+                  <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-secondary ml-auto" type="checkbox">
                 </label>
               </div>
             </section>
-            <section class="rounded-lg border border-base-300 p-4 space-y-4"
-              aria-labelledby="notifications-project-heading">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4" aria-labelledby="notifications-project-heading">
               <div class="space-y-1">
                 <h3 id="notifications-project-heading" class="text-lg font-semibold">Project management</h3>
                 <p class="text-sm text-base-content/70">Control project save, update, and delete notifications.</p>
               </div>
-              <label
-                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+              <label class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                 <span class="text-base-content font-medium">Enable project notifications</span>
                 <input id="notificationProjectToggle" class="toggle toggle-primary ml-auto" type="checkbox">
               </label>

@@ -4,6 +4,7 @@ import {
   getBookmarkFolderPath,
   ensureBookmarkFolderPath,
 } from '../shared/bookmarkFolders.js';
+import { getWhitelistPatterns, getBlacklistPatterns, setPatterns, isValidUrlPattern } from './brightMode.js';
 
 /**
  * @typedef {Object} RootFolderSettings
@@ -27,8 +28,8 @@ import {
  * @property {string} id
  * @property {string} pattern
  * @property {number} intervalSeconds
- * @property {string | undefined} createdAt
- * @property {string | undefined} updatedAt
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
  */
 
 /**
@@ -55,11 +56,26 @@ import {
  */
 
 /**
+ * @typedef {Object} BrightModePatternSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
+ * @typedef {Object} BrightModeSettings
+ * @property {BrightModePatternSettings[]} whitelist
+ * @property {BrightModePatternSettings[]} blacklist
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
  * @property {NotificationPreferences} notificationPreferences
  * @property {AutoReloadRuleSettings[]} autoReloadRules
+ * @property {BrightModeSettings} brightModeSettings
  */
 
 /**
@@ -69,10 +85,12 @@ import {
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 2;
+const EXPORT_VERSION = 4;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
+const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
+const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
@@ -218,6 +236,7 @@ function normalizeAutoReloadRules(value) {
         ? raw.id.trim()
         : generateRuleId();
 
+    /** @type {AutoReloadRuleSettings} */
     const normalized = {
       id,
       pattern,
@@ -235,6 +254,59 @@ function normalizeAutoReloadRules(value) {
   });
 
   return sortAutoReloadRules(sanitized);
+}
+
+/**
+ * Normalize bright mode patterns from storage or input.
+ * @param {unknown} value
+ * @returns {BrightModePatternSettings[]}
+ */
+function normalizeBrightModePatterns(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {BrightModePatternSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw = /** @type {{ id?: unknown, pattern?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+    const pattern =
+      typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    if (!pattern) {
+      return;
+    }
+
+    if (!isValidUrlPattern(pattern)) {
+      console.warn('[importExport:brightMode] Ignoring invalid pattern:', pattern);
+      return;
+    }
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {BrightModePatternSettings} */
+    const normalized = {
+      id,
+      pattern,
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
 }
 
 /**
@@ -279,13 +351,15 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings }>}
  */
 async function readCurrentOptions() {
-  const [rootResp, notifResp, reloadResp] = await Promise.all([
+  const [rootResp, notifResp, reloadResp, whitelistPatterns, blacklistPatterns] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
     chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY),
+    getWhitelistPatterns(),
+    getBlacklistPatterns(),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -326,7 +400,13 @@ async function readCurrentOptions() {
   const autoReloadRules = normalizeAutoReloadRules(
     reloadResp?.[AUTO_RELOAD_RULES_KEY],
   );
-  return { rootFolder, notifications, autoReloadRules };
+  
+  const brightModeSettings = {
+    whitelist: whitelistPatterns,
+    blacklist: blacklistPatterns,
+  };
+  
+  return { rootFolder, notifications, autoReloadRules, brightModeSettings };
 }
 
 /**
@@ -354,7 +434,7 @@ function downloadJson(data, filename) {
  */
 async function handleExportClick() {
   try {
-    const { rootFolder, notifications, autoReloadRules } = await readCurrentOptions();
+    const { rootFolder, notifications, autoReloadRules, brightModeSettings } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
       version: EXPORT_VERSION,
@@ -363,6 +443,7 @@ async function handleExportClick() {
         mirrorRootFolderSettings: rootFolder,
         notificationPreferences: notifications,
         autoReloadRules,
+        brightModeSettings,
       },
     };
     const now = new Date();
@@ -384,9 +465,11 @@ async function handleExportClick() {
  * Apply imported settings to storage.
  * @param {RootFolderImportSettings} rootFolder
  * @param {NotificationPreferences} notifications
+ * @param {AutoReloadRuleSettings[]} autoReloadRules
+ * @param {BrightModeSettings} brightModeSettings
  * @returns {Promise<void>}
  */
-async function applyImportedOptions(rootFolder, notifications, autoReloadRules) {
+async function applyImportedOptions(rootFolder, notifications, autoReloadRules, brightModeSettings) {
   let parentFolderId = '';
   const desiredPath =
     typeof rootFolder?.parentFolderPath === 'string'
@@ -426,6 +509,20 @@ async function applyImportedOptions(rootFolder, notifications, autoReloadRules) 
   };
   const sanitizedNotifications = normalizePreferences(notifications);
   const sanitizedRules = normalizeAutoReloadRules(autoReloadRules);
+  
+  // Handle bright mode settings - support both old and new format
+  let sanitizedWhitelist = [];
+  let sanitizedBlacklist = [];
+  
+  if (brightModeSettings && typeof brightModeSettings === 'object') {
+    // New format: { whitelist: [...], blacklist: [...] }
+    sanitizedWhitelist = normalizeBrightModePatterns(brightModeSettings.whitelist || []);
+    sanitizedBlacklist = normalizeBrightModePatterns(brightModeSettings.blacklist || []);
+  } else {
+    // Fallback for old format or missing data
+    sanitizedWhitelist = [];
+    sanitizedBlacklist = [];
+  }
 
   // Read existing map to preserve other providers if any
   const existing = await chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY);
@@ -433,11 +530,13 @@ async function applyImportedOptions(rootFolder, notifications, autoReloadRules) 
   const map = /** @type {*} */ (existing?.[ROOT_FOLDER_SETTINGS_KEY]) || {};
   map[PROVIDER_ID] = sanitizedRoot;
 
-  // Persist both keys
+  // Persist all keys
   await chrome.storage.sync.set({
     [ROOT_FOLDER_SETTINGS_KEY]: map,
     [NOTIFICATION_PREFERENCES_KEY]: sanitizedNotifications,
     [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
+    [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
+    [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
   });
 }
 
@@ -473,8 +572,19 @@ async function handleFileChosen() {
     const autoReloadRules = /** @type {AutoReloadRuleSettings[]} */ (
       data.autoReloadRules
     );
+    
+    // Handle bright mode settings - support both old and new format
+    let brightModeSettings = data.brightModeSettings;
+    if (!brightModeSettings && (data.brightModeWhitelist || data.brightModeBlacklist)) {
+      // Convert old format to new format
+      brightModeSettings = {
+        whitelist: data.brightModeWhitelist || [],
+        blacklist: data.brightModeBlacklist || [],
+      };
+    }
+    brightModeSettings = brightModeSettings || { whitelist: [], blacklist: [] };
 
-    await applyImportedOptions(root, notifications, autoReloadRules);
+    await applyImportedOptions(root, notifications, autoReloadRules, brightModeSettings);
     showToast('Options imported successfully.', 'success');
   } catch (error) {
     console.warn('[importExport] Import failed:', error);
