@@ -18,7 +18,47 @@
   <div class="navbar bg-base-100 shadow-sm sticky top-0 z-10">
     <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
   </div>
-  <main class="min-h-screen flex flex-col items-center p-6">
+  
+  <!-- Vertical Navigation Sidebar -->
+  <nav class="fixed left-0 top-16 w-64 h-[calc(100vh-4rem)] z-20 overflow-y-auto">
+    <div class="p-4">
+      <ul class="space-y-2">
+        <li>
+          <a href="#mirror-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔖</span>
+            <span class="text-sm">Cloud Bookmarks</span>
+          </a>
+        </li>
+        <li>
+          <a href="#backup-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🗃️</span>
+            <span class="text-sm">Options Backup</span>
+          </a>
+        </li>
+        <li>
+          <a href="#auto-reload-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔁</span>
+            <span class="text-sm">Auto Reload Rules</span>
+          </a>
+        </li>
+        <li>
+          <a href="#bright-mode-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">☀️</span>
+            <span class="text-sm">Bright Mode</span>
+          </a>
+        </li>
+        <li>
+          <a href="#notifications-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔔</span>
+            <span class="text-sm">Notifications</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- sections -->
+  <main class="min-h-screen flex flex-col items-center p-6 ml-64">
     <div class="w-full max-w-4xl flex flex-col items-center gap-6">
       
       <!-- Bookmarks section -->
