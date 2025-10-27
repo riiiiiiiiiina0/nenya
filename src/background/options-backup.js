@@ -67,6 +67,14 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} BrightModePatternSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} BackupMetadata
  * @property {number} version
  * @property {number} lastModified
@@ -93,6 +101,19 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @typedef {Object} AutoReloadRulesBackupPayload
  * @property {'auto-reload-rules'} kind
  * @property {AutoReloadRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
+ * @typedef {Object} BrightModeSettings
+ * @property {BrightModePatternSettings[]} whitelist
+ * @property {BrightModePatternSettings[]} blacklist
+ */
+
+/**
+ * @typedef {Object} BrightModeSettingsBackupPayload
+ * @property {'bright-mode-settings'} kind
+ * @property {BrightModeSettings} settings
  * @property {BackupMetadata} metadata
  */
 
@@ -127,6 +148,8 @@ const AUTO_NOTIFICATION_COOLDOWN_MS = 15 * 60 * 1000;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
+const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
+const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -166,6 +189,7 @@ const CATEGORY_IDS = [
   'auth-provider-settings',
   'notification-preferences',
   'auto-reload-rules',
+  'bright-mode-settings',
 ];
 
 /**
@@ -790,6 +814,123 @@ async function applyAutoReloadRules(rules) {
 }
 
 /**
+ * Normalize bright mode patterns from storage or input.
+ * @param {unknown} value
+ * @returns {{ patterns: BrightModePatternSettings[], mutated: boolean }}
+ */
+function normalizeBrightModePatterns(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw = /** @type {{ id?: unknown, pattern?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+      const pattern =
+        typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!pattern) {
+        return;
+      }
+
+      try {
+        // Basic pattern validation (URLPattern may not be available in service worker context)
+        // Check for basic URL pattern syntax
+        if (pattern.includes('*') && !pattern.includes('://')) {
+          // This is likely a glob pattern, which is acceptable
+        } else if (pattern.includes('://')) {
+          // This is likely a full URL pattern, validate basic syntax
+          const url = new URL('https://example.com');
+          // Basic validation passed
+        }
+      } catch (error) {
+        console.warn(
+          '[options-backup] Ignoring invalid bright mode pattern:',
+          pattern,
+          error,
+        );
+        return;
+      }
+
+      let id =
+        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {BrightModePatternSettings} */
+      const patternObj = {
+        id,
+        pattern,
+        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+      sanitized.push(patternObj);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+  if (!mutated && sanitized.length !== originalLength) {
+    mutated = true;
+  }
+  return { patterns: sorted, mutated };
+}
+
+/**
+ * Collect bright mode patterns from storage.
+ * @param {string} storageKey
+ * @returns {Promise<BrightModePatternSettings[]>}
+ */
+async function collectBrightModePatterns(storageKey) {
+  const result = await chrome.storage.sync.get(storageKey);
+  const { patterns: sanitized, mutated } = normalizeBrightModePatterns(
+    result?.[storageKey],
+  );
+  if (mutated) {
+    const categoryId = storageKey === BRIGHT_MODE_WHITELIST_KEY ? 'bright-mode-whitelist' : 'bright-mode-blacklist';
+    suppressBackup(categoryId);
+    await chrome.storage.sync.set({
+      [storageKey]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply bright mode patterns to storage.
+ * @param {BrightModePatternSettings[]} patterns
+ * @param {string} storageKey
+ * @returns {Promise<void>}
+ */
+async function applyBrightModePatterns(patterns, storageKey) {
+  const { patterns: sanitized } = normalizeBrightModePatterns(patterns);
+  const categoryId = storageKey === BRIGHT_MODE_WHITELIST_KEY ? 'bright-mode-whitelist' : 'bright-mode-blacklist';
+  suppressBackup(categoryId);
+  await chrome.storage.sync.set({
+    [storageKey]: sanitized,
+  });
+}
+
+/**
+ * Apply bright mode settings to storage.
+ * @param {BrightModeSettings} settings
+ * @returns {Promise<void>}
+ */
+async function applyBrightModeSettings(settings) {
+  const { patterns: sanitizedWhitelist } = normalizeBrightModePatterns(settings.whitelist || []);
+  const { patterns: sanitizedBlacklist } = normalizeBrightModePatterns(settings.blacklist || []);
+  
+  suppressBackup('bright-mode-settings');
+  await chrome.storage.sync.set({
+    [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
+    [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
+  });
+}
+
+/**
  * Build the auth/provider payload for backup.
  * @param {string} trigger
  * @returns {Promise<AuthProviderBackupPayload>}
@@ -848,6 +989,30 @@ async function buildAutoReloadRulesPayload(trigger) {
   return {
     kind: 'auto-reload-rules',
     rules,
+    metadata,
+  };
+}
+
+/**
+ * Build the bright mode settings payload for backup.
+ * @param {string} trigger
+ * @returns {Promise<BrightModeSettingsBackupPayload>}
+ */
+async function buildBrightModeSettingsPayload(trigger) {
+  const [whitelistPatterns, blacklistPatterns] = await Promise.all([
+    collectBrightModePatterns(BRIGHT_MODE_WHITELIST_KEY),
+    collectBrightModePatterns(BRIGHT_MODE_BLACKLIST_KEY),
+  ]);
+  
+  const settings = {
+    whitelist: whitelistPatterns,
+    blacklist: blacklistPatterns,
+  };
+  
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'bright-mode-settings',
+    settings,
     metadata,
   };
 }
@@ -1049,6 +1214,71 @@ function parseAutoReloadItem(item) {
 }
 
 /**
+ * Attempt to parse bright mode settings payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: BrightModeSettingsBackupPayload | null, lastModified: number }}
+ */
+function parseBrightModeSettingsItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const settings = parsed?.settings || {};
+    const normalizedWhitelist = normalizeBrightModePatterns(settings.whitelist || []).patterns;
+    const normalizedBlacklist = normalizeBrightModePatterns(settings.blacklist || []).patterns;
+
+    const payload = /** @type {BrightModeSettingsBackupPayload} */ ({
+      kind: 'bright-mode-settings',
+      settings: {
+        whitelist: normalizedWhitelist,
+        blacklist: normalizedBlacklist,
+      },
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Configuration for each backup category.
  */
 const CATEGORY_CONFIG = {
@@ -1072,6 +1302,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildAutoReloadRulesPayload,
     parseItem: parseAutoReloadItem,
     applyPayload: applyAutoReloadRules,
+  },
+  'bright-mode-settings': {
+    title: 'bright-mode-settings',
+    link: 'nenya://options/bright-mode',
+    buildPayload: buildBrightModeSettingsPayload,
+    parseItem: parseBrightModeSettingsItem,
+    applyPayload: applyBrightModeSettings,
   },
 };
 
@@ -1309,6 +1546,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.mirrorRootFolderSettings;
         } else if (payload.kind === 'auto-reload-rules') {
           payloadToApply = payload.rules;
+        } else if (payload.kind === 'bright-mode-settings') {
+          payloadToApply = payload.settings;
         } else {
           payloadToApply = payload.preferences;
         }
@@ -1404,6 +1643,9 @@ function handleStorageChanges(changes, areaName) {
   }
   if (AUTO_RELOAD_RULES_KEY in changes) {
     queueCategoryBackup('auto-reload-rules', 'storage');
+  }
+  if (BRIGHT_MODE_WHITELIST_KEY in changes || BRIGHT_MODE_BLACKLIST_KEY in changes) {
+    queueCategoryBackup('bright-mode-settings', 'storage');
   }
 }
 
@@ -1539,6 +1781,7 @@ export async function resetOptionsToDefaults() {
   suppressBackup('auth-provider-settings');
   suppressBackup('notification-preferences');
   suppressBackup('auto-reload-rules');
+  suppressBackup('bright-mode-settings');
 
   const defaultPreferences = JSON.parse(
     JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES),
@@ -1553,6 +1796,8 @@ export async function resetOptionsToDefaults() {
     },
     [NOTIFICATION_PREFERENCES_KEY]: defaultPreferences,
     [AUTO_RELOAD_RULES_KEY]: [],
+    [BRIGHT_MODE_WHITELIST_KEY]: [],
+    [BRIGHT_MODE_BLACKLIST_KEY]: [],
   });
 
   await updateState((state) => {

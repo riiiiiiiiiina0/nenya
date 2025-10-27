@@ -4,3 +4,4 @@ import './backup.js';
 import './notifications.js';
 import './importExport.js';
 import './autoReload.js';
+import './brightMode.js';

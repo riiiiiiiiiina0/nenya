@@ -5,10 +5,6 @@
  */
 
 /**
- * @typedef {any} URLPattern
- */
-
-/**
  * @typedef {Object} AutoReloadRule
  * @property {string} id
  * @property {string} pattern
