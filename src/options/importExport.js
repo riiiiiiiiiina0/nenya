@@ -78,6 +78,9 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  * @property {string} value
  * @property {string} textColor
  * @property {string} backgroundColor
+ * @property {boolean} bold
+ * @property {boolean} italic
+ * @property {boolean} underline
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -341,7 +344,7 @@ function normalizeHighlightTextRules(value) {
     if (!entry || typeof entry !== 'object') {
       return;
     }
-    const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+    const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
     const pattern =
       typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
     if (!pattern) {
@@ -376,6 +379,9 @@ function normalizeHighlightTextRules(value) {
 
     const textColor = typeof raw.textColor === 'string' ? raw.textColor : '#000000';
     const backgroundColor = typeof raw.backgroundColor === 'string' ? raw.backgroundColor : '#ffff00';
+    const bold = typeof raw.bold === 'boolean' ? raw.bold : false;
+    const italic = typeof raw.italic === 'boolean' ? raw.italic : false;
+    const underline = typeof raw.underline === 'boolean' ? raw.underline : false;
 
     const id =
       typeof raw.id === 'string' && raw.id.trim()
@@ -390,6 +396,9 @@ function normalizeHighlightTextRules(value) {
       value: valueText,
       textColor,
       backgroundColor,
+      bold,
+      italic,
+      underline,
     };
 
     if (typeof raw.createdAt === 'string') {

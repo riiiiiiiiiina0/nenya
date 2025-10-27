@@ -8,6 +8,9 @@
  * @property {string} value
  * @property {string} textColor
  * @property {string} backgroundColor
+ * @property {boolean} bold
+ * @property {boolean} italic
+ * @property {boolean} underline
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -86,6 +89,18 @@ function createHighlightElement(text, rule) {
   span.style.backgroundColor = rule.backgroundColor;
   span.style.padding = '1px 2px';
   span.style.borderRadius = '2px';
+  
+  // Apply text styling
+  if (rule.bold) {
+    span.style.fontWeight = 'bold';
+  }
+  if (rule.italic) {
+    span.style.fontStyle = 'italic';
+  }
+  if (rule.underline) {
+    span.style.textDecoration = 'underline';
+  }
+  
   span.textContent = text;
   return span;
 }
@@ -257,14 +272,31 @@ function removeHighlights(ruleId) {
 }
 
 /**
+ * Remove all existing highlights regardless of rule.
+ * Ensures stale highlights are cleared when URL changes or rules no longer match.
+ * @returns {void}
+ */
+function removeAllHighlights() {
+  // Select any element that has a class token starting with our highlight prefix
+  const selector = '[class^="' + HIGHLIGHT_CLASS_PREFIX + '"], [class*=" ' + HIGHLIGHT_CLASS_PREFIX + '"]';
+  const elements = document.querySelectorAll(selector);
+  for (const element of elements) {
+    const parent = element.parentNode;
+    if (parent) {
+      parent.replaceChild(document.createTextNode(element.textContent), element);
+      parent.normalize();
+    }
+  }
+}
+
+/**
  * Apply highlighting to the page.
  * @returns {void}
  */
 function applyHighlighting() {
-  // Remove existing highlights
-  for (const ruleId of highlightedElements.keys()) {
-    removeHighlights(ruleId);
-  }
+  // Always clear any existing highlights first. This prevents leftover
+  // highlights from a previous URL or ruleset from appearing on the wrong page.
+  removeAllHighlights();
   highlightedElements.clear();
 
   // Check if current URL matches any rules
@@ -347,7 +379,12 @@ async function loadRules() {
         typeof rule.textColor === 'string' &&
         typeof rule.backgroundColor === 'string' &&
         ['whole-phrase', 'comma-separated', 'regex'].includes(rule.type);
-    });
+    }).map(rule => ({
+      ...rule,
+      bold: typeof rule.bold === 'boolean' ? rule.bold : false,
+      italic: typeof rule.italic === 'boolean' ? rule.italic : false,
+      underline: typeof rule.underline === 'boolean' ? rule.underline : false,
+    }));
   } catch (error) {
     console.warn('[highlight-text] Failed to load rules:', error);
     rules = [];

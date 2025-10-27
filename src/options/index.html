@@ -398,6 +398,23 @@
                 <input id="highlightTextBackgroundInput" class="input input-bordered w-full" type="color" value="#ffff00">
               </label>
             </div>
+            <div class="space-y-3">
+              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Text styling</span>
+              <div class="flex flex-wrap gap-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input id="highlightTextBoldInput" class="checkbox checkbox-sm" type="checkbox">
+                  <span class="text-sm font-bold">Bold</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input id="highlightTextItalicInput" class="checkbox checkbox-sm" type="checkbox">
+                  <span class="text-sm italic">Italic</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input id="highlightTextUnderlineInput" class="checkbox checkbox-sm" type="checkbox">
+                  <span class="text-sm underline">Underline</span>
+                </label>
+              </div>
+            </div>
             <p id="highlightTextFormError" class="text-sm text-error" hidden></p>
             <div class="flex flex-wrap gap-3">
               <button id="highlightTextSaveButton" class="btn btn-primary" type="submit">
@@ -426,6 +443,11 @@
                 <div class="flex gap-1">
                   <div id="highlightTextRuleColorPreview" class="w-4 h-4 rounded border border-base-300"></div>
                   <div id="highlightTextRuleBackgroundPreview" class="w-4 h-4 rounded border border-base-300"></div>
+                </div>
+                <div id="highlightTextRuleStylePreview" class="flex gap-1 text-xs">
+                  <span id="highlightTextRuleBoldPreview" class="hidden font-bold">B</span>
+                  <span id="highlightTextRuleItalicPreview" class="hidden italic">I</span>
+                  <span id="highlightTextRuleUnderlinePreview" class="hidden underline">U</span>
                 </div>
               </div>
             </div>

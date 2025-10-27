@@ -8,6 +8,9 @@
  * @property {string} value
  * @property {string} textColor
  * @property {string} backgroundColor
+ * @property {boolean} bold
+ * @property {boolean} italic
+ * @property {boolean} underline
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -32,6 +35,15 @@ const textColorInput = /** @type {HTMLInputElement | null} */ (
 const backgroundColorInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('highlightTextBackgroundInput')
 );
+const boldInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('highlightTextBoldInput')
+);
+const italicInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('highlightTextItalicInput')
+);
+const underlineInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('highlightTextUnderlineInput')
+);
 const formError = /** @type {HTMLParagraphElement | null} */ (
   document.getElementById('highlightTextFormError')
 );
@@ -49,6 +61,15 @@ const rulesList = /** @type {HTMLDivElement | null} */ (
 );
 const ruleDetails = /** @type {HTMLDivElement | null} */ (
   document.getElementById('highlightTextRuleDetails')
+);
+const boldPreview = /** @type {HTMLSpanElement | null} */ (
+  document.getElementById('highlightTextRuleBoldPreview')
+);
+const italicPreview = /** @type {HTMLSpanElement | null} */ (
+  document.getElementById('highlightTextRuleItalicPreview')
+);
+const underlinePreview = /** @type {HTMLSpanElement | null} */ (
+  document.getElementById('highlightTextRuleUnderlinePreview')
 );
 
 /** @type {HighlightTextRuleSettings[]} */
@@ -139,6 +160,9 @@ function clearForm() {
   if (valueInput) valueInput.value = '';
   if (textColorInput) textColorInput.value = '#000000';
   if (backgroundColorInput) backgroundColorInput.value = '#ffff00';
+  if (boldInput) boldInput.checked = false;
+  if (italicInput) italicInput.checked = false;
+  if (underlineInput) underlineInput.checked = false;
   if (formError) {
     formError.textContent = '';
     formError.hidden = true;
@@ -174,7 +198,12 @@ async function loadRules() {
         ['whole-phrase', 'comma-separated', 'regex'].includes(rule.type) &&
         isValidUrlPattern(rule.pattern) &&
         (rule.type !== 'regex' || isValidRegex(rule.value));
-    });
+    }).map(rule => ({
+      ...rule,
+      bold: typeof rule.bold === 'boolean' ? rule.bold : false,
+      italic: typeof rule.italic === 'boolean' ? rule.italic : false,
+      underline: typeof rule.underline === 'boolean' ? rule.underline : false,
+    }));
   } catch (error) {
     console.warn('[highlightText] Failed to load rules:', error);
     return [];
@@ -255,6 +284,11 @@ function renderRulesList() {
                 <div class="w-3 h-3 rounded border border-base-300" style="background-color: ${rule.textColor}"></div>
                 <div class="w-3 h-3 rounded border border-base-300" style="background-color: ${rule.backgroundColor}"></div>
               </div>
+              <div class="flex gap-1 text-xs">
+                ${rule.bold ? '<span class="font-bold">B</span>' : ''}
+                ${rule.italic ? '<span class="italic">I</span>' : ''}
+                ${rule.underline ? '<span class="underline">U</span>' : ''}
+              </div>
             </div>
           </div>
           <div class="flex gap-1">
@@ -316,6 +350,9 @@ function showRuleDetails(ruleId) {
   if (typeSummary) typeSummary.textContent = getTypeDisplayName(rule.type);
   if (colorPreview) colorPreview.style.backgroundColor = rule.textColor;
   if (backgroundPreview) backgroundPreview.style.backgroundColor = rule.backgroundColor;
+  if (boldPreview) boldPreview.hidden = !rule.bold;
+  if (italicPreview) italicPreview.hidden = !rule.italic;
+  if (underlinePreview) underlinePreview.hidden = !rule.underline;
   if (createdDetail) createdDetail.textContent = formatDate(rule.createdAt);
   if (updatedDetail) updatedDetail.textContent = formatDate(rule.updatedAt);
 
@@ -335,6 +372,9 @@ function editRule(ruleId) {
   if (valueInput) valueInput.value = rule.value;
   if (textColorInput) textColorInput.value = rule.textColor;
   if (backgroundColorInput) backgroundColorInput.value = rule.backgroundColor;
+  if (boldInput) boldInput.checked = rule.bold || false;
+  if (italicInput) italicInput.checked = rule.italic || false;
+  if (underlineInput) underlineInput.checked = rule.underline || false;
 
   if (saveButton) saveButton.textContent = 'Update rule';
   if (cancelEditButton) cancelEditButton.hidden = false;
@@ -388,7 +428,7 @@ async function handleFormSubmit(event) {
     return;
   }
 
-  if (!patternInput || !typeSelect || !valueInput || !textColorInput || !backgroundColorInput) {
+  if (!patternInput || !typeSelect || !valueInput || !textColorInput || !backgroundColorInput || !boldInput || !italicInput || !underlineInput) {
     return;
   }
 
@@ -398,6 +438,9 @@ async function handleFormSubmit(event) {
     value: valueInput.value.trim(),
     textColor: textColorInput.value,
     backgroundColor: backgroundColorInput.value,
+    bold: boldInput.checked,
+    italic: italicInput.checked,
+    underline: underlineInput.checked,
   };
 
   try {
@@ -405,19 +448,19 @@ async function handleFormSubmit(event) {
       // Update existing rule
       const ruleIndex = rules.findIndex(r => r.id === editingRuleId);
       if (ruleIndex !== -1) {
-        rules[ruleIndex] = {
+        rules[ruleIndex] = /** @type {HighlightTextRuleSettings} */ ({
           ...rules[ruleIndex],
           ...ruleData,
           updatedAt: new Date().toISOString(),
-        };
+        });
       }
     } else {
       // Add new rule
-      const newRule = {
+      const newRule = /** @type {HighlightTextRuleSettings} */ ({
         id: generateRuleId(),
         ...ruleData,
         createdAt: new Date().toISOString(),
-      };
+      });
       rules.push(newRule);
     }
 
@@ -453,12 +496,14 @@ async function initHighlightText() {
   }
 
   // Clear form error when user starts typing
-  [patternInput, typeSelect, valueInput].forEach(element => {
-    element.addEventListener('input', () => {
-      if (formError) {
-        formError.hidden = true;
-      }
-    });
+  [patternInput, typeSelect, valueInput, boldInput, italicInput, underlineInput].forEach(element => {
+    if (element) {
+      element.addEventListener('input', () => {
+        if (formError) {
+          formError.hidden = true;
+        }
+      });
+    }
   });
 }
 
