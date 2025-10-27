@@ -1,6 +1,22 @@
 /* global chrome */
 
 /**
+ * Debounce a function.
+ * @param {Function} func
+ * @param {number} delay
+ * @returns {Function}
+ */
+function debounce(func, delay) {
+  let timeoutId;
+  return function (...args) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      func.apply(this, args);
+    }, delay);
+  };
+}
+
+/**
  * @typedef {Object} HighlightTextRuleSettings
  * @property {string} id
  * @property {string} pattern
@@ -420,6 +436,8 @@ async function initHighlightText() {
   let currentUrl = window.location.href;
   
   // Re-apply highlighting when DOM changes (for dynamic content)
+  const debouncedApplyHighlighting = debounce(applyHighlighting, 100);
+
   const observer = new MutationObserver((mutations) => {
     let shouldReapply = false;
     
@@ -434,7 +452,7 @@ async function initHighlightText() {
       if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
         // Check if any added nodes contain text
         for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.TEXT_NODE || 
+          if (node.nodeType === Node.TEXT_NODE ||
               (node.nodeType === Node.ELEMENT_NODE && node.textContent)) {
             shouldReapply = true;
             break;
@@ -444,8 +462,7 @@ async function initHighlightText() {
     }
     
     if (shouldReapply) {
-      // Debounce reapplication
-      setTimeout(applyHighlighting, 100);
+      debouncedApplyHighlighting();
     }
   });
 
@@ -456,7 +473,7 @@ async function initHighlightText() {
 
   // Also listen for popstate events (back/forward navigation)
   window.addEventListener('popstate', () => {
-    setTimeout(applyHighlighting, 100);
+    debouncedApplyHighlighting();
   });
 }
 
