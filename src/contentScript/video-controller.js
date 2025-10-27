@@ -6,6 +6,117 @@ const MIN_VIDEO_HEIGHT = 180;
 // Store original video data for restoration
 const originalVideoData = new WeakMap();
 
+// Store fullscreen video observers
+const fullscreenObservers = new WeakMap();
+
+// Store restoration timeouts to prevent infinite loops
+const restorationTimeouts = new WeakMap();
+
+/**
+ * @param {HTMLVideoElement} video
+ */
+function createFullscreenObserver(video) {
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === 'attributes') {
+        const attributeName = mutation.attributeName;
+        
+        if (attributeName === 'style' || attributeName === 'class') {
+          const existingTimeout = restorationTimeouts.get(video);
+          if (existingTimeout) {
+            clearTimeout(existingTimeout);
+          }
+          
+          // Debounce restoration to prevent infinite loops
+          const timeout = setTimeout(() => {
+            restoreFullscreenState(video);
+            restorationTimeouts.delete(video);
+          }, 50); // 50ms debounce
+          
+          restorationTimeouts.set(video, timeout);
+        }
+      }
+    });
+  });
+  
+  // Observe the video element for attribute and child changes
+  observer.observe(video, {
+    attributes: true,
+    attributeFilter: ['style', 'controls', 'class'],
+    childList: true,
+    subtree: false
+  });
+  
+  // Also observe document.body to detect if video is moved
+  observer.observe(document.body, {
+    childList: true,
+    subtree: false
+  });
+  
+  return observer;
+}
+
+/**
+ * @param {HTMLVideoElement} video
+ */
+function restoreFullscreenState(video) {
+  // Only restore if video is actually in fullscreen mode
+  if (!video.classList.contains('video-fullscreen')) {
+    return;
+  }
+  
+  // Temporarily disable the observer to prevent loops
+  const observer = fullscreenObservers.get(video);
+  if (observer) {
+    observer.disconnect();
+  }
+  
+  try {
+    // Re-apply fullscreen styles only if they're actually missing
+    video.style.position = 'fixed';
+    video.style.top = '0';
+    video.style.left = '0';
+    video.style.width = '100vw';
+    video.style.height = '100vh';
+    video.style.zIndex = '2147483647';
+    video.style.backgroundColor = 'black';
+    video.style.objectFit = 'contain';
+    video.style.objectPosition = 'center';
+    video.style.isolation = 'isolate';
+    video.style.transform = 'translateZ(0)';
+    
+    // Ensure video is in document.body
+    if (!document.body.contains(video)) {
+      document.body.appendChild(video);
+    }
+    
+    // Ensure controls stay hidden in fullscreen
+    if (video.controls) {
+      video.controls = false;
+    }
+    
+    // Ensure fullscreen class is present
+    if (!video.classList.contains('video-fullscreen')) {
+      video.classList.add('video-fullscreen');
+    }
+  } finally {
+    // Re-enable the observer
+    if (observer) {
+      observer.observe(video, {
+        attributes: true,
+        attributeFilter: ['style', 'controls', 'class'],
+        childList: true,
+        subtree: false
+      });
+      
+      observer.observe(document.body, {
+        childList: true,
+        subtree: false
+      });
+    }
+  }
+}
+
 /**
  * @param {HTMLVideoElement} video
  */
@@ -14,11 +125,13 @@ function enterFullscreen(video) {
   const originalParent = video.parentElement;
   const originalNextSibling = video.nextSibling;
   const originalStyle = video.getAttribute('style') || '';
+  const originalControls = video.controls;
   
   originalVideoData.set(video, {
     parent: originalParent,
     nextSibling: originalNextSibling,
-    style: originalStyle
+    style: originalStyle,
+    controls: originalControls
   });
 
   // Move video to document body to avoid parent container constraints
@@ -37,6 +150,13 @@ function enterFullscreen(video) {
   video.style.objectPosition = 'center';
   video.style.isolation = 'isolate';
   video.style.transform = 'translateZ(0)';
+  
+  // Hide video controls in fullscreen for cleaner experience
+  video.controls = false;
+  
+  // Start monitoring for changes
+  const observer = createFullscreenObserver(video);
+  fullscreenObservers.set(video, observer);
 }
 
 /**
@@ -53,6 +173,23 @@ function exitFullscreen(video) {
   // Restore original style if it existed
   if (originalData.style) {
     video.setAttribute('style', originalData.style);
+  }
+
+  // Restore original controls state
+  video.controls = originalData.controls;
+
+  // Clear any pending restoration timeout
+  const timeout = restorationTimeouts.get(video);
+  if (timeout) {
+    clearTimeout(timeout);
+    restorationTimeouts.delete(video);
+  }
+
+  // Stop monitoring for changes
+  const observer = fullscreenObservers.get(video);
+  if (observer) {
+    observer.disconnect();
+    fullscreenObservers.delete(video);
   }
 
   // Move video back to original position
