@@ -477,6 +477,7 @@ async function handleRestoreProjectTabs(projectId, projectTitle, trigger) {
     const response = await sendRuntimeMessage({
       type: 'projects:restoreProjectTabs',
       projectId: normalizedId,
+      projectTitle: displayName,
     });
 
     if (!response || typeof response !== 'object') {

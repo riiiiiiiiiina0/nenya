@@ -423,7 +423,9 @@ export function handleDeleteProjectMessage(message, sendResponse) {
  */
 export function handleRestoreProjectTabsMessage(message, sendResponse) {
   const projectId = Number(message.projectId);
-  restoreProjectTabs(projectId)
+  const projectTitle =
+    typeof message.projectTitle === 'string' ? message.projectTitle : undefined;
+  restoreProjectTabs(projectId, projectTitle)
     .then((result) => {
       sendResponse(result);
     })
@@ -1047,9 +1049,10 @@ export async function clearAllProjectData() {
 /**
  * Restore saved project tabs into the current browser window.
  * @param {number} projectId
+ * @param {string} [projectTitle]
  * @returns {Promise<RestoreProjectResult>}
  */
-export async function restoreProjectTabs(projectId) {
+export async function restoreProjectTabs(projectId, projectTitle) {
   /** @type {RestoreProjectResult} */
   const summary = {
     ok: false,
@@ -1115,8 +1118,12 @@ export async function restoreProjectTabs(projectId) {
     return summary;
   }
 
+  const normalizedProjectName = normalizeProjectName(projectTitle);
+
   try {
-    const restoreOutcome = await applyProjectRestore(sanitized.entries);
+    const restoreOutcome = await applyProjectRestore(sanitized.entries, {
+      projectName: normalizedProjectName || undefined,
+    });
     summary.created = restoreOutcome.created;
     summary.pinned = restoreOutcome.pinned;
     summary.grouped = restoreOutcome.grouped;
@@ -1395,9 +1402,10 @@ function computeProjectEntryIndex(entry) {
 /**
  * Restore project tabs into the current window based on sanitized entries.
  * @param {ProjectRestoreEntry[]} entries
+ * @param {{ projectName?: string }} [options]
  * @returns {Promise<{ created: number, pinned: number, grouped: number, errors: string[] }>}
  */
-async function applyProjectRestore(entries) {
+async function applyProjectRestore(entries, options) {
   /** @type {string[]} */
   const errors = [];
   const outcome = {
@@ -1406,6 +1414,14 @@ async function applyProjectRestore(entries) {
     grouped: 0,
     errors,
   };
+
+  const projectName =
+    typeof options?.projectName === 'string' && options.projectName
+      ? options.projectName
+      : undefined;
+  const hadGroupMetadata = Array.isArray(entries)
+    ? entries.some((entry) => Boolean(entry.group))
+    : false;
 
   if (!Array.isArray(entries) || entries.length === 0) {
     return outcome;
@@ -1613,6 +1629,43 @@ async function applyProjectRestore(entries) {
           ': ' +
           message,
       );
+    }
+  }
+
+  if (
+    groupingRecords.length === 0 &&
+    !hadGroupMetadata &&
+    projectName &&
+    createdEntries.length > 0
+  ) {
+    const fallbackTabIds = createdEntries
+      .filter(({ tab }) => tab && typeof tab.id === 'number' && !tab.pinned)
+      .map(({ tab }) => /** @type {number} */ (tab.id));
+
+    if (fallbackTabIds.length > 0) {
+      try {
+        const groupId = await tabsGroup({
+          tabIds:
+            fallbackTabIds.length === 1
+              ? fallbackTabIds[0]
+              : /** @type {[number, ...number[]]} */ (fallbackTabIds),
+          createProperties: { windowId },
+        });
+        outcome.grouped += 1;
+        try {
+          await tabGroupsUpdate(groupId, {
+            title: projectName,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          outcome.errors.push('Group ' + projectName + ': ' + message);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        outcome.errors.push(
+          'Failed to create group ' + projectName + ': ' + message,
+        );
+      }
     }
   }
 
