@@ -2720,7 +2720,7 @@ async function loadItemBookmarkMap() {
     return itemBookmarkMapCache;
   }
   if (!itemBookmarkMapPromise) {
-    itemBookmarkMapPromise = (async () => {
+    itemBookmarkMapPromise = /** @type {Promise<Record<string, string>>} */ ((async () => {
       try {
         const result = await chrome.storage.local.get(ITEM_BOOKMARK_MAP_KEY);
         const raw = result?.[ITEM_BOOKMARK_MAP_KEY];
@@ -2733,9 +2733,9 @@ async function loadItemBookmarkMap() {
         itemBookmarkMapCache = {};
       }
       return itemBookmarkMapCache;
-    })();
+    })());
   }
-  return itemBookmarkMapPromise;
+  return /** @type {Promise<Record<string, string>>} */ (itemBookmarkMapPromise);
 }
 
 /**
@@ -2747,7 +2747,7 @@ async function persistItemBookmarkMap() {
     await loadItemBookmarkMap();
   }
   await chrome.storage.local.set({
-    [ITEM_BOOKMARK_MAP_KEY]: itemBookmarkMapCache ?? {},
+    [ITEM_BOOKMARK_MAP_KEY]: itemBookmarkMapCache || {},
   });
 }
 
