@@ -53,6 +53,10 @@ function addControls(video) {
 
   video.addEventListener('leavepictureinpicture', () => {
     chrome.storage.local.remove('pipTabId');
+    // Pause the video when exiting PiP
+    if (!video.paused) {
+      video.pause();
+    }
   });
 
   const parent = video.parentElement;
