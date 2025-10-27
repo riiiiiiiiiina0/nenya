@@ -3,6 +3,69 @@
 const MIN_VIDEO_WIDTH = 320;
 const MIN_VIDEO_HEIGHT = 180;
 
+// Store original video data for restoration
+const originalVideoData = new WeakMap();
+
+/**
+ * @param {HTMLVideoElement} video
+ */
+function enterFullscreen(video) {
+  // Store original video data
+  const originalParent = video.parentElement;
+  const originalNextSibling = video.nextSibling;
+  const originalStyle = video.getAttribute('style') || '';
+  
+  originalVideoData.set(video, {
+    parent: originalParent,
+    nextSibling: originalNextSibling,
+    style: originalStyle
+  });
+
+  // Move video to document body to avoid parent container constraints
+  document.body.appendChild(video);
+  
+  // Apply fullscreen styles
+  video.classList.add('video-fullscreen');
+  video.style.position = 'fixed';
+  video.style.top = '0';
+  video.style.left = '0';
+  video.style.width = '100vw';
+  video.style.height = '100vh';
+  video.style.zIndex = '2147483647';
+  video.style.backgroundColor = 'black';
+  video.style.objectFit = 'contain';
+  video.style.objectPosition = 'center';
+  video.style.isolation = 'isolate';
+  video.style.transform = 'translateZ(0)';
+}
+
+/**
+ * @param {HTMLVideoElement} video
+ */
+function exitFullscreen(video) {
+  const originalData = originalVideoData.get(video);
+  if (!originalData) return;
+
+  // Remove fullscreen class and reset styles
+  video.classList.remove('video-fullscreen');
+  video.removeAttribute('style');
+  
+  // Restore original style if it existed
+  if (originalData.style) {
+    video.setAttribute('style', originalData.style);
+  }
+
+  // Move video back to original position
+  if (originalData.nextSibling) {
+    originalData.parent.insertBefore(video, originalData.nextSibling);
+  } else {
+    originalData.parent.appendChild(video);
+  }
+
+  // Clean up stored data
+  originalVideoData.delete(video);
+}
+
 /**
  * @param {HTMLVideoElement} video
  */
@@ -42,9 +105,9 @@ function addControls(video) {
   fullscreenButton.addEventListener('click', (e) => {
     e.stopPropagation();
     if (video.classList.contains('video-fullscreen')) {
-      video.classList.remove('video-fullscreen');
+      exitFullscreen(video);
     } else {
-      video.classList.add('video-fullscreen');
+      enterFullscreen(video);
     }
   });
 
@@ -88,13 +151,17 @@ function processNode(node) {
         }
     } else if (node.querySelectorAll) {
         const videos = node.querySelectorAll('video');
-        videos.forEach(processNode);
+        videos.forEach((video) => processNode(video));
     }
 }
 
 const observer = new MutationObserver((mutations) => {
   mutations.forEach((mutation) => {
-    mutation.addedNodes.forEach(processNode);
+    mutation.addedNodes.forEach((node) => {
+      if (node instanceof Element) {
+        processNode(node);
+      }
+    });
   });
 });
 
@@ -108,8 +175,8 @@ document.querySelectorAll('video').forEach(processNode);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     const fullscreenVideo = document.querySelector('.video-fullscreen');
-    if (fullscreenVideo) {
-      fullscreenVideo.classList.remove('video-fullscreen');
+    if (fullscreenVideo && fullscreenVideo instanceof HTMLVideoElement) {
+      exitFullscreen(fullscreenVideo);
     }
   }
 });
