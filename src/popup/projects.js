@@ -41,6 +41,40 @@ import {
  */
 
 /**
+ * Create a button element with the given label and click handler.
+ * @param {string} label
+ * @param {(e: MouseEvent) => void} onClick
+ * @returns {HTMLButtonElement}
+ */
+function createButton(label, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
+  button.textContent = label;
+  button.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onClick(e);
+  });
+  return button;
+}
+
+/**
+ * Create a tooltip element with the given label and element.
+ * @param {string} label
+ * @param {HTMLElement} element
+ * @param {'top' | 'bottom' | 'left' | 'right'} placement
+ * @returns {HTMLDivElement}
+ */
+function createTooltip(label, placement, element) {
+  const tooltip = document.createElement('div');
+  tooltip.className = `tooltip tooltip-${placement}`;
+  tooltip.setAttribute('data-tip', label);
+  tooltip.appendChild(element);
+  return tooltip;
+}
+
+/**
  * Set the projects container to disabled state.
  * @param {HTMLElement | null} projectsContainer
  * @param {boolean} disabled
@@ -63,20 +97,13 @@ function setProjectsContainerDisabled(projectsContainer, disabled) {
 /**
  * Refresh the list of saved projects.
  * @param {HTMLElement} projectsContainer
- * @param {HTMLElement} refreshProjectsButton
  * @returns {Promise<void>}
  */
 export async function refreshProjectList(
   projectsContainer,
-  refreshProjectsButton,
 ) {
   if (!projectsContainer) {
     return;
-  }
-
-  if (refreshProjectsButton) {
-    /** @type {HTMLButtonElement} */ (refreshProjectsButton).disabled = true;
-    refreshProjectsButton.textContent = 'Loading...';
   }
 
   // Apply loading state to projects container
@@ -99,13 +126,6 @@ export async function refreshProjectList(
       // Reset loading state for cached data
       projectsContainer.style.opacity = '';
       projectsContainer.style.pointerEvents = '';
-
-      if (refreshProjectsButton) {
-        /** @type {HTMLButtonElement} */ (
-          refreshProjectsButton
-        ).disabled = false;
-        refreshProjectsButton.textContent = '🔄️';
-      }
     }
 
     // Then fetch fresh data in the background
@@ -120,11 +140,6 @@ export async function refreshProjectList(
     // Reset loading state
     projectsContainer.style.opacity = '';
     projectsContainer.style.pointerEvents = '';
-
-    if (refreshProjectsButton) {
-      /** @type {HTMLButtonElement} */ (refreshProjectsButton).disabled = false;
-      refreshProjectsButton.textContent = '🔄️';
-    }
   }
 }
 
@@ -236,7 +251,8 @@ function renderProjectRow(project) {
 
   const renderDefaultIcon = () => {
     iconElement.textContent = '📁';
-    iconElement.className = 'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-lg';
+    iconElement.className =
+      'flex-shrink-0 w-4 h-4 flex items-center justify-center rounded text-lg';
   };
 
   const renderCoverIcon = () => {
@@ -322,19 +338,13 @@ function renderProjectRow(project) {
 
   // Create title element with truncation
   const titleElement = document.createElement('span');
-  titleElement.className = 'text-left truncate flex-1 min-w-0 text-sm font-normal';
+  titleElement.className =
+    'text-left truncate flex-1 min-w-0 text-sm font-normal';
   titleElement.textContent = title;
   titleElement.title = title; // Show full title on hover
 
-  // // Create count badge
-  // const countBadge = document.createElement('span');
-  // countBadge.className = 'badge badge-ghost badge-sm flex-shrink-0';
-  // countBadge.textContent =
-  //   Number.isFinite(itemCount) && itemCount >= 0 ? String(itemCount) : '—';
-
   openButton.appendChild(iconElement);
   openButton.appendChild(titleElement);
-  // openButton.appendChild(countBadge);
 
   openButton.addEventListener('click', (event) => {
     event.preventDefault();
@@ -342,67 +352,43 @@ function renderProjectRow(project) {
   });
 
   // add tabs to project button
-  const addButton = document.createElement('button');
-  addButton.type = 'button';
-  addButton.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
-  addButton.textContent = '➕';
-  const addLabel = 'Add current tabs to ' + title;
-  addButton.setAttribute('aria-label', addLabel);
-  addButton.title = addLabel;
-  addButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void handleAddTabsToProject(id, title, addButton);
-  });
+  const addButton = createTooltip(
+    'Add highlighted tabs to project',
+    'left',
+    createButton('➕', (event) => {
+      void handleAddTabsToProject(
+        id,
+        title,
+        /** @type {HTMLButtonElement} */ (event.target),
+      );
+    }),
+  );
 
   // replace project items with highlighted/active tabs button
-  const replaceButton = document.createElement('button');
-  replaceButton.type = 'button';
-  replaceButton.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
-  replaceButton.textContent = '🔼';
-  const replaceLabel = 'Replace items in ' + title + ' with highlighted tabs';
-  replaceButton.setAttribute('aria-label', replaceLabel);
-  replaceButton.title = replaceLabel;
-  replaceButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void handleReplaceProjectItems(id, title, replaceButton);
-  });
+  const replaceButton = createTooltip(
+    'Replace with highlighted tabs',
+    'left',
+    createButton('🔼', (event) => {
+      void handleReplaceProjectItems(
+        id,
+        title,
+        /** @type {HTMLButtonElement} */ (event.target),
+      );
+    }),
+  );
 
   // replace project items with all tabs in current window button
-  const replaceWindowButton = document.createElement('button');
-  replaceWindowButton.type = 'button';
-  replaceWindowButton.className =
-    'btn btn-ghost btn-sm btn-square flex-shrink-0';
-  replaceWindowButton.textContent = '⏫';
-  const replaceWindowLabel =
-    'Replace items in ' + title + ' with current window tabs';
-  replaceWindowButton.setAttribute('aria-label', replaceWindowLabel);
-  replaceWindowButton.title = replaceWindowLabel;
-  replaceWindowButton.addEventListener('click', (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    void handleReplaceProjectItemsWithWindowTabs(
-      id,
-      title,
-      replaceWindowButton,
-    );
-  });
-
-  // NOTE: hide delete project button, i want to keep ui clean and simple
-  // // delete project button
-  // const deleteButton = document.createElement('button');
-  // deleteButton.type = 'button';
-  // deleteButton.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0 text-error hover:bg-error hover:text-error-content';
-  // deleteButton.textContent = '🗑️';
-  // const deleteLabel = 'Delete ' + title;
-  // deleteButton.setAttribute('aria-label', deleteLabel);
-  // deleteButton.title = deleteLabel;
-  // deleteButton.addEventListener('click', (event) => {
-  //   event.preventDefault();
-  //   event.stopPropagation();
-  //   void handleDeleteProject(id, title, deleteButton);
-  // });
+  const replaceWindowButton = createTooltip(
+    'Replace with current window tabs',
+    'left',
+    createButton('⏫', (event) => {
+      void handleReplaceProjectItemsWithWindowTabs(
+        id,
+        title,
+        /** @type {HTMLButtonElement} */ (event.target),
+      );
+    }),
+  );
 
   container.append(
     openButton,
@@ -1159,9 +1145,8 @@ function handleSaveProjectResponse(response, statusMessage) {
     concludeStatus(message, 'success', 3000, statusMessage);
     // Auto-refresh the projects list after successful save
     const projectsContainer = document.getElementById('projectsContainer');
-    const refreshButton = document.getElementById('refreshProjectsButton');
-    if (projectsContainer && refreshButton) {
-      void refreshProjectList(projectsContainer, refreshButton);
+    if (projectsContainer) {
+      void refreshProjectList(projectsContainer);
     }
     return;
   }
@@ -1209,7 +1194,7 @@ function handleDeleteProjectResponse(response, statusMessage, projectName) {
 
 /**
  * Update the save project button label to reflect highlighted tab count.
- * @param {HTMLElement} saveProjectButton
+ * @param {HTMLButtonElement} saveProjectButton
  * @returns {Promise<void>}
  */
 export async function updateSaveProjectButtonLabel(saveProjectButton) {
@@ -1223,8 +1208,18 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
       highlighted: true,
     });
 
+    const active = await queryTabs({
+      currentWindow: true,
+      active: true,
+    });
+
+    // Combine highlighted and active tabs, deduplicating by tab id
+    /** @type {chrome.tabs.Tab[]} */
+    const tabs = [...new Map([...highlighted, ...active].map(tab => [tab.id, tab])).values()];
+    console.log(tabs);
+
     let validCount = 0;
-    highlighted.forEach((tab) => {
+    tabs.forEach((tab) => {
       if (!tab.url) {
         return;
       }
@@ -1234,28 +1229,33 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
       }
     });
 
-    if (validCount > 1) {
-      saveProjectButton.textContent = 'Save ' + validCount + ' tabs as project';
+    if (validCount >= 1 && validCount <= 10) {
+      const numbers = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+      saveProjectButton.textContent = numbers[validCount - 1];
+      saveProjectButton.disabled = false;
+    } else if (validCount > 10) {
+      saveProjectButton.textContent = '🅽';
+      saveProjectButton.disabled = false;
     } else {
-      saveProjectButton.textContent = 'Save current tab as project';
+      saveProjectButton.textContent = '0️⃣';
+      saveProjectButton.disabled = true;
     }
   } catch (error) {
     console.error('[popup] Unable to update save project button label.', error);
-    saveProjectButton.textContent = 'Save current tab as project';
+    saveProjectButton.textContent = '😳';
+    saveProjectButton.disabled = true;
   }
 }
 
 /**
  * Initialize projects functionality with event listeners.
- * @param {HTMLElement} saveProjectButton
- * @param {HTMLElement} refreshProjectsButton
+ * @param {HTMLButtonElement} saveProjectButton
  * @param {HTMLElement} projectsContainer
  * @param {HTMLElement} statusMessage
  * @returns {void}
  */
 export function initializeProjects(
   saveProjectButton,
-  refreshProjectsButton,
   projectsContainer,
   statusMessage,
 ) {
@@ -1280,14 +1280,6 @@ export function initializeProjects(
     console.error('[popup] Save project button not found.');
   }
 
-  if (refreshProjectsButton) {
-    refreshProjectsButton.addEventListener('click', () => {
-      void refreshProjectList(projectsContainer, refreshProjectsButton);
-    });
-  } else {
-    console.error('[popup] Refresh projects button not found.');
-  }
-
   // Initial load
-  void refreshProjectList(projectsContainer, refreshProjectsButton);
+  void refreshProjectList(projectsContainer);
 }

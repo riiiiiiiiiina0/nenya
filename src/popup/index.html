@@ -17,14 +17,18 @@
       <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
       <span id="autoReloadStatus" class="text-sm text-base-content/70" hidden></span>
     </div>
-    <div class="flex-none">
-      <button id="pullButton" class="btn btn-square btn-ghost" type="button" aria-label="Pull from raindrop">
-        📥
-      </button>
-      <button id="saveUnsortedButton" class="btn btn-square btn-ghost" type="button" aria-label="Save to unsorted">
-        💾
-      </button>
-      <button id="openOptionsButton" class="btn btn-square btn-ghost" type="button" aria-label="Open options">
+    <div class="flex-none gap-2">
+      <div class="tooltip tooltip-bottom" data-tip="Pull from raindrop">
+        <button id="pullButton" class="btn btn-square btn-sm btn-ghost" type="button">
+          📥
+        </button>
+      </div>
+      <div class="tooltip tooltip-bottom" data-tip="Save to unsorted">
+        <button id="saveUnsortedButton" class="btn btn-square btn-sm btn-ghost" type="button">
+          💾
+        </button>
+      </div>
+      <button id="openOptionsButton" class="btn btn-square btn-sm btn-ghost" type="button">
         ⚙️
       </button>
     </div>
@@ -35,20 +39,21 @@
     <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">
       <div class="card-body gap-2">
         <header class="space-y-1">
-          <div class="flex flex-row items-center justify-between">
-            <h1 class="text-xl font-semibold text-base-content">📚 Saved Projects</h1>
-            <button id="refreshProjectsButton" class="btn btn-ghost btn-sm hidden" type="button" aria-label="Refresh projects">
-              🔄️
-            </button>
+          <div class="flex flex-row items-center gap-2">
+            <h1 class="text-xl font-semibold text-base-content">📚 Projects</h1>
+            <div class="flex-1"></div>
+            <div class="tooltip tooltip-bottom" data-tip="Save tabs as project">
+              <button id="saveProjectButton" class="btn btn-sm btn-square btn-ghost" type="button">
+                💾
+              </button>
+            </div>
+            <div class="tooltip tooltip-bottom" data-tip="Rename tab">
+              <button id="renameTabButton" class="btn btn-sm btn-square btn-ghost" type="button">
+                ✏️
+              </button>
+            </div>
           </div>
-          <p class="text-sm text-base-content/70">Group tabs into a project for easy access later.</p>
         </header>
-        <button id="saveProjectButton" class="btn btn-accent w-full" type="button">
-          Save current tab as project
-        </button>
-        <button id="renameTabButton" class="btn btn-outline w-full" type="button">
-          Rename tab
-        </button>
         <section class="space-y-2 mt-2">
           <div id="projectsContainer" class="space-y-2" role="list"></div>
         </section>

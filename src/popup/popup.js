@@ -34,9 +34,6 @@ const autoReloadStatusElement = /** @type {HTMLSpanElement | null} */ (
 const projectsContainer = /** @type {HTMLDivElement | null} */ (
   document.getElementById('projectsContainer')
 );
-const refreshProjectsButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('refreshProjectsButton')
-);
 const mirrorSection = /** @type {HTMLElement | null} */ (
   document.querySelector('article[aria-labelledby="mirror-heading"]')
 );
@@ -49,13 +46,11 @@ if (pullButton && saveUnsortedButton && statusMessage) {
 // Initialize projects functionality
 if (
   saveProjectButton &&
-  refreshProjectsButton &&
   projectsContainer &&
   statusMessage
 ) {
   initializeProjects(
     saveProjectButton,
-    refreshProjectsButton,
     projectsContainer,
     statusMessage,
   );
