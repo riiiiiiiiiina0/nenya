@@ -331,6 +331,28 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
+  if (command === 'quit-pip') {
+    void (async () => {
+      try {
+        const { pipTabId } = await chrome.storage.local.get('pipTabId');
+        if (pipTabId) {
+          await chrome.scripting.executeScript({
+            target: { tabId: pipTabId },
+            func: () => {
+              if (document.pictureInPictureElement) {
+                document.exitPictureInPicture();
+              }
+            },
+          });
+          await chrome.storage.local.remove('pipTabId');
+        }
+      } catch (error) {
+        console.warn('[commands] Quit PiP failed:', error);
+      }
+    })();
+    return;
+  }
+
   // Handle clipboard commands
   if (command === 'copy-title-url' || command === 'copy-title-dash-url' || 
       command === 'copy-markdown-link' || command === 'copy-screenshot') {
@@ -407,11 +429,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === GET_CURRENT_TAB_ID_MESSAGE) {
-    // Return the tab ID of the sender (content script)
-    if (sender && sender.tab && typeof sender.tab.id === 'number') {
+    if (sender.tab) {
       sendResponse({ tabId: sender.tab.id });
-    } else {
-      sendResponse({ error: 'No valid tab ID found' });
     }
     return true;
   }
