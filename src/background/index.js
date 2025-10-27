@@ -105,6 +105,35 @@ chrome.runtime.onStartup.addListener(() => {
  * @returns {void}
  */
 chrome.commands.onCommand.addListener((command) => {
+  if (command === 'activate-left-tab' || command === 'activate-right-tab') {
+    void (async () => {
+      try {
+        const window = await chrome.windows.getCurrent({ populate: true });
+        if (!window.tabs) {
+          return;
+        }
+        const activeTabIndex = window.tabs.findIndex((tab) => tab.active);
+        if (activeTabIndex === -1) {
+          return;
+        }
+
+        let newIndex;
+        if (command === 'activate-left-tab') {
+          newIndex = (activeTabIndex - 1 + window.tabs.length) % window.tabs.length;
+        } else { // 'activate-right-tab'
+          newIndex = (activeTabIndex + 1) % window.tabs.length;
+        }
+
+        const newTab = window.tabs[newIndex];
+        if (newTab && newTab.id) {
+          await chrome.tabs.update(newTab.id, { active: true });
+        }
+      } catch (error) {
+        console.warn('[commands] Tab activation failed:', error);
+      }
+    })();
+    return;
+  }
   if (command === 'pull-raindrop') {
     void runMirrorPull('manual').catch((error) => {
       console.warn('[commands] Pull failed:', error);

@@ -87,6 +87,18 @@
     },
     "copy-screenshot": {
       "description": "Copy Screenshot"
+    },
+    "activate-left-tab": {
+      "suggested_key": {
+        "default": "Alt+Left"
+      },
+      "description": "Activate left tab"
+    },
+    "activate-right-tab": {
+      "suggested_key": {
+        "default": "Alt+Right"
+      },
+      "description": "Activate right tab"
     }
   }
 }
