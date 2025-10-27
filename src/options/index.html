@@ -48,6 +48,12 @@
           </a>
         </li>
         <li>
+          <a href="#highlight-text-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🎨</span>
+            <span class="text-sm">Highlight Text</span>
+          </a>
+        </li>
+        <li>
           <a href="#notifications-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔔</span>
             <span class="text-sm">Notifications</span>
@@ -334,6 +340,162 @@
                 <div id="brightModeBlacklistList" class="space-y-2" role="list"></div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Highlight text section -->
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="highlight-text-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="highlight-text-heading" class="card-title text-3xl">🎨 Highlight Text</h2>
+            <p class="text-base-content/70">Create rules to highlight specific text on web pages based on URL patterns.</p>
+          </div>
+          <form id="highlightTextRuleForm" class="space-y-4" novalidate>
+            <div class="grid gap-4 sm:grid-cols-2">
+              <label class="form-control">
+                <span class="label">
+                  <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
+                </span>
+                <input id="highlightTextPatternInput" class="input input-bordered w-full font-mono text-sm"
+                  type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                  Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
+                </span>
+              </label>
+              <label class="form-control">
+                <span class="label">
+                  <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Type</span>
+                </span>
+                <select id="highlightTextTypeSelect" class="select select-bordered w-full" required>
+                  <option value="whole-phrase">Whole phrase matches</option>
+                  <option value="comma-separated">Comma separated words</option>
+                  <option value="regex">Regular expression</option>
+                </select>
+              </label>
+            </div>
+            <label class="form-control">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Value</span>
+              </span>
+              <textarea id="highlightTextValueInput" class="textarea textarea-bordered w-full font-mono text-sm"
+                placeholder="Enter text to highlight or regex pattern" rows="3" required></textarea>
+              <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                For comma-separated words, enter words separated by commas. For regex, use valid JavaScript regex syntax.
+              </span>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2">
+              <input id="highlightTextIgnoreCaseInput" class="checkbox checkbox-sm" type="checkbox">
+              <span class="text-sm text-base-content">Ignore case when matching</span>
+            </label>
+            <div class="space-y-3">
+              <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Appearance</span>
+              <div class="flex flex-wrap gap-4">
+                <label class="form-control flex-1 min-w-40">
+                  <span class="label">
+                    <span class="label-text text-xs text-base-content/60">Text color</span>
+                  </span>
+                  <div class="flex items-center gap-3">
+                    <input id="highlightTextColorInput" class="input input-bordered h-10 w-16" type="color" value="#000000">
+                    <div class="flex items-center gap-2 flex-1">
+                      <input id="highlightTextColorAlphaInput" class="range range-sm flex-1" type="range" min="0" max="100" value="100">
+                      <span id="highlightTextColorAlphaLabel" class="text-xs text-base-content/60 w-10 text-right">100%</span>
+                    </div>
+                  </div>
+                </label>
+                <label class="form-control flex-1 min-w-40">
+                  <span class="label">
+                    <span class="label-text text-xs text-base-content/60">Background color</span>
+                  </span>
+                  <div class="flex items-center gap-3">
+                    <input id="highlightTextBackgroundInput" class="input input-bordered h-10 w-16" type="color" value="#ffff00">
+                    <div class="flex items-center gap-2 flex-1">
+                      <input id="highlightTextBackgroundAlphaInput" class="range range-sm flex-1" type="range" min="0" max="100" value="100">
+                      <span id="highlightTextBackgroundAlphaLabel" class="text-xs text-base-content/60 w-10 text-right">100%</span>
+                    </div>
+                  </div>
+                </label>
+                <div class="form-control">
+                  <span class="label">
+                    <span class="label-text text-xs text-base-content/60">Text styling</span>
+                  </span>
+                  <div class="flex gap-3 mt-[10px]">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="highlightTextBoldInput" class="checkbox checkbox-sm" type="checkbox">
+                      <span class="text-sm font-bold">Bold</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="highlightTextItalicInput" class="checkbox checkbox-sm" type="checkbox">
+                      <span class="text-sm italic">Italic</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="highlightTextUnderlineInput" class="checkbox checkbox-sm" type="checkbox">
+                      <span class="text-sm underline">Underline</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p id="highlightTextFormError" class="text-sm text-error" hidden></p>
+            <div class="flex flex-wrap gap-3">
+              <button id="highlightTextSaveButton" class="btn btn-primary" type="submit">
+                Add rule
+              </button>
+              <button id="highlightTextCancelEditButton" class="btn btn-outline" type="button" hidden>
+                Cancel edit
+              </button>
+            </div>
+          </form>
+          <div class="space-y-3">
+            <div>
+              <h3 class="text-lg font-semibold">Saved rules</h3>
+              <p class="text-sm text-base-content/70">Select a rule to view details or manage it.</p>
+            </div>
+            <div id="highlightTextRulesEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+              No highlight text rules yet. Add one above to start.
+            </div>
+            <div id="highlightTextRulesList" class="space-y-2" role="list"></div>
+          </div>
+          <div id="highlightTextRuleDetails" class="rounded-lg border border-base-300 p-4 space-y-3" hidden>
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-lg font-semibold">Rule details</h3>
+              <div class="flex gap-2">
+                <span id="highlightTextRuleTypeSummary" class="badge badge-outline text-sm"></span>
+                <div class="flex gap-1">
+                  <div id="highlightTextRuleColorPreview" class="w-4 h-4 rounded border border-base-300"></div>
+                  <div id="highlightTextRuleBackgroundPreview" class="w-4 h-4 rounded border border-base-300"></div>
+                </div>
+                <div id="highlightTextRuleStylePreview" class="flex gap-1 text-xs">
+                  <span id="highlightTextRuleBoldPreview" class="hidden font-bold">B</span>
+                  <span id="highlightTextRuleItalicPreview" class="hidden italic">I</span>
+                  <span id="highlightTextRuleUnderlinePreview" class="hidden underline">U</span>
+                </div>
+              </div>
+            </div>
+            <dl class="space-y-2 text-sm">
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Pattern</dt>
+                <dd id="highlightTextRulePatternDetail" class="font-mono break-words text-base-content"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Value</dt>
+                <dd id="highlightTextRuleValueDetail" class="font-mono break-words text-base-content"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Ignore case</dt>
+                <dd id="highlightTextRuleIgnoreCaseDetail" class="text-base-content"></dd>
+              </div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Created</dt>
+                  <dd id="highlightTextRuleCreatedDetail" class="text-base-content"></dd>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Last updated</dt>
+                  <dd id="highlightTextRuleUpdatedDetail" class="text-base-content"></dd>
+                </div>
+              </div>
+            </dl>
           </div>
         </div>
       </section>

@@ -5,6 +5,7 @@ import {
   ensureBookmarkFolderPath,
 } from '../shared/bookmarkFolders.js';
 import { getWhitelistPatterns, getBlacklistPatterns, setPatterns, isValidUrlPattern } from './brightMode.js';
+import { loadRules as loadHighlightTextRules } from './highlightText.js';
 
 /**
  * @typedef {Object} RootFolderSettings
@@ -70,12 +71,29 @@ import { getWhitelistPatterns, getBlacklistPatterns, setPatterns, isValidUrlPatt
  */
 
 /**
+ * @typedef {Object} HighlightTextRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {'whole-phrase' | 'comma-separated' | 'regex'} type
+ * @property {string} value
+ * @property {string} textColor
+ * @property {string} backgroundColor
+ * @property {boolean} bold
+ * @property {boolean} italic
+ * @property {boolean} underline
+ * @property {boolean} ignoreCase
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
  * @property {NotificationPreferences} notificationPreferences
  * @property {AutoReloadRuleSettings[]} autoReloadRules
  * @property {BrightModeSettings} brightModeSettings
+ * @property {HighlightTextRuleSettings[]} highlightTextRules
  */
 
 /**
@@ -85,12 +103,13 @@ import { getWhitelistPatterns, getBlacklistPatterns, setPatterns, isValidUrlPatt
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 4;
+const EXPORT_VERSION = 5;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
+const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
@@ -310,6 +329,95 @@ function normalizeBrightModePatterns(value) {
 }
 
 /**
+ * Normalize highlight text rules from storage or input.
+ * @param {unknown} value
+ * @returns {HighlightTextRuleSettings[]}
+ */
+function normalizeHighlightTextRules(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {HighlightTextRuleSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+    const pattern =
+      typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    if (!pattern) {
+      return;
+    }
+
+    if (!isValidUrlPattern(pattern)) {
+      console.warn('[importExport:highlightText] Ignoring invalid pattern:', pattern);
+      return;
+    }
+
+    const type = raw.type;
+    if (typeof type !== 'string' || !['whole-phrase', 'comma-separated', 'regex'].includes(type)) {
+      console.warn('[importExport:highlightText] Ignoring invalid type:', type);
+      return;
+    }
+
+    const valueText = typeof raw.value === 'string' ? raw.value.trim() : '';
+    if (!valueText) {
+      return;
+    }
+
+    if (type === 'regex') {
+      try {
+        // eslint-disable-next-line no-new
+        new RegExp(valueText);
+      } catch (error) {
+        console.warn('[importExport:highlightText] Ignoring invalid regex:', valueText, error);
+        return;
+      }
+    }
+
+    const textColor = typeof raw.textColor === 'string' ? raw.textColor : '#000000';
+    const backgroundColor = typeof raw.backgroundColor === 'string' ? raw.backgroundColor : '#ffff00';
+    const bold = typeof raw.bold === 'boolean' ? raw.bold : false;
+    const italic = typeof raw.italic === 'boolean' ? raw.italic : false;
+    const underline = typeof raw.underline === 'boolean' ? raw.underline : false;
+    const ignoreCase = typeof raw.ignoreCase === 'boolean' ? raw.ignoreCase : false;
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {HighlightTextRuleSettings} */
+    const normalized = {
+      id,
+      pattern,
+      type: /** @type {'whole-phrase' | 'comma-separated' | 'regex'} */ (type),
+      value: valueText,
+      textColor,
+      backgroundColor,
+      bold,
+      italic,
+      underline,
+      ignoreCase,
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -351,15 +459,16 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[] }>}
  */
 async function readCurrentOptions() {
-  const [rootResp, notifResp, reloadResp, whitelistPatterns, blacklistPatterns] = await Promise.all([
+  const [rootResp, notifResp, reloadResp, whitelistPatterns, blacklistPatterns, highlightTextRules] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
     chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY),
     getWhitelistPatterns(),
     getBlacklistPatterns(),
+    loadHighlightTextRules(),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -406,7 +515,7 @@ async function readCurrentOptions() {
     blacklist: blacklistPatterns,
   };
   
-  return { rootFolder, notifications, autoReloadRules, brightModeSettings };
+  return { rootFolder, notifications, autoReloadRules, brightModeSettings, highlightTextRules };
 }
 
 /**
@@ -434,7 +543,7 @@ function downloadJson(data, filename) {
  */
 async function handleExportClick() {
   try {
-    const { rootFolder, notifications, autoReloadRules, brightModeSettings } = await readCurrentOptions();
+    const { rootFolder, notifications, autoReloadRules, brightModeSettings, highlightTextRules } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
       version: EXPORT_VERSION,
@@ -444,6 +553,7 @@ async function handleExportClick() {
         notificationPreferences: notifications,
         autoReloadRules,
         brightModeSettings,
+        highlightTextRules,
       },
     };
     const now = new Date();
@@ -467,9 +577,10 @@ async function handleExportClick() {
  * @param {NotificationPreferences} notifications
  * @param {AutoReloadRuleSettings[]} autoReloadRules
  * @param {BrightModeSettings} brightModeSettings
+ * @param {HighlightTextRuleSettings[]} highlightTextRules
  * @returns {Promise<void>}
  */
-async function applyImportedOptions(rootFolder, notifications, autoReloadRules, brightModeSettings) {
+async function applyImportedOptions(rootFolder, notifications, autoReloadRules, brightModeSettings, highlightTextRules) {
   let parentFolderId = '';
   const desiredPath =
     typeof rootFolder?.parentFolderPath === 'string'
@@ -509,6 +620,7 @@ async function applyImportedOptions(rootFolder, notifications, autoReloadRules, 
   };
   const sanitizedNotifications = normalizePreferences(notifications);
   const sanitizedRules = normalizeAutoReloadRules(autoReloadRules);
+  const sanitizedHighlightTextRules = normalizeHighlightTextRules(highlightTextRules || []);
   
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
@@ -537,6 +649,7 @@ async function applyImportedOptions(rootFolder, notifications, autoReloadRules, 
     [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
     [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
     [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
+    [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
   });
 }
 
@@ -572,6 +685,9 @@ async function handleFileChosen() {
     const autoReloadRules = /** @type {AutoReloadRuleSettings[]} */ (
       data.autoReloadRules
     );
+    const highlightTextRules = /** @type {HighlightTextRuleSettings[]} */ (
+      data.highlightTextRules || []
+    );
     
     // Handle bright mode settings - support both old and new format
     let brightModeSettings = data.brightModeSettings;
@@ -584,7 +700,7 @@ async function handleFileChosen() {
     }
     brightModeSettings = brightModeSettings || { whitelist: [], blacklist: [] };
 
-    await applyImportedOptions(root, notifications, autoReloadRules, brightModeSettings);
+    await applyImportedOptions(root, notifications, autoReloadRules, brightModeSettings, highlightTextRules);
     showToast('Options imported successfully.', 'success');
   } catch (error) {
     console.warn('[importExport] Import failed:', error);
