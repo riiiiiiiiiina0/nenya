@@ -20,6 +20,67 @@ if (stateParam) {
 const urls = Array.isArray(state.urls) ? state.urls : [];
 const iframeContainer = document.getElementById('iframe-container');
 
+// Track current theme (light or dark)
+/** @type {'light' | 'dark'} */
+let currentTheme = 'light';
+
+/**
+ * Get the current theme based on system preference
+ * @returns {'light' | 'dark'}
+ */
+function getCurrentTheme() {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  return prefersDark.matches ? 'dark' : 'light';
+}
+
+/**
+ * Apply color scheme to an iframe
+ * @param {HTMLIFrameElement} iframe
+ * @param {'light' | 'dark'} theme
+ */
+function applyThemeToIframe(iframe, theme) {
+  iframe.style.colorScheme = theme;
+}
+
+/**
+ * Apply theme to all iframes
+ * @param {'light' | 'dark'} theme
+ */
+function applyThemeToAllIframes(theme) {
+  const iframes = document.querySelectorAll('iframe');
+  iframes.forEach((iframe) => {
+    applyThemeToIframe(/** @type {HTMLIFrameElement} */ (iframe), theme);
+  });
+  currentTheme = theme;
+}
+
+/**
+ * Initialize theme monitoring
+ */
+function initializeThemeMonitoring() {
+  // Set initial theme
+  currentTheme = getCurrentTheme();
+  applyThemeToAllIframes(currentTheme);
+
+  // Listen for OS theme changes
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+  
+  const handleThemeChange = (event) => {
+    const newTheme = event.matches ? 'dark' : 'light';
+    console.log('[split] Theme changed to:', newTheme);
+    applyThemeToAllIframes(newTheme);
+  };
+
+  if (typeof prefersDark.addEventListener === 'function') {
+    prefersDark.addEventListener('change', handleThemeChange);
+  } else if (typeof prefersDark.addListener === 'function') {
+    prefersDark.addListener(handleThemeChange);
+  }
+}
+
+// Initialize theme monitoring
+initializeThemeMonitoring();
+
 // Store iframe data for tracking
 /** @type {Map<string, {url: string, title: string, urlValue: HTMLElement, loaded: boolean, wrapper: HTMLElement}>} */
 const iframeData = new Map();
@@ -64,6 +125,9 @@ if (!iframeContainer) {
       'allow-same-origin allow-scripts allow-forms allow-popups allow-downloads',
     );
     iframe.setAttribute('allow', 'fullscreen');
+    
+    // Apply current theme to iframe
+    applyThemeToIframe(iframe, currentTheme);
 
     // Inject monitoring script when iframe loads
     iframe.addEventListener('load', async () => {
@@ -1094,6 +1158,9 @@ function createIframeWrapper(url, order) {
     'allow-same-origin allow-scripts allow-forms allow-popups allow-downloads',
   );
   iframe.setAttribute('allow', 'fullscreen');
+  
+  // Apply current theme to iframe
+  applyThemeToIframe(iframe, currentTheme);
 
   // Inject monitoring script when iframe loads
   iframe.addEventListener('load', async () => {
