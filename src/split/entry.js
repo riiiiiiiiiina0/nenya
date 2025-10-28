@@ -131,11 +131,7 @@ if (!iframeContainer) {
 
     // Inject monitoring script when iframe loads
     iframe.addEventListener('load', async () => {
-      const success = await injectMonitoringScript(iframe);
-      if (!success) {
-        // For cross-origin iframes, request background script to inject
-        requestBackgroundInjection(iframe);
-      }
+      requestBackgroundInjection(iframe);
       
       // After iframe loads, wait briefly for content script to send message
       // If no message arrives, the iframe is likely blocked
@@ -757,154 +753,6 @@ function showIframeError(iframeWrapper, iframe, url, message) {
 }
 
 /**
- * Inject monitoring script into an iframe
- * @param {HTMLIFrameElement} iframe
- * @returns {Promise<boolean>} True if injection was successful
- */
-async function injectMonitoringScript(iframe) {
-  try {
-    const iframeWindow = iframe.contentWindow;
-    const iframeDocument = iframe.contentDocument;
-
-    if (!iframeWindow || !iframeDocument) {
-      console.warn('Cannot access iframe content:', iframe.src);
-      return false;
-    }
-
-    // Create and inject the monitoring script
-    const script = iframeDocument.createElement('script');
-    script.textContent = `
-      (function() {
-        'use strict';
-        
-        // Prevent double-injection
-        if (window['__nenyaIframeMonitorInstalled']) {
-          return;
-        }
-        window['__nenyaIframeMonitorInstalled'] = true;
-        
-        let lastUrl = window.location.href;
-        let lastTitle = '';
-        
-        function sendUpdate() {
-          const currentUrl = window.location.href;
-          // Get title, but prefer a non-empty title over falling back to URL
-          let currentTitle = document.title;
-          if (!currentTitle || currentTitle.trim() === '') {
-            // If title is empty, try to extract from meta tags
-            const ogTitle = document.querySelector('meta[property="og:title"]');
-            if (ogTitle && ogTitle instanceof HTMLMetaElement) {
-              currentTitle = ogTitle.content;
-            } else {
-              // Only use URL as last resort
-              currentTitle = currentUrl;
-            }
-          }
-          
-          if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
-            lastUrl = currentUrl;
-            lastTitle = currentTitle;
-            console.log('sendUpdate', currentUrl, currentTitle);
-            
-            window.parent.postMessage({
-              type: 'iframe-update',
-              url: currentUrl,
-              title: currentTitle,
-              frameName: window.name
-            }, '*');
-          }
-        }
-        
-        function debounce(func, wait) {
-          let timeout;
-          return function executedFunction(...args) {
-            const later = () => {
-              clearTimeout(timeout);
-              func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-          };
-        }
-        
-        const debouncedUpdate = debounce(sendUpdate, 100);
-        
-        // Monitor page load
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', sendUpdate);
-        } else {
-          sendUpdate();
-        }
-        
-        window.addEventListener('load', sendUpdate);
-        
-        // Monitor SPA navigation
-        const originalPushState = history.pushState;
-        const originalReplaceState = history.replaceState;
-        
-        history.pushState = function(...args) {
-          originalPushState.apply(this, args);
-          sendUpdate();
-        };
-        
-        history.replaceState = function(...args) {
-          originalReplaceState.apply(this, args);
-          sendUpdate();
-        };
-        
-        window.addEventListener('popstate', sendUpdate);
-        window.addEventListener('hashchange', sendUpdate);
-        
-        // Monitor DOM mutations for title changes
-        const titleObserver = new MutationObserver(() => {
-          const newTitle = document.title;
-          if (newTitle !== lastTitle) {
-            debouncedUpdate();
-          }
-        });
-        
-        titleObserver.observe(document.documentElement, {
-          childList: true,
-          characterData: true,
-          subtree: true
-        });
-        
-        // Send initial update with retries to catch the title as it loads
-        let retryCount = 0;
-        const maxRetries = 5;
-        const retryDelays = [50, 200, 500, 1000, 2000];
-        
-        function sendInitialUpdate() {
-          const hadTitle = document.title && document.title.trim() !== '';
-          sendUpdate();
-          
-          // If we still don't have a title and haven't exhausted retries, try again
-          if (!hadTitle && retryCount < maxRetries) {
-            setTimeout(sendInitialUpdate, retryDelays[retryCount]);
-            retryCount++;
-          }
-        }
-        
-        // Start initial update sequence
-        setTimeout(sendInitialUpdate, 50);
-      })();
-    `;
-
-    iframeDocument.head.appendChild(script);
-    console.log('Monitoring script injected into iframe:', iframe.name);
-    return true;
-  } catch (err) {
-    // This will happen for cross-origin iframes - that's expected
-    console.log(
-      'Cannot inject monitoring script (cross-origin):',
-      iframe.src,
-      err.message,
-    );
-    return false;
-  }
-}
-
-/**
  * Request background script to inject monitoring code into cross-origin iframe
  * @param {HTMLIFrameElement} iframe
  */
@@ -1185,11 +1033,7 @@ function createIframeWrapper(url, order) {
 
   // Inject monitoring script when iframe loads
   iframe.addEventListener('load', async () => {
-    const success = await injectMonitoringScript(iframe);
-    if (!success) {
-      // For cross-origin iframes, request background script to inject
-      requestBackgroundInjection(iframe);
-    }
+    requestBackgroundInjection(iframe);
     
     // After iframe loads, wait briefly for content script to send message
     // If no message arrives, the iframe is likely blocked

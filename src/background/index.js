@@ -903,15 +903,13 @@ async function handleSplitTabsContextMenu(tab) {
       windowId: tab.windowId,
     });
 
-    // Close the original tabs if we have more than one
-    if (httpTabs.length > 1) {
-      const tabIdsToClose = httpTabs
-        .map((t) => t.id)
-        .filter((id) => typeof id === 'number');
+    // Close the original tab(s) after creating split page
+    const tabIdsToClose = httpTabs
+      .map((t) => t.id)
+      .filter((id) => typeof id === 'number');
 
-      if (tabIdsToClose.length > 0) {
-        await chrome.tabs.remove(tabIdsToClose);
-      }
+    if (tabIdsToClose.length > 0) {
+      await chrome.tabs.remove(tabIdsToClose);
     }
   } catch (error) {
     console.error('Failed to split tabs:', error);
