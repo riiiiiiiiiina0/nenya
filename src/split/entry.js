@@ -84,6 +84,44 @@ if (!iframeContainer) {
       iframeWrapper.replaceChild(errorDiv, iframe);
     });
 
+    // Add control bar at the top
+    const controlBar = document.createElement('div');
+    controlBar.className =
+      'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center z-50';
+
+    // Restore as tab button
+    const restoreButton = document.createElement('button');
+    restoreButton.className =
+      'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
+    restoreButton.innerHTML = '↗️';
+    restoreButton.title = 'Restore as browser tab';
+    restoreButton.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      // Get the current URL from iframe data
+      const data = iframeData.get(iframe.name);
+      const currentUrl = data ? data.url : iframe.src;
+
+      // Open the URL in a new tab
+      await chrome.tabs.create({ url: currentUrl });
+
+      // Remove this iframe
+      removeIframeWrapper(iframeWrapper);
+    });
+
+    // Delete button
+    const deleteButton = document.createElement('button');
+    deleteButton.className =
+      'bg-red-500/70 hover:bg-red-600/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
+    deleteButton.innerHTML = '🗑️';
+    deleteButton.title = 'Delete from split page';
+    deleteButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeIframeWrapper(iframeWrapper);
+    });
+
+    controlBar.appendChild(restoreButton);
+    controlBar.appendChild(deleteButton);
+
     // Add URL display at the bottom
     const urlDisplay = document.createElement('div');
     urlDisplay.className =
@@ -133,6 +171,7 @@ if (!iframeContainer) {
     });
 
     iframeWrapper.appendChild(iframe);
+    iframeWrapper.appendChild(controlBar);
     iframeWrapper.appendChild(urlDisplay);
     iframeContainer.appendChild(iframeWrapper);
 
@@ -195,7 +234,7 @@ function setupResizing() {
       currentIndex = index;
       startX = e.clientX;
 
-      // Get the adjacent wrappers
+      // Get all wrappers sorted by order
       const wrappers = Array.from(
         document.querySelectorAll('.iframe-wrapper'),
       ).sort(
@@ -204,13 +243,20 @@ function setupResizing() {
           parseInt(/** @type {HTMLElement} */ (b).style.order),
       );
 
-      const leftWrapper = wrappers[index];
-      const rightWrapper = wrappers[index + 1];
+      // Split wrappers into left and right groups
+      const leftWrappers = wrappers.slice(0, index + 1);
+      const rightWrappers = wrappers.slice(index + 1);
 
-      if (leftWrapper && rightWrapper) {
-        startLeftWidth = leftWrapper.getBoundingClientRect().width;
-        startRightWidth = rightWrapper.getBoundingClientRect().width;
-      }
+      // Calculate total width of left and right groups
+      startLeftWidth = 0;
+      leftWrappers.forEach((wrapper) => {
+        startLeftWidth += wrapper.getBoundingClientRect().width;
+      });
+
+      startRightWidth = 0;
+      rightWrappers.forEach((wrapper) => {
+        startRightWidth += wrapper.getBoundingClientRect().width;
+      });
 
       // Visual feedback
       dividerEl.style.backgroundColor = 'rgba(59, 130, 246, 0.8)';
@@ -234,7 +280,7 @@ function setupResizing() {
     const deltaX = e.clientX - startX;
     const containerWidth = iframeContainer?.clientWidth || 1;
 
-    // Get the adjacent wrappers
+    // Get all wrappers sorted by order
     const wrappers = Array.from(
       document.querySelectorAll('.iframe-wrapper'),
     ).sort(
@@ -243,12 +289,11 @@ function setupResizing() {
         parseInt(/** @type {HTMLElement} */ (b).style.order),
     );
 
-    const leftWrapper = /** @type {HTMLElement} */ (wrappers[currentIndex]);
-    const rightWrapper = /** @type {HTMLElement} */ (
-      wrappers[currentIndex + 1]
-    );
+    // Split wrappers into left and right groups
+    const leftWrappers = wrappers.slice(0, currentIndex + 1);
+    const rightWrappers = wrappers.slice(currentIndex + 1);
 
-    if (leftWrapper && rightWrapper) {
+    if (leftWrappers.length > 0 && rightWrappers.length > 0) {
       // Calculate new widths based on initial widths + delta
       const newLeftWidth = startLeftWidth + deltaX;
       const newRightWidth = startRightWidth - deltaX;
@@ -262,9 +307,21 @@ function setupResizing() {
       leftPercent = Math.max(10, Math.min(90, leftPercent));
       rightPercent = 100 - leftPercent;
 
-      // Apply the new flex values
-      leftWrapper.style.flex = `0 0 ${leftPercent}%`;
-      rightWrapper.style.flex = `0 0 ${rightPercent}%`;
+      // Distribute left space equally among left iframes
+      const leftPercentPerIframe = leftPercent / leftWrappers.length;
+      leftWrappers.forEach((wrapper) => {
+        /** @type {HTMLElement} */ (
+          wrapper
+        ).style.flex = `0 0 ${leftPercentPerIframe}%`;
+      });
+
+      // Distribute right space equally among right iframes
+      const rightPercentPerIframe = rightPercent / rightWrappers.length;
+      rightWrappers.forEach((wrapper) => {
+        /** @type {HTMLElement} */ (
+          wrapper
+        ).style.flex = `0 0 ${rightPercentPerIframe}%`;
+      });
     }
   });
 
@@ -830,6 +887,44 @@ function createIframeWrapper(url, order) {
     iframeWrapper.replaceChild(errorDiv, iframe);
   });
 
+  // Add control bar at the top
+  const controlBar = document.createElement('div');
+  controlBar.className =
+    'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center z-50';
+
+  // Restore as tab button
+  const restoreButton = document.createElement('button');
+  restoreButton.className =
+    'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
+  restoreButton.innerHTML = '↗️';
+  restoreButton.title = 'Restore as browser tab';
+  restoreButton.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    // Get the current URL from iframe data
+    const data = iframeData.get(iframe.name);
+    const currentUrl = data ? data.url : iframe.src;
+
+    // Open the URL in a new tab
+    await chrome.tabs.create({ url: currentUrl });
+
+    // Remove this iframe
+    removeIframeWrapper(iframeWrapper);
+  });
+
+  // Delete button
+  const deleteButton = document.createElement('button');
+  deleteButton.className =
+    'bg-red-500/70 hover:bg-red-600/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
+  deleteButton.innerHTML = '🗑️';
+  deleteButton.title = 'Delete from split page';
+  deleteButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    removeIframeWrapper(iframeWrapper);
+  });
+
+  controlBar.appendChild(restoreButton);
+  controlBar.appendChild(deleteButton);
+
   // Add URL display at the bottom
   const urlDisplay = document.createElement('div');
   urlDisplay.className =
@@ -879,6 +974,7 @@ function createIframeWrapper(url, order) {
   });
 
   iframeWrapper.appendChild(iframe);
+  iframeWrapper.appendChild(controlBar);
   iframeWrapper.appendChild(urlDisplay);
 
   return iframeWrapper;
@@ -892,4 +988,70 @@ function rebalanceIframeSizes() {
   wrappers.forEach((wrapper) => {
     /** @type {HTMLElement} */ (wrapper).style.flex = '1';
   });
+}
+
+/**
+ * Remove an iframe wrapper and clean up related elements
+ * @param {HTMLElement} iframeWrapper - The wrapper element to remove
+ */
+function removeIframeWrapper(iframeWrapper) {
+  if (!iframeContainer) return;
+
+  const iframe = iframeWrapper.querySelector('iframe');
+  if (iframe) {
+    // Clean up iframe data
+    const iframeName = /** @type {HTMLIFrameElement} */ (iframe).name;
+    iframeData.delete(iframeName);
+
+    // Clear active iframe if it's the one being removed
+    if (activeIframeName === iframeName) {
+      activeIframeName = null;
+      updatePageTitle();
+    }
+  }
+
+  const wrapperOrder = parseInt(iframeWrapper.style.order);
+
+  // Find and remove the adjacent divider
+  // Divider could be before (order - 1) or after (order + 1)
+  const allElements = Array.from(iframeContainer.children);
+  const adjacentDivider = allElements.find((el) => {
+    const htmlEl = /** @type {HTMLElement} */ (el);
+    if (!htmlEl.classList.contains('iframe-divider')) return false;
+    const dividerOrder = parseInt(htmlEl.style.order);
+    return (
+      dividerOrder === wrapperOrder - 1 || dividerOrder === wrapperOrder + 1
+    );
+  });
+
+  // Remove the wrapper
+  iframeWrapper.remove();
+
+  // Remove the adjacent divider
+  if (adjacentDivider) {
+    adjacentDivider.remove();
+  }
+
+  // Check if there are any iframes left
+  const remainingWrappers = document.querySelectorAll('.iframe-wrapper');
+  if (remainingWrappers.length === 0) {
+    // No iframes left, close the split page tab
+    chrome.tabs.getCurrent((tab) => {
+      if (tab && tab.id) {
+        chrome.tabs.remove(tab.id);
+      }
+    });
+  } else {
+    // Rebalance remaining iframes
+    rebalanceIframeSizes();
+
+    // Update URL state parameter
+    updateUrlStateParameter();
+
+    // Update plus button visibility
+    updatePlusButtonVisibility();
+
+    // Re-setup resizing
+    setupResizing();
+  }
 }
