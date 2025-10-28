@@ -149,7 +149,10 @@ chrome.runtime.onStartup.addListener(() => {
  * @returns {void}
  */
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'activate-left-tab' || command === 'activate-right-tab') {
+  if (
+    command === 'tabs-activate-left-tab' ||
+    command === 'tabs-activate-right-tab'
+  ) {
     void (async () => {
       try {
         const window = await chrome.windows.getCurrent({ populate: true });
@@ -162,11 +165,11 @@ chrome.commands.onCommand.addListener((command) => {
         }
 
         let newIndex;
-        if (command === 'activate-left-tab') {
+        if (command === 'tabs-activate-left-tab') {
           newIndex =
             (activeTabIndex - 1 + window.tabs.length) % window.tabs.length;
         } else {
-          // 'activate-right-tab'
+          // 'tabs-activate-right-tab'
           newIndex = (activeTabIndex + 1) % window.tabs.length;
         }
 
@@ -180,14 +183,14 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
-  if (command === 'pull-raindrop') {
+  if (command === 'bookmarks-pull-raindrop') {
     void runMirrorPull('manual').catch((error) => {
       console.warn('[commands] Pull failed:', error);
     });
     return;
   }
 
-  if (command === 'save-to-unsorted') {
+  if (command === 'bookmarks-save-to-unsorted') {
     void (async () => {
       try {
         /** @type {chrome.tabs.Tab[]} */
@@ -224,7 +227,7 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'save-project') {
+  if (command === 'bookmarks-save-project') {
     void (async () => {
       try {
         /** @type {chrome.tabs.Tab[]} */
@@ -331,7 +334,7 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'rename-tab') {
+  if (command === 'bookmarks-rename-tab') {
     void (async () => {
       try {
         const tabs = await chrome.tabs.query({
@@ -420,7 +423,7 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'quit-pip') {
+  if (command === 'pip-quit') {
     void (async () => {
       try {
         const { pipTabId } = await chrome.storage.local.get('pipTabId');
@@ -452,6 +455,57 @@ chrome.commands.onCommand.addListener((command) => {
     void handleClipboardCommand(command).catch((error) => {
       console.warn('[commands] Clipboard command failed:', error);
     });
+    return;
+  }
+
+  if (command === 'split-screen-toggle') {
+    void (async () => {
+      try {
+        const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+
+        // Get all highlighted tabs
+        const highlightedTabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
+
+        // Check if any highlighted tab is a split.html page
+        const existingSplitTab = highlightedTabs.find(
+          (tab) => tab.url && tab.url.startsWith(splitBaseUrl),
+        );
+
+        if (existingSplitTab && highlightedTabs.length > 1) {
+          // If there are multiple highlighted tabs and one is split.html, activate it
+          if (existingSplitTab.id) {
+            await chrome.tabs.update(existingSplitTab.id, { active: true });
+          }
+          return;
+        }
+
+        // Get current active tab
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const currentTab = tabs && tabs[0];
+        if (!currentTab) {
+          return;
+        }
+
+        const isSplitPage =
+          currentTab.url && currentTab.url.startsWith(splitBaseUrl);
+
+        if (isSplitPage) {
+          // Current tab is split.html - unsplit it
+          await handleUnsplitTabsContextMenu(currentTab);
+        } else {
+          // Current tab is NOT split.html - create split page
+          await handleSplitTabsContextMenu(currentTab);
+        }
+      } catch (error) {
+        console.warn('[commands] Toggle split screen failed:', error);
+      }
+    })();
     return;
   }
 });
@@ -597,6 +651,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return handleRestoreProjectTabsMessage(message, sendResponse);
   }
 
+  if (message.action === 'inject-iframe-monitor') {
+    // Handle iframe monitoring script injection for cross-origin frames
+    return handleIframeMonitorInjection(message, sender, sendResponse);
+  }
+
   if (message.action === 'unsplit-tabs') {
     // Handle keyboard shortcut for unsplitting
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -635,6 +694,169 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+/**
+ * Handle iframe monitor injection request from split page
+ * @param {object} message - The message object
+ * @param {chrome.runtime.MessageSender} sender - The message sender
+ * @param {Function} sendResponse - Response callback
+ * @returns {boolean} True to indicate async response
+ */
+function handleIframeMonitorInjection(message, sender, sendResponse) {
+  const { frameName, url } = message;
+
+  if (!sender.tab || !sender.tab.id) {
+    sendResponse({ success: false, error: 'No tab ID' });
+    return false;
+  }
+
+  const tabId = sender.tab.id;
+
+  // Find the frame by matching the URL
+  // We'll inject the script into all frames and let it filter by name
+  chrome.scripting
+    .executeScript({
+      target: { tabId, allFrames: true },
+      func: (targetFrameName) => {
+        // Only run in the target iframe
+        if (window.name !== targetFrameName) {
+          return;
+        }
+
+        // This is the monitoring script (inline version)
+        (function () {
+          'use strict';
+
+          // Prevent double-injection
+          if (window['__nenyaIframeMonitorInstalled']) {
+            return;
+          }
+          window['__nenyaIframeMonitorInstalled'] = true;
+
+          let lastUrl = window.location.href;
+          let lastTitle = '';
+
+          function sendUpdate() {
+            const currentUrl = window.location.href;
+            // Get title, but prefer a non-empty title over falling back to URL
+            let currentTitle = document.title;
+            if (!currentTitle || currentTitle.trim() === '') {
+              // If title is empty, try to extract from meta tags
+              const ogTitle = document.querySelector(
+                'meta[property="og:title"]',
+              );
+              if (ogTitle && ogTitle instanceof HTMLMetaElement) {
+                currentTitle = ogTitle.content;
+              } else {
+                // Only use URL as last resort
+                currentTitle = currentUrl;
+              }
+            }
+
+            if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
+              lastUrl = currentUrl;
+              lastTitle = currentTitle;
+              console.log('sendUpdate', currentUrl, currentTitle);
+
+              window.parent.postMessage(
+                {
+                  type: 'iframe-update',
+                  url: currentUrl,
+                  title: currentTitle,
+                  frameName: window.name,
+                },
+                '*',
+              );
+            }
+          }
+
+          function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+              const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+              };
+              clearTimeout(timeout);
+              timeout = setTimeout(later, wait);
+            };
+          }
+
+          const debouncedUpdate = debounce(sendUpdate, 100);
+
+          // Monitor page load
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', sendUpdate);
+          } else {
+            sendUpdate();
+          }
+
+          window.addEventListener('load', sendUpdate);
+
+          // Monitor SPA navigation
+          const originalPushState = history.pushState;
+          const originalReplaceState = history.replaceState;
+
+          history.pushState = function (...args) {
+            originalPushState.apply(this, args);
+            sendUpdate();
+          };
+
+          history.replaceState = function (...args) {
+            originalReplaceState.apply(this, args);
+            sendUpdate();
+          };
+
+          window.addEventListener('popstate', sendUpdate);
+          window.addEventListener('hashchange', sendUpdate);
+
+          // Monitor DOM mutations for title changes
+          const titleObserver = new MutationObserver(() => {
+            const newTitle = document.title;
+            if (newTitle !== lastTitle) {
+              debouncedUpdate();
+            }
+          });
+
+          titleObserver.observe(document.documentElement, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+          });
+
+          // Send initial update with retries to catch the title as it loads
+          let retryCount = 0;
+          const maxRetries = 5;
+          const retryDelays = [50, 200, 500, 1000, 2000];
+
+          function sendInitialUpdate() {
+            const hadTitle = document.title && document.title.trim() !== '';
+            sendUpdate();
+
+            // If we still don't have a title and haven't exhausted retries, try again
+            if (!hadTitle && retryCount < maxRetries) {
+              setTimeout(sendInitialUpdate, retryDelays[retryCount]);
+              retryCount++;
+            }
+          }
+
+          // Start initial update sequence
+          setTimeout(sendInitialUpdate, 50);
+        })();
+      },
+      args: [frameName],
+    })
+    .then(() => {
+      sendResponse({ success: true });
+    })
+    .catch((error) => {
+      console.error('Failed to inject iframe monitor:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+
+  // Return true to indicate we'll respond asynchronously
+  return true;
+}
 
 /**
  * Handle split tabs context menu click
