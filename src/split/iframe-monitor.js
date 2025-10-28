@@ -24,8 +24,9 @@
 
   /**
    * Send update to parent window
+   * @param {boolean} isInitialLoad - Whether this is the initial load
    */
-  function sendUpdate() {
+  function sendUpdate(isInitialLoad = false) {
     const currentUrl = window.location.href;
     // Get title, but prefer a non-empty title over falling back to URL
     let currentTitle = document.title;
@@ -43,7 +44,7 @@
     }
 
     // Only send if something changed
-    if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
+    if (currentUrl !== lastUrl || currentTitle !== lastTitle || isInitialLoad) {
       console.log('sendUpdate', currentUrl, currentTitle);
       lastUrl = currentUrl;
       lastTitle = currentTitle;
@@ -55,6 +56,7 @@
           url: currentUrl,
           title: currentTitle,
           frameName: window.name,
+          loaded: true, // Indicates successful load
         },
         '*',
       );
@@ -83,14 +85,14 @@
 
   // 1. Monitor page load
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', sendUpdate);
+    document.addEventListener('DOMContentLoaded', () => sendUpdate(true));
   } else {
     // Already loaded
-    sendUpdate();
+    sendUpdate(true);
   }
 
   // Also send on full load
-  window.addEventListener('load', sendUpdate);
+  window.addEventListener('load', () => sendUpdate(true));
 
   // 2. Monitor SPA navigation
   // History API (pushState, replaceState)
@@ -108,10 +110,10 @@
   };
 
   // Handle popstate (back/forward navigation)
-  window.addEventListener('popstate', sendUpdate);
+  window.addEventListener('popstate', () => sendUpdate());
 
   // Handle hash changes
-  window.addEventListener('hashchange', sendUpdate);
+  window.addEventListener('hashchange', () => sendUpdate());
 
   // 3. Monitor DOM mutations for title changes
   const titleObserver = new MutationObserver(() => {
@@ -135,7 +137,7 @@
 
   function sendInitialUpdate() {
     const hadTitle = document.title && document.title.trim() !== '';
-    sendUpdate();
+    sendUpdate(true);
 
     // If we still don't have a title and haven't exhausted retries, try again
     if (!hadTitle && retryCount < maxRetries) {
@@ -146,4 +148,14 @@
 
   // Start initial update sequence
   setTimeout(sendInitialUpdate, 50);
+
+  // Send a quick loaded confirmation immediately
+  window.parent.postMessage(
+    {
+      type: 'iframe-loaded',
+      frameName: window.name,
+      url: window.location.href,
+    },
+    '*',
+  );
 })();

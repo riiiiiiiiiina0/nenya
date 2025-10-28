@@ -21,11 +21,15 @@ const urls = Array.isArray(state.urls) ? state.urls : [];
 const iframeContainer = document.getElementById('iframe-container');
 
 // Store iframe data for tracking
-/** @type {Map<string, {url: string, title: string, urlValue: HTMLElement}>} */
+/** @type {Map<string, {url: string, title: string, urlValue: HTMLElement, loaded: boolean, wrapper: HTMLElement}>} */
 const iframeData = new Map();
 
 // Track currently active (hovered) iframe
 let activeIframeName = null;
+
+// Track iframe load timeouts
+/** @type {Map<string, number>} */
+const iframeLoadTimeouts = new Map();
 
 if (!iframeContainer) {
   console.error('iframe-container not found');
@@ -68,21 +72,20 @@ if (!iframeContainer) {
         // For cross-origin iframes, request background script to inject
         requestBackgroundInjection(iframe);
       }
+      
+      // After iframe loads, wait briefly for content script to send message
+      // If no message arrives, the iframe is likely blocked
+      setupIframeLoadedCheck(iframe.name, iframeWrapper, iframe, url);
     });
 
     // Add error handling for iframe loading
     iframe.addEventListener('error', () => {
-      const errorDiv = document.createElement('div');
-      errorDiv.className =
-        'flex items-center justify-center h-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400';
-      errorDiv.innerHTML = `
-        <div class="text-center p-4">
-          <p class="font-semibold">Failed to load page</p>
-          <p class="text-sm mt-1">${url}</p>
-        </div>
-      `;
-      iframeWrapper.replaceChild(errorDiv, iframe);
+      clearIframeLoadTimeout(iframe.name);
+      showIframeError(iframeWrapper, iframe, url, 'Failed to load page');
     });
+
+    // Set up initial timeout for iframe loading (longer timeout for slow networks)
+    setupIframeLoadTimeout(iframe.name, iframeWrapper, iframe, url, 10000);
 
     // Add control bar at the top
     const controlBar = document.createElement('div');
@@ -189,6 +192,8 @@ if (!iframeContainer) {
       url,
       title: '', // Will be updated when iframe loads
       urlValue,
+      loaded: false,
+      wrapper: iframeWrapper,
     });
 
     // Add hover tracking for title updates
@@ -463,14 +468,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Listen for messages from iframe content scripts
 window.addEventListener('message', (event) => {
   // Validate message type
-  if (event.data && event.data.type === 'iframe-update') {
-    const { frameName, url, title } = event.data;
+  if (!event.data) return;
+
+  // Handle iframe loaded confirmation
+  if (event.data.type === 'iframe-loaded') {
+    const { frameName } = event.data;
+    console.log('[split] Iframe loaded successfully:', frameName);
+    
+    // Clear the timeout since iframe loaded
+    clearIframeLoadTimeout(frameName);
+    
+    // Mark as loaded
+    const data = iframeData.get(frameName);
+    if (data) {
+      data.loaded = true;
+    }
+  }
+  
+  // Handle iframe update
+  if (event.data.type === 'iframe-update') {
+    const { frameName, url, title, loaded } = event.data;
 
     // Update iframe data
     const data = iframeData.get(frameName);
     if (data) {
       data.url = url;
       data.title = title;
+      
+      // Mark as loaded if indicated
+      if (loaded) {
+        data.loaded = true;
+        clearIframeLoadTimeout(frameName);
+      }
 
       // Update URL display
       data.urlValue.textContent = url;
@@ -527,6 +556,119 @@ function updateUrlStateParameter() {
 
   // Update browser URL without reload using replaceState
   window.history.replaceState(null, '', newUrl);
+}
+
+/**
+ * Set up a timeout to detect if iframe fails to load at all
+ * @param {string} frameName - The iframe name
+ * @param {HTMLElement} wrapper - The wrapper element
+ * @param {HTMLIFrameElement} iframe - The iframe element
+ * @param {string} url - The URL being loaded
+ * @param {number} timeoutMs - Timeout in milliseconds
+ */
+function setupIframeLoadTimeout(frameName, wrapper, iframe, url, timeoutMs = 10000) {
+  // Clear any existing timeout
+  clearIframeLoadTimeout(frameName);
+  
+  // Set timeout - if iframe hasn't loaded at all by then, show error
+  const timeoutId = setTimeout(() => {
+    const data = iframeData.get(frameName);
+    if (data && !data.loaded) {
+      console.log('[split] Iframe failed to load within timeout:', url);
+      showIframeError(wrapper, iframe, url, 'Failed to load page');
+    }
+  }, timeoutMs);
+  
+  iframeLoadTimeouts.set(frameName, timeoutId);
+}
+
+/**
+ * After iframe "load" event, check if content script sent a message
+ * If not, the page is likely blocked by security policies
+ * @param {string} frameName - The iframe name
+ * @param {HTMLElement} wrapper - The wrapper element
+ * @param {HTMLIFrameElement} iframe - The iframe element
+ * @param {string} url - The URL being loaded
+ */
+function setupIframeLoadedCheck(frameName, wrapper, iframe, url) {
+  // Clear the initial load timeout since iframe has loaded
+  clearIframeLoadTimeout(frameName);
+  
+  // Now set a short timeout to check if content script sent a message
+  const timeoutId = setTimeout(() => {
+    const data = iframeData.get(frameName);
+    if (data && !data.loaded) {
+      console.log('[split] Iframe loaded but content script did not run - likely blocked:', url);
+      showIframeError(wrapper, iframe, url, 'This site cannot be embedded');
+    }
+  }, 1000); // Only 1 second after load event
+  
+  iframeLoadTimeouts.set(frameName, timeoutId);
+}
+
+/**
+ * Clear the load timeout for an iframe
+ * @param {string} frameName - The iframe name
+ */
+function clearIframeLoadTimeout(frameName) {
+  const timeoutId = iframeLoadTimeouts.get(frameName);
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+    iframeLoadTimeouts.delete(frameName);
+  }
+}
+
+/**
+ * Show an error message when iframe fails to load
+ * @param {HTMLElement} iframeWrapper - The wrapper element
+ * @param {HTMLIFrameElement} iframe - The iframe element
+ * @param {string} url - The URL that failed to load
+ * @param {string} message - Error message to display
+ */
+function showIframeError(iframeWrapper, iframe, url, message) {
+  // Check if error div already exists
+  if (iframeWrapper.querySelector('.iframe-error-message')) {
+    return;
+  }
+
+  const errorDiv = document.createElement('div');
+  errorDiv.className =
+    'iframe-error-message flex flex-col items-center justify-center h-full bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300';
+  errorDiv.innerHTML = `
+    <div class="text-center p-8 max-w-md">
+      <div class="text-6xl mb-4">🔒</div>
+      <p class="font-semibold text-lg mb-2">${message}</p>
+      <p class="text-sm mb-4 opacity-80">Due to browser security policies, some sites (like X.com, Perplexity) cannot be embedded in iframes.</p>
+      <div class="flex gap-2 justify-center">
+        <button class="open-in-tab-btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+          Open in New Tab
+        </button>
+        <button class="remove-frame-btn bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+          Remove
+        </button>
+      </div>
+      <p class="text-xs mt-4 opacity-60">${url}</p>
+    </div>
+  `;
+
+  // Add button handlers
+  const openBtn = errorDiv.querySelector('.open-in-tab-btn');
+  const removeBtn = errorDiv.querySelector('.remove-frame-btn');
+
+  if (openBtn) {
+    openBtn.addEventListener('click', async () => {
+      await chrome.tabs.create({ url });
+      removeIframeWrapper(iframeWrapper);
+    });
+  }
+
+  if (removeBtn) {
+    removeBtn.addEventListener('click', () => {
+      removeIframeWrapper(iframeWrapper);
+    });
+  }
+
+  iframeWrapper.replaceChild(errorDiv, iframe);
 }
 
 /**
@@ -960,21 +1102,20 @@ function createIframeWrapper(url, order) {
       // For cross-origin iframes, request background script to inject
       requestBackgroundInjection(iframe);
     }
+    
+    // After iframe loads, wait briefly for content script to send message
+    // If no message arrives, the iframe is likely blocked
+    setupIframeLoadedCheck(iframe.name, iframeWrapper, iframe, url);
   });
 
   // Add error handling for iframe loading
   iframe.addEventListener('error', () => {
-    const errorDiv = document.createElement('div');
-    errorDiv.className =
-      'flex items-center justify-center h-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400';
-    errorDiv.innerHTML = `
-      <div class="text-center p-4">
-        <p class="font-semibold">Failed to load page</p>
-        <p class="text-sm mt-1">${url}</p>
-      </div>
-    `;
-    iframeWrapper.replaceChild(errorDiv, iframe);
+    clearIframeLoadTimeout(iframe.name);
+    showIframeError(iframeWrapper, iframe, url, 'Failed to load page');
   });
+
+  // Set up initial timeout for iframe loading (longer timeout for slow networks)
+  setupIframeLoadTimeout(iframe.name, iframeWrapper, iframe, url, 10000);
 
   // Add control bar at the top
   const controlBar = document.createElement('div');
@@ -1081,6 +1222,8 @@ function createIframeWrapper(url, order) {
     url,
     title: '', // Will be updated when iframe loads
     urlValue,
+    loaded: false,
+    wrapper: iframeWrapper,
   });
 
   // Add hover tracking for title updates
@@ -1145,6 +1288,11 @@ function removeIframeWrapper(iframeWrapper) {
   if (iframe) {
     // Clean up iframe data
     const iframeName = /** @type {HTMLIFrameElement} */ (iframe).name;
+    
+    // Clear any pending timeout
+    clearIframeLoadTimeout(iframeName);
+    
+    // Remove from data tracking
     iframeData.delete(iframeName);
 
     // Clear active iframe if it's the one being removed
