@@ -154,74 +154,95 @@ if (!iframeContainer) {
     // Add control bar at the top
     const controlBar = document.createElement('div');
     controlBar.className =
-      'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center z-50';
+      'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-50';
 
-    // Move left button
-    const moveLeftButton = document.createElement('button');
-    moveLeftButton.className =
-      'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
-    moveLeftButton.innerHTML = '◀️';
-    moveLeftButton.title = 'Move left';
-    moveLeftButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      swapIframeWithNeighbor(iframeWrapper, 'left');
+    const buttonsWrapper = document.createElement('div');
+    buttonsWrapper.className = 'flex flex-row gap-2 items-center justify-center bg-black/50 backdrop-blur-sm rounded-full p-1';
+
+    /**
+     * Create a control bar button for an iframe wrapper
+     * @param {Object} opts
+     * @param {string} opts.icon - Button innerHTML (emoji or svg)
+     * @param {string} opts.title - Tooltip for the button
+     * @param {string} [opts.className] - Additional classes for styling
+     * @param {(e: MouseEvent) => void | Promise<void>} opts.onClick - Click handler function
+     * @returns {{ btn: HTMLButtonElement, tooltip: HTMLDivElement }}
+     */
+    function createControlButton({ icon, title, className = '', onClick }) {
+      const btn = document.createElement('button');
+      btn.className =
+        (className ? className : '') +
+        ' size-5 p-1 flex items-center justify-center rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
+      btn.innerHTML = icon;
+      btn.addEventListener('click', onClick);
+
+      const tooltip = document.createElement('div');
+      tooltip.classList = 'tooltip tooltip-bottom';
+      tooltip.setAttribute('data-tip', title);
+      tooltip.appendChild(btn);
+
+      return { btn, tooltip };
+    }
+
+    const moveLeftButton = createControlButton({
+      icon: '◀️',
+      title: 'Move left',
+      onClick: (e) => {
+        e.stopPropagation();
+        swapIframeWithNeighbor(iframeWrapper, 'left');
+      },
     });
 
-    // Move right button
-    const moveRightButton = document.createElement('button');
-    moveRightButton.className =
-      'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
-    moveRightButton.innerHTML = '▶️';
-    moveRightButton.title = 'Move right';
-    moveRightButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      swapIframeWithNeighbor(iframeWrapper, 'right');
+    const moveRightButton = createControlButton({
+      icon: '▶️',
+      title: 'Move right',
+      onClick: (e) => {
+        e.stopPropagation();
+        swapIframeWithNeighbor(iframeWrapper, 'right');
+      },
     });
 
-    // Restore as tab button
-    const restoreButton = document.createElement('button');
-    restoreButton.className =
-      'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
-    restoreButton.innerHTML = '↗️';
-    restoreButton.title = 'Restore as browser tab';
-    restoreButton.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      // Get the current URL from iframe data
-      const data = iframeData.get(iframe.name);
-      const currentUrl = data ? data.url : iframe.src;
-
-      // Open the URL in a new tab
-      await chrome.tabs.create({ url: currentUrl });
-
-      // Remove this iframe
-      removeIframeWrapper(iframeWrapper);
+    const restoreButton = createControlButton({
+      icon: '↗️',
+      title: 'Restore as browser tab',
+      onClick: async (e) => {
+        e.stopPropagation();
+        // Get the current URL from iframe data
+        const data = iframeData.get(iframe.name);
+        const currentUrl = data ? data.url : iframe.src;
+        // Open the URL in a new tab
+        await chrome.tabs.create({ url: currentUrl });
+        // Remove this iframe
+        removeIframeWrapper(iframeWrapper);
+      },
     });
 
-    // Delete button
-    const deleteButton = document.createElement('button');
-    deleteButton.className =
-      'bg-red-500/70 hover:bg-red-600/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
-    deleteButton.innerHTML = '🗑️';
-    deleteButton.title = 'Delete from split page';
-    deleteButton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      removeIframeWrapper(iframeWrapper);
+    const deleteButton = createControlButton({
+      icon: '🗑️',
+      title: 'Delete from split page',
+      className:
+        'bg-red-500/70 hover:bg-red-600/90 text-white',
+      onClick: (e) => {
+        e.stopPropagation();
+        removeIframeWrapper(iframeWrapper);
+      },
     });
 
     // Update button states on hover to reflect current position
     iframeWrapper.addEventListener('mouseenter', () => {
-      updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+      updateMoveButtonStates(iframeWrapper, moveLeftButton.btn, moveRightButton.btn);
     });
 
-    controlBar.appendChild(moveLeftButton);
-    controlBar.appendChild(moveRightButton);
-    controlBar.appendChild(restoreButton);
-    controlBar.appendChild(deleteButton);
+    controlBar.appendChild(buttonsWrapper);
+    buttonsWrapper.appendChild(moveLeftButton.tooltip);
+    buttonsWrapper.appendChild(moveRightButton.tooltip);
+    buttonsWrapper.appendChild(restoreButton.tooltip);
+    buttonsWrapper.appendChild(deleteButton.tooltip);
 
     // Set initial button states
     // Use setTimeout to ensure all iframes are in the DOM first
     setTimeout(() => {
-      updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+      updateMoveButtonStates(iframeWrapper, moveLeftButton.btn, moveRightButton.btn);
     }, 0);
 
     // Add URL display at the bottom
