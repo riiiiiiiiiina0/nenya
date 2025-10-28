@@ -122,7 +122,7 @@ if (!iframeContainer) {
     iframe.className = 'w-full h-full border-0';
     iframe.setAttribute(
       'sandbox',
-      'allow-same-origin allow-scripts allow-forms allow-popups allow-downloads',
+      'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads',
     );
     iframe.setAttribute('allow', 'fullscreen');
     
@@ -745,7 +745,7 @@ function showIframeError(iframeWrapper, iframe, url, message) {
 
   if (removeBtn) {
     removeBtn.addEventListener('click', () => {
-      removeIframeWrapper(iframeWrapper);
+      removeIframeWrapper(iframeWrapper); 
     });
   }
 
@@ -1024,7 +1024,7 @@ function createIframeWrapper(url, order) {
   iframe.className = 'w-full h-full border-0';
   iframe.setAttribute(
     'sandbox',
-    'allow-same-origin allow-scripts allow-forms allow-popups allow-downloads',
+    'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads',
   );
   iframe.setAttribute('allow', 'fullscreen');
   
