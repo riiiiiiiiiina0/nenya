@@ -47,6 +47,22 @@
     .iframe-divider:active {
       background-color: rgba(59, 130, 246, 0.8) !important;
     }
+
+    /* Show plus button on divider hover */
+    .iframe-divider:hover .divider-plus-btn {
+      opacity: 1 !important;
+    }
+
+    /* Edge plus button styles */
+    .edge-plus-btn {
+      pointer-events: auto;
+    }
+
+    /* Ensure buttons are above iframes */
+    .divider-plus-btn,
+    .edge-plus-btn {
+      z-index: 100;
+    }
   </style>
 </head>
 

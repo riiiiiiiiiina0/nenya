@@ -2,6 +2,8 @@
  * Split screen entry point - handles URL parsing and iframe creation
  */
 
+import { showTabPicker } from './tab-picker.js';
+
 // Parse URL state from query parameters
 const urlParams = new URLSearchParams(window.location.search);
 const stateParam = urlParams.get('state');
@@ -142,12 +144,22 @@ if (!iframeContainer) {
       divider.style.order = String(index * 2 + 1);
       divider.style.width = '4px';
       divider.style.flexShrink = '0';
+
+      // Add + button to divider
+      addPlusButtonToDivider(divider);
+
       iframeContainer.appendChild(divider);
     }
   });
 
   // Set up basic resizing functionality
   setupResizing();
+
+  // Add edge plus buttons
+  addEdgePlusButtons();
+
+  // Update plus button visibility based on iframe count
+  updatePlusButtonVisibility();
 }
 
 /**
@@ -543,4 +555,341 @@ function requestBackgroundInjection(iframe) {
       // If background injection fails, content script will handle it
     },
   );
+}
+
+/**
+ * Add a + button to a divider
+ * @param {HTMLElement} divider
+ */
+function addPlusButtonToDivider(divider) {
+  const plusButton = document.createElement('button');
+  plusButton.className =
+    'divider-plus-btn absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 hover:opacity-100 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 z-10';
+  plusButton.innerHTML = `
+    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+  `;
+  plusButton.title = 'Add tab here';
+
+  // Show button on divider hover
+  divider.style.position = 'relative';
+  divider.addEventListener('mouseenter', () => {
+    plusButton.style.opacity = '1';
+  });
+  divider.addEventListener('mouseleave', () => {
+    plusButton.style.opacity = '0';
+  });
+  plusButton.addEventListener('mouseenter', () => {
+    plusButton.style.opacity = '1';
+  });
+
+  plusButton.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await showTabPicker({ x: e.clientX, y: e.clientY }, (tab) => {
+      insertIframeAtDivider(divider, tab);
+    });
+  });
+
+  divider.appendChild(plusButton);
+}
+
+/**
+ * Add + buttons to left and right edges of the split page
+ */
+function addEdgePlusButtons() {
+  // Left edge button
+  const leftEdgeButton = document.createElement('button');
+  leftEdgeButton.id = 'nenya-edge-plus-left';
+  leftEdgeButton.className =
+    'edge-plus-btn fixed left-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100';
+  leftEdgeButton.innerHTML = `
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+  `;
+  leftEdgeButton.title = 'Add tab to the left';
+
+  leftEdgeButton.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await showTabPicker({ x: e.clientX, y: e.clientY }, (tab) => {
+      insertIframeAtEdge('left', tab);
+    });
+  });
+
+  // Right edge button
+  const rightEdgeButton = document.createElement('button');
+  rightEdgeButton.id = 'nenya-edge-plus-right';
+  rightEdgeButton.className =
+    'edge-plus-btn fixed right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100';
+  rightEdgeButton.innerHTML = `
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+  `;
+  rightEdgeButton.title = 'Add tab to the right';
+
+  rightEdgeButton.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await showTabPicker({ x: e.clientX, y: e.clientY }, (tab) => {
+      insertIframeAtEdge('right', tab);
+    });
+  });
+
+  document.body.appendChild(leftEdgeButton);
+  document.body.appendChild(rightEdgeButton);
+}
+
+/**
+ * Update plus button visibility based on iframe count
+ */
+function updatePlusButtonVisibility() {
+  const wrappers = document.querySelectorAll('.iframe-wrapper');
+  const shouldHide = wrappers.length >= 4;
+
+  // Hide/show divider plus buttons
+  const dividerPlusButtons = document.querySelectorAll('.divider-plus-btn');
+  dividerPlusButtons.forEach((btn) => {
+    /** @type {HTMLElement} */ (btn).style.display = shouldHide
+      ? 'none'
+      : 'flex';
+  });
+
+  // Hide/show edge plus buttons
+  const edgePlusButtons = document.querySelectorAll('.edge-plus-btn');
+  edgePlusButtons.forEach((btn) => {
+    /** @type {HTMLElement} */ (btn).style.display = shouldHide
+      ? 'none'
+      : 'flex';
+  });
+}
+
+/**
+ * Insert an iframe at a divider position
+ * @param {HTMLElement} divider
+ * @param {Object} tab - Chrome tab object
+ */
+function insertIframeAtDivider(divider, tab) {
+  if (!iframeContainer) return;
+
+  const dividerOrder = parseInt(divider.style.order);
+  const leftWrapperOrder = dividerOrder - 1;
+
+  // Create new iframe wrapper
+  const iframeWrapper = createIframeWrapper(tab.url, dividerOrder);
+
+  // Update orders: shift all wrappers and dividers after this position by 2
+  const allElements = Array.from(iframeContainer.children);
+  allElements.forEach((el) => {
+    const htmlEl = /** @type {HTMLElement} */ (el);
+    const currentOrder = parseInt(htmlEl.style.order);
+    if (currentOrder > leftWrapperOrder) {
+      htmlEl.style.order = String(currentOrder + 2);
+    }
+  });
+
+  // Insert new wrapper and its right divider
+  iframeContainer.appendChild(iframeWrapper);
+
+  const newDivider = document.createElement('div');
+  newDivider.className =
+    'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+  newDivider.style.order = String(dividerOrder + 1);
+  newDivider.style.width = '4px';
+  newDivider.style.flexShrink = '0';
+  addPlusButtonToDivider(newDivider);
+  iframeContainer.appendChild(newDivider);
+
+  // Rebalance flex sizes
+  rebalanceIframeSizes();
+
+  // Re-setup resizing
+  setupResizing();
+
+  // Update visibility
+  updatePlusButtonVisibility();
+
+  // Close the source tab after iframe loads
+  const iframe = iframeWrapper.querySelector('iframe');
+  if (iframe) {
+    iframe.addEventListener('load', () => {
+      chrome.tabs.remove(tab.id);
+    });
+  }
+}
+
+/**
+ * Insert an iframe at edge (left or right)
+ * @param {string} position - 'left' or 'right'
+ * @param {Object} tab - Chrome tab object
+ */
+function insertIframeAtEdge(position, tab) {
+  if (!iframeContainer) return;
+
+  const wrappers = Array.from(document.querySelectorAll('.iframe-wrapper'));
+  if (wrappers.length === 0) return;
+
+  let newOrder;
+  if (position === 'left') {
+    // Insert at the beginning
+    newOrder = -2;
+
+    // Shift all existing elements by 2
+    const allElements = Array.from(iframeContainer.children);
+    allElements.forEach((el) => {
+      const htmlEl = /** @type {HTMLElement} */ (el);
+      const currentOrder = parseInt(htmlEl.style.order);
+      htmlEl.style.order = String(currentOrder + 2);
+    });
+  } else {
+    // Insert at the end
+    const maxOrder = Math.max(
+      ...Array.from(iframeContainer.children).map((el) =>
+        parseInt(/** @type {HTMLElement} */ (el).style.order),
+      ),
+    );
+    newOrder = maxOrder + 2;
+  }
+
+  // Create new iframe wrapper
+  const iframeWrapper = createIframeWrapper(tab.url, newOrder);
+  iframeContainer.appendChild(iframeWrapper);
+
+  // Add divider
+  const divider = document.createElement('div');
+  divider.className =
+    'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+  divider.style.order =
+    position === 'left' ? String(newOrder + 1) : String(newOrder - 1);
+  divider.style.width = '4px';
+  divider.style.flexShrink = '0';
+  addPlusButtonToDivider(divider);
+  iframeContainer.appendChild(divider);
+
+  // Rebalance flex sizes
+  rebalanceIframeSizes();
+
+  // Re-setup resizing
+  setupResizing();
+
+  // Update visibility
+  updatePlusButtonVisibility();
+
+  // Close the source tab after iframe loads
+  const iframe = iframeWrapper.querySelector('iframe');
+  if (iframe) {
+    iframe.addEventListener('load', () => {
+      chrome.tabs.remove(tab.id);
+    });
+  }
+}
+
+/**
+ * Create an iframe wrapper with all necessary components
+ * @param {string} url
+ * @param {number} order
+ * @returns {HTMLElement}
+ */
+function createIframeWrapper(url, order) {
+  const iframeWrapper = document.createElement('div');
+  iframeWrapper.className =
+    'iframe-wrapper group relative flex-shrink-0 flex-grow-0';
+  iframeWrapper.style.order = String(order);
+  iframeWrapper.style.flex = '1';
+
+  const iframe = document.createElement('iframe');
+  iframe.src = url;
+  iframe.name = `nenya-iframe-${Date.now()}`;
+  iframe.className = 'w-full h-full border-0';
+  iframe.setAttribute(
+    'sandbox',
+    'allow-same-origin allow-scripts allow-forms allow-popups allow-downloads',
+  );
+  iframe.setAttribute('allow', 'fullscreen');
+
+  // Inject monitoring script when iframe loads
+  iframe.addEventListener('load', async () => {
+    const success = await injectMonitoringScript(iframe);
+    if (!success) {
+      // For cross-origin iframes, request background script to inject
+      requestBackgroundInjection(iframe);
+    }
+  });
+
+  // Add error handling for iframe loading
+  iframe.addEventListener('error', () => {
+    const errorDiv = document.createElement('div');
+    errorDiv.className =
+      'flex items-center justify-center h-full bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400';
+    errorDiv.innerHTML = `
+      <div class="text-center p-4">
+        <p class="font-semibold">Failed to load page</p>
+        <p class="text-sm mt-1">${url}</p>
+      </div>
+    `;
+    iframeWrapper.replaceChild(errorDiv, iframe);
+  });
+
+  // Add URL display at the bottom
+  const urlDisplay = document.createElement('div');
+  urlDisplay.className =
+    'absolute bottom-1 left-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center';
+  const urlValue = document.createElement('div');
+  urlValue.className =
+    'url-value text-xs min-w-0 max-w-[80%] cursor-pointer truncate bg-black/50 backdrop-blur-sm text-white rounded-full px-2 py-1';
+  urlValue.textContent = url;
+  urlValue.title = 'Click to copy URL';
+
+  // Add click handler to copy URL to clipboard
+  urlValue.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(url);
+      const originalText = urlValue.textContent;
+      urlValue.textContent = '✅ Copied';
+      setTimeout(() => {
+        urlValue.textContent = originalText;
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  });
+
+  urlDisplay.appendChild(urlValue);
+
+  // Store iframe data for tracking
+  iframeData.set(iframe.name, {
+    url,
+    title: '', // Will be updated when iframe loads
+    urlValue,
+  });
+
+  // Add hover tracking for title updates
+  iframeWrapper.addEventListener('mouseenter', () => {
+    activeIframeName = iframe.name;
+    updatePageTitle();
+  });
+
+  iframeWrapper.addEventListener('mouseleave', () => {
+    // Only clear if this is still the active iframe
+    if (activeIframeName === iframe.name) {
+      activeIframeName = null;
+      updatePageTitle();
+    }
+  });
+
+  iframeWrapper.appendChild(iframe);
+  iframeWrapper.appendChild(urlDisplay);
+
+  return iframeWrapper;
+}
+
+/**
+ * Rebalance iframe sizes to be equal
+ */
+function rebalanceIframeSizes() {
+  const wrappers = document.querySelectorAll('.iframe-wrapper');
+  wrappers.forEach((wrapper) => {
+    /** @type {HTMLElement} */ (wrapper).style.flex = '1';
+  });
 }
