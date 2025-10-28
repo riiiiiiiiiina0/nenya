@@ -33,7 +33,9 @@
     "alarms",
     "scripting",
     "activeTab",
-    "clipboardWrite"
+    "clipboardWrite",
+    "declarativeNetRequest",
+    "webNavigation"
   ],
   "externally_connectable": {
     "matches": [
@@ -44,9 +46,23 @@
     "https://api.raindrop.io/*",
     "<all_urls>"
   ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/split.html",
+        "src/split/*",
+        "src/libs/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "src/contentScript/custom-title.js",
         "src/contentScript/video-controller.js",
@@ -58,8 +74,12 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/contentScript/bright-mode.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/contentScript/bright-mode.js"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -96,7 +116,7 @@
         "default": "Alt+Q"
       },
       "description": "Quit Picture-in-Picture"
-	  },
+    },
     "activate-left-tab": {
       "description": "Activate left tab"
     },

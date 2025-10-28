@@ -46,6 +46,8 @@ const RESET_PULL_MESSAGE = 'mirror:resetPull';
 const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
+const CONTEXT_MENU_SPLIT_TABS_ID = 'nenya-split-tabs';
+const CONTEXT_MENU_UNSPLIT_TABS_ID = 'nenya-unsplit-tabs';
 const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
@@ -61,6 +63,42 @@ async function scheduleMirrorAlarm() {
 }
 
 /**
+ * Set up header removal rules for iframe functionality
+ * @returns {Promise<void>}
+ */
+async function setupHeaderRemovalRules() {
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [1],
+      addRules: [
+        {
+          id: 1,
+          condition: {
+            urlFilter: '*',
+            resourceTypes: ['sub_frame', 'main_frame'],
+          },
+          action: {
+            type: 'modifyHeaders',
+            responseHeaders: [
+              { header: 'X-Frame-Options', operation: 'remove' },
+              { header: 'Frame-Options', operation: 'remove' },
+              { header: 'Content-Security-Policy', operation: 'remove' },
+              {
+                header: 'Content-Security-Policy-Report-Only',
+                operation: 'remove',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    console.log('Header removal rules installed successfully');
+  } catch (error) {
+    console.error('Failed to install header removal rules:', error);
+  }
+}
+
+/**
  * Handle one-time initialization tasks.
  * @param {string} trigger
  * @returns {void}
@@ -69,20 +107,26 @@ function handleLifecycleEvent(trigger) {
   setupContextMenus();
   setupClipboardContextMenus();
   void scheduleMirrorAlarm();
+  void setupHeaderRemovalRules();
   initializeOptionsBackupService();
-  void handleOptionsBackupLifecycle(trigger).then(async () => {
-    // Re-evaluate auto reload rules after options backup restore completes
-    try {
-      await evaluateAllTabs();
-    } catch (error) {
-      console.warn('[background] Failed to re-evaluate auto reload rules after options backup:', error);
-    }
-  }).catch((error) => {
-    console.warn(
-      '[options-backup] Lifecycle restore skipped:',
-      error instanceof Error ? error.message : error,
-    );
-  });
+  void handleOptionsBackupLifecycle(trigger)
+    .then(async () => {
+      // Re-evaluate auto reload rules after options backup restore completes
+      try {
+        await evaluateAllTabs();
+      } catch (error) {
+        console.warn(
+          '[background] Failed to re-evaluate auto reload rules after options backup:',
+          error,
+        );
+      }
+    })
+    .catch((error) => {
+      console.warn(
+        '[options-backup] Lifecycle restore skipped:',
+        error instanceof Error ? error.message : error,
+      );
+    });
   void runMirrorPull(trigger).catch((error) => {
     console.warn(
       '[mirror] Initial pull skipped:',
@@ -119,8 +163,10 @@ chrome.commands.onCommand.addListener((command) => {
 
         let newIndex;
         if (command === 'activate-left-tab') {
-          newIndex = (activeTabIndex - 1 + window.tabs.length) % window.tabs.length;
-        } else { // 'activate-right-tab'
+          newIndex =
+            (activeTabIndex - 1 + window.tabs.length) % window.tabs.length;
+        } else {
+          // 'activate-right-tab'
           newIndex = (activeTabIndex + 1) % window.tabs.length;
         }
 
@@ -145,7 +191,10 @@ chrome.commands.onCommand.addListener((command) => {
     void (async () => {
       try {
         /** @type {chrome.tabs.Tab[]} */
-        let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+        let tabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
         if (!tabs || tabs.length === 0) {
           tabs = await chrome.tabs.query({ currentWindow: true, active: true });
         }
@@ -153,12 +202,17 @@ chrome.commands.onCommand.addListener((command) => {
         /** @type {{ url: string, title?: string }[]} */
         const entries = [];
         tabs.forEach((tab) => {
-          const normalized = normalizeHttpUrl(typeof tab.url === 'string' ? tab.url : '');
+          const normalized = normalizeHttpUrl(
+            typeof tab.url === 'string' ? tab.url : '',
+          );
           if (!normalized || seen.has(normalized)) {
             return;
           }
           seen.add(normalized);
-          entries.push({ url: normalized, title: typeof tab.title === 'string' ? tab.title : '' });
+          entries.push({
+            url: normalized,
+            title: typeof tab.title === 'string' ? tab.title : '',
+          });
         });
         if (entries.length > 0) {
           await saveUrlsToUnsorted(entries);
@@ -174,7 +228,10 @@ chrome.commands.onCommand.addListener((command) => {
     void (async () => {
       try {
         /** @type {chrome.tabs.Tab[]} */
-        let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+        let tabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
         if (!tabs || tabs.length === 0) {
           tabs = await chrome.tabs.query({ currentWindow: true, active: true });
         }
@@ -184,16 +241,24 @@ chrome.commands.onCommand.addListener((command) => {
           if (!tab || typeof tab.id !== 'number') {
             return;
           }
-          const normalized = normalizeHttpUrl(typeof tab.url === 'string' ? tab.url : '');
+          const normalized = normalizeHttpUrl(
+            typeof tab.url === 'string' ? tab.url : '',
+          );
           if (!normalized || seen.has(normalized)) {
             return;
           }
           seen.add(normalized);
           descriptors.push({
             id: tab.id,
-            windowId: typeof tab.windowId === 'number' ? tab.windowId : (chrome.windows?.WINDOW_ID_NONE ?? -1),
+            windowId:
+              typeof tab.windowId === 'number'
+                ? tab.windowId
+                : chrome.windows?.WINDOW_ID_NONE ?? -1,
             index: typeof tab.index === 'number' ? tab.index : -1,
-            groupId: typeof tab.groupId === 'number' ? tab.groupId : (chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1),
+            groupId:
+              typeof tab.groupId === 'number'
+                ? tab.groupId
+                : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1,
             pinned: Boolean(tab.pinned),
             url: normalized,
             title: typeof tab.title === 'string' ? tab.title : '',
@@ -206,19 +271,33 @@ chrome.commands.onCommand.addListener((command) => {
         // Prompt user for project name in the active tab
         let projectName = '';
         try {
-          const activeTabs = await chrome.tabs.query({ currentWindow: true, active: true });
+          const activeTabs = await chrome.tabs.query({
+            currentWindow: true,
+            active: true,
+          });
           const active = activeTabs && activeTabs[0];
           if (active && typeof active.id === 'number') {
             const results = await chrome.scripting.executeScript({
               target: { tabId: active.id },
               func: () => {
-                const base = document.title || (typeof location?.href === 'string' ? (() => { try { return new URL(location.href).hostname; } catch { return 'project'; } })() : 'project');
+                const base =
+                  document.title ||
+                  (typeof location?.href === 'string'
+                    ? (() => {
+                        try {
+                          return new URL(location.href).hostname;
+                        } catch {
+                          return 'project';
+                        }
+                      })()
+                    : 'project');
                 const input = window.prompt('Project name', base);
                 return input && input.trim() ? input.trim() : null;
               },
               world: 'ISOLATED',
             });
-            const value = Array.isArray(results) && results[0] ? results[0].result : null;
+            const value =
+              Array.isArray(results) && results[0] ? results[0].result : null;
             if (!value) {
               return;
             }
@@ -255,7 +334,10 @@ chrome.commands.onCommand.addListener((command) => {
   if (command === 'rename-tab') {
     void (async () => {
       try {
-        const tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
         const active = tabs && tabs[0];
         if (!active || typeof active.id !== 'number') {
           return;
@@ -268,12 +350,16 @@ chrome.commands.onCommand.addListener((command) => {
             target: { tabId: active.id },
             func: () => {
               const current = document.title || '';
-              const input = window.prompt('Enter custom title for this tab:', current);
+              const input = window.prompt(
+                'Enter custom title for this tab:',
+                current,
+              );
               return input && input.trim() ? input.trim() : null;
             },
             world: 'ISOLATED',
           });
-          newTitle = Array.isArray(results) && results[0] ? results[0].result : null;
+          newTitle =
+            Array.isArray(results) && results[0] ? results[0].result : null;
         } catch (e) {
           newTitle = null;
         }
@@ -298,7 +384,10 @@ chrome.commands.onCommand.addListener((command) => {
 
         // Apply via content script if available
         try {
-          await chrome.tabs.sendMessage(active.id, { type: 'renameTab', title: newTitle });
+          await chrome.tabs.sendMessage(active.id, {
+            type: 'renameTab',
+            title: newTitle,
+          });
         } catch (e) {
           // Fallback: apply directly in the page
           try {
@@ -354,8 +443,12 @@ chrome.commands.onCommand.addListener((command) => {
   }
 
   // Handle clipboard commands
-  if (command === 'copy-title-url' || command === 'copy-title-dash-url' || 
-      command === 'copy-markdown-link' || command === 'copy-screenshot') {
+  if (
+    command === 'copy-title-url' ||
+    command === 'copy-title-dash-url' ||
+    command === 'copy-markdown-link' ||
+    command === 'copy-screenshot'
+  ) {
     void handleClipboardCommand(command).catch((error) => {
       console.warn('[commands] Clipboard command failed:', error);
     });
@@ -376,12 +469,34 @@ void initializeAutoReloadFeature().catch((error) => {
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   // Clean up custom title record for the closed tab
   void chrome.storage.local.remove([`customTitle_${tabId}`]).catch((error) => {
-    console.warn('[background] Failed to clean up custom title for tab:', tabId, error);
+    console.warn(
+      '[background] Failed to clean up custom title for tab:',
+      tabId,
+      error,
+    );
   });
 });
 
 chrome.tabs.onHighlighted.addListener(() => {
   void updateClipboardContextMenuVisibility();
+});
+
+// Update context menu visibility when tabs change
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab) {
+      void updateContextMenuVisibility(tab);
+    }
+  } catch (error) {
+    console.warn('Failed to get tab for context menu update:', error);
+  }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab) {
+    void updateContextMenuVisibility(tab);
+  }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -419,12 +534,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === AUTO_RELOAD_RE_EVALUATE_MESSAGE) {
-    void evaluateAllTabs().then(() => {
-      sendResponse({ success: true });
-    }).catch((error) => {
-      console.warn('[background] Failed to re-evaluate auto reload rules:', error);
-      sendResponse({ success: false, error: error.message });
-    });
+    void evaluateAllTabs()
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.warn(
+          '[background] Failed to re-evaluate auto reload rules:',
+          error,
+        );
+        sendResponse({ success: false, error: error.message });
+      });
     return true;
   }
 
@@ -477,6 +597,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return handleRestoreProjectTabsMessage(message, sendResponse);
   }
 
+  if (message.action === 'unsplit-tabs') {
+    // Handle keyboard shortcut for unsplitting
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0]) {
+        void handleUnsplitTabsContextMenu(tabs[0]);
+      }
+    });
+    return true;
+  }
+
   if (message.type === MANUAL_PULL_MESSAGE) {
     runMirrorPull('manual')
       .then((result) => {
@@ -507,6 +637,133 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
+ * Handle split tabs context menu click
+ * @param {chrome.tabs.Tab} tab - The current tab
+ * @returns {Promise<void>}
+ */
+async function handleSplitTabsContextMenu(tab) {
+  try {
+    // Get highlighted tabs first, fallback to current tab
+    let tabs = await chrome.tabs.query({
+      currentWindow: true,
+      highlighted: true,
+    });
+    if (!tabs || tabs.length === 0) {
+      tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+    }
+
+    // Filter to http/https tabs, sort by tab index, take first 4
+    const httpTabs = tabs
+      .filter(
+        (t) =>
+          typeof t.url === 'string' &&
+          (t.url.startsWith('http://') || t.url.startsWith('https://')),
+      )
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+      .slice(0, 4);
+
+    if (httpTabs.length < 1) {
+      console.log('No HTTP(S) tabs found to split');
+      return;
+    }
+
+    const state = {
+      urls: httpTabs.map((t) => String(t.url)),
+    };
+
+    const splitUrl = `${chrome.runtime.getURL(
+      'src/split/split.html',
+    )}?state=${encodeURIComponent(JSON.stringify(state))}`;
+
+    // Create new tab with split page
+    const newTab = await chrome.tabs.create({
+      url: splitUrl,
+      windowId: tab.windowId,
+    });
+
+    // Close the original tabs if we have more than one
+    if (httpTabs.length > 1) {
+      const tabIdsToClose = httpTabs
+        .map((t) => t.id)
+        .filter((id) => typeof id === 'number');
+
+      if (tabIdsToClose.length > 0) {
+        await chrome.tabs.remove(tabIdsToClose);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to split tabs:', error);
+  }
+}
+
+/**
+ * Handle unsplit tabs context menu click
+ * @param {chrome.tabs.Tab} tab - The current tab (should be split page)
+ * @returns {Promise<void>}
+ */
+async function handleUnsplitTabsContextMenu(tab) {
+  try {
+    if (!tab || typeof tab.id !== 'number') {
+      console.log('No valid tab for unsplitting');
+      return;
+    }
+
+    // Request the current URLs from the split page
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      action: 'get-current-urls',
+    });
+
+    const urls = (
+      response && Array.isArray(response.urls) ? response.urls : []
+    ).filter((url) => typeof url === 'string' && url.length > 0);
+
+    if (urls.length === 0) {
+      console.log('No URLs received from split page, closing split tab');
+      await chrome.tabs.remove(tab.id);
+      return;
+    }
+
+    // Create new tabs for each URL
+    const newTabs = await Promise.all(
+      urls.map((url) =>
+        chrome.tabs.create({
+          url: url,
+          windowId: tab.windowId,
+        }),
+      ),
+    );
+
+    // Close the split page tab
+    await chrome.tabs.remove(tab.id);
+  } catch (error) {
+    console.error('Failed to unsplit tabs:', error);
+  }
+}
+
+/**
+ * Update context menu visibility based on current tab
+ * @param {chrome.tabs.Tab} tab - The current tab
+ * @returns {Promise<void>}
+ */
+async function updateContextMenuVisibility(tab) {
+  if (!chrome.contextMenus) return;
+
+  const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+  const isSplitPage = tab && tab.url && tab.url.startsWith(splitBaseUrl);
+
+  try {
+    await chrome.contextMenus.update(CONTEXT_MENU_SPLIT_TABS_ID, {
+      visible: Boolean(!isSplitPage),
+    });
+    await chrome.contextMenus.update(CONTEXT_MENU_UNSPLIT_TABS_ID, {
+      visible: Boolean(isSplitPage),
+    });
+  } catch (error) {
+    console.warn('Failed to update context menu visibility:', error);
+  }
+}
+
+/**
  * Ensure extension context menu entries exist.
  * @returns {void}
  */
@@ -528,13 +785,7 @@ function setupContextMenus() {
       {
         id: CONTEXT_MENU_SAVE_PAGE_ID,
         title: 'Save to Raindrop Unsorted',
-        contexts: [
-          'page',
-          'frame',
-          'selection',
-          'editable',
-          'image',
-        ],
+        contexts: ['page', 'frame', 'selection', 'editable', 'image'],
       },
       () => {
         const createError = chrome.runtime.lastError;
@@ -558,6 +809,41 @@ function setupContextMenus() {
         if (createError) {
           console.warn(
             '[contextMenu] Failed to register link item:',
+            createError.message,
+          );
+        }
+      },
+    );
+
+    chrome.contextMenus.create(
+      {
+        id: CONTEXT_MENU_SPLIT_TABS_ID,
+        title: 'Split tabs',
+        contexts: ['page'],
+      },
+      () => {
+        const createError = chrome.runtime.lastError;
+        if (createError) {
+          console.warn(
+            '[contextMenu] Failed to register split tabs item:',
+            createError.message,
+          );
+        }
+      },
+    );
+
+    chrome.contextMenus.create(
+      {
+        id: CONTEXT_MENU_UNSPLIT_TABS_ID,
+        title: 'Unsplit tabs',
+        contexts: ['page'],
+        visible: false, // Initially hidden, will be shown on split pages
+      },
+      () => {
+        const createError = chrome.runtime.lastError;
+        if (createError) {
+          console.warn(
+            '[contextMenu] Failed to register unsplit tabs item:',
             createError.message,
           );
         }
@@ -592,6 +878,20 @@ if (chrome.contextMenus) {
       void saveUrlsToUnsorted([{ url, title }]).catch((error) => {
         console.error('[contextMenu] Failed to save link:', error);
       });
+      return;
+    }
+
+    if (info.menuItemId === CONTEXT_MENU_SPLIT_TABS_ID) {
+      if (tab) {
+        void handleSplitTabsContextMenu(tab);
+      }
+      return;
+    }
+
+    if (info.menuItemId === CONTEXT_MENU_UNSPLIT_TABS_ID) {
+      if (tab) {
+        void handleUnsplitTabsContextMenu(tab);
+      }
       return;
     }
 
