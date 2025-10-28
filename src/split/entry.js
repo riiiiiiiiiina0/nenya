@@ -89,6 +89,28 @@ if (!iframeContainer) {
     controlBar.className =
       'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center z-50';
 
+    // Move left button
+    const moveLeftButton = document.createElement('button');
+    moveLeftButton.className =
+      'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
+    moveLeftButton.innerHTML = '◀️';
+    moveLeftButton.title = 'Move left';
+    moveLeftButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      swapIframeWithNeighbor(iframeWrapper, 'left');
+    });
+
+    // Move right button
+    const moveRightButton = document.createElement('button');
+    moveRightButton.className =
+      'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
+    moveRightButton.innerHTML = '▶️';
+    moveRightButton.title = 'Move right';
+    moveRightButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      swapIframeWithNeighbor(iframeWrapper, 'right');
+    });
+
     // Restore as tab button
     const restoreButton = document.createElement('button');
     restoreButton.className =
@@ -119,8 +141,21 @@ if (!iframeContainer) {
       removeIframeWrapper(iframeWrapper);
     });
 
+    // Update button states on hover to reflect current position
+    iframeWrapper.addEventListener('mouseenter', () => {
+      updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+    });
+
+    controlBar.appendChild(moveLeftButton);
+    controlBar.appendChild(moveRightButton);
     controlBar.appendChild(restoreButton);
     controlBar.appendChild(deleteButton);
+
+    // Set initial button states
+    // Use setTimeout to ensure all iframes are in the DOM first
+    setTimeout(() => {
+      updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+    }, 0);
 
     // Add URL display at the bottom
     const urlDisplay = document.createElement('div');
@@ -201,38 +236,139 @@ if (!iframeContainer) {
   updatePlusButtonVisibility();
 }
 
+// Global resize state and handlers (to avoid duplicate event listeners)
+let isResizing = false;
+let resizeCurrentIndex = -1;
+let resizeStartX = 0;
+let resizeStartLeftWidth = 0;
+let resizeStartRightWidth = 0;
+let resizeLeftWrapper = null;
+let resizeRightWrapper = null;
+let resizeOtherWrapperWidths = [];
+
+/**
+ * Handle mouse move during resize
+ * @param {MouseEvent} e
+ */
+function handleResizeMouseMove(e) {
+  if (
+    !isResizing ||
+    resizeCurrentIndex === -1 ||
+    !resizeLeftWrapper ||
+    !resizeRightWrapper
+  )
+    return;
+
+  e.preventDefault();
+
+  const deltaX = e.clientX - resizeStartX;
+
+  // Calculate new widths for the two adjacent iframes
+  let newLeftWidth = resizeStartLeftWidth + deltaX;
+  let newRightWidth = resizeStartRightWidth - deltaX;
+
+  // Apply minimum width constraint (50px)
+  const minWidth = 50;
+  if (newLeftWidth < minWidth) {
+    newLeftWidth = minWidth;
+    newRightWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+  }
+  if (newRightWidth < minWidth) {
+    newRightWidth = minWidth;
+    newLeftWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+  }
+
+  // Set fixed pixel widths for the two adjacent iframes
+  resizeLeftWrapper.style.flex = `0 0 ${newLeftWidth}px`;
+  resizeRightWrapper.style.flex = `0 0 ${newRightWidth}px`;
+
+  // Keep all other iframes at their original widths
+  resizeOtherWrapperWidths.forEach(({ wrapper, width }) => {
+    wrapper.style.flex = `0 0 ${width}px`;
+  });
+}
+
+/**
+ * Handle mouse up during resize
+ */
+function handleResizeMouseUp() {
+  if (!isResizing) return;
+
+  isResizing = false;
+  resizeCurrentIndex = -1;
+  resizeLeftWrapper = null;
+  resizeRightWrapper = null;
+  resizeOtherWrapperWidths = [];
+
+  // Reset visual feedback
+  const dividers = document.querySelectorAll('.iframe-divider');
+  dividers.forEach((divider) => {
+    const dividerEl = /** @type {HTMLElement} */ (divider);
+    dividerEl.style.backgroundColor = '';
+  });
+
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+
+  // Re-enable pointer events on iframes
+  const iframes = document.querySelectorAll('iframe');
+  iframes.forEach((iframe) => {
+    /** @type {HTMLElement} */ (iframe).style.pointerEvents = '';
+  });
+}
+
 /**
  * Set up improved resizing functionality for the iframe dividers
  */
 function setupResizing() {
+  // Remove old global event listeners if they exist
+  document.removeEventListener('mousemove', handleResizeMouseMove);
+  document.removeEventListener('mouseup', handleResizeMouseUp);
+
+  // Add global event listeners once
+  document.addEventListener('mousemove', handleResizeMouseMove);
+  document.addEventListener('mouseup', handleResizeMouseUp);
+
   const dividers = document.querySelectorAll('.iframe-divider');
-  let isResizing = false;
-  let currentIndex = -1;
-  let startX = 0;
-  let startLeftWidth = 0;
-  let startRightWidth = 0;
 
   dividers.forEach((divider, index) => {
     const dividerEl = /** @type {HTMLElement} */ (divider);
 
+    // Remove the plus button before cloning (we'll re-add it after)
+    const plusButton = dividerEl.querySelector('.divider-plus-btn');
+    if (plusButton) {
+      plusButton.remove();
+    }
+
+    // Remove old event listeners by cloning the element
+    const newDivider = /** @type {HTMLElement} */ (dividerEl.cloneNode(true));
+    dividerEl.parentNode?.replaceChild(newDivider, dividerEl);
+
+    // Re-add the plus button with its event listeners
+    addPlusButtonToDivider(newDivider);
+
     // Add hover effect
-    dividerEl.addEventListener('mouseenter', () => {
+    newDivider.addEventListener('mouseenter', () => {
       if (!isResizing) {
-        dividerEl.style.backgroundColor = 'rgba(59, 130, 246, 0.5)';
+        newDivider.style.backgroundColor = 'rgba(59, 130, 246, 0.5)';
       }
     });
 
-    dividerEl.addEventListener('mouseleave', () => {
+    newDivider.addEventListener('mouseleave', () => {
       if (!isResizing) {
-        dividerEl.style.backgroundColor = '';
+        newDivider.style.backgroundColor = '';
       }
     });
 
-    dividerEl.addEventListener('mousedown', (e) => {
-      e.preventDefault();
+    newDivider.addEventListener('mousedown', (e) => {
+      const mouseEvent = /** @type {MouseEvent} */ (e);
+      mouseEvent.preventDefault();
       isResizing = true;
-      currentIndex = index;
-      startX = e.clientX;
+      resizeCurrentIndex = index;
+      resizeStartX = mouseEvent.clientX;
+
+      // Get the order of this divider
+      const dividerOrder = parseInt(newDivider.style.order);
 
       // Get all wrappers sorted by order
       const wrappers = Array.from(
@@ -243,23 +379,53 @@ function setupResizing() {
           parseInt(/** @type {HTMLElement} */ (b).style.order),
       );
 
-      // Split wrappers into left and right groups
-      const leftWrappers = wrappers.slice(0, index + 1);
-      const rightWrappers = wrappers.slice(index + 1);
+      // Find the wrappers immediately before and after this divider based on order
+      // Divider order should be between left wrapper and right wrapper
+      // For example: leftWrapper.order = 0, divider.order = 1, rightWrapper.order = 2
+      const leftWrapperEl = wrappers.find(
+        (w) =>
+          parseInt(/** @type {HTMLElement} */ (w).style.order) ===
+          dividerOrder - 1,
+      );
+      const rightWrapperEl = wrappers.find(
+        (w) =>
+          parseInt(/** @type {HTMLElement} */ (w).style.order) ===
+          dividerOrder + 1,
+      );
 
-      // Calculate total width of left and right groups
-      startLeftWidth = 0;
-      leftWrappers.forEach((wrapper) => {
-        startLeftWidth += wrapper.getBoundingClientRect().width;
-      });
+      if (!leftWrapperEl || !rightWrapperEl) {
+        console.error(
+          'Could not find adjacent wrappers for divider',
+          dividerOrder,
+        );
+        return;
+      }
 
-      startRightWidth = 0;
-      rightWrappers.forEach((wrapper) => {
-        startRightWidth += wrapper.getBoundingClientRect().width;
-      });
+      resizeLeftWrapper = /** @type {HTMLElement} */ (leftWrapperEl);
+      resizeRightWrapper = /** @type {HTMLElement} */ (rightWrapperEl);
+
+      // Store initial widths of the two adjacent iframes
+      resizeStartLeftWidth = resizeLeftWrapper.getBoundingClientRect().width;
+      resizeStartRightWidth = resizeRightWrapper.getBoundingClientRect().width;
+
+      // Store widths of all other iframes to keep them fixed
+      resizeOtherWrapperWidths = wrappers
+        .filter((wrapper) => {
+          const wrapperOrder = parseInt(
+            /** @type {HTMLElement} */ (wrapper).style.order,
+          );
+          return (
+            wrapperOrder !== dividerOrder - 1 &&
+            wrapperOrder !== dividerOrder + 1
+          );
+        })
+        .map((wrapper) => ({
+          wrapper: /** @type {HTMLElement} */ (wrapper),
+          width: wrapper.getBoundingClientRect().width,
+        }));
 
       // Visual feedback
-      dividerEl.style.backgroundColor = 'rgba(59, 130, 246, 0.8)';
+      newDivider.style.backgroundColor = 'rgba(59, 130, 246, 0.8)';
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
@@ -268,83 +434,6 @@ function setupResizing() {
       iframes.forEach((iframe) => {
         /** @type {HTMLElement} */ (iframe).style.pointerEvents = 'none';
       });
-    });
-  });
-
-  // Global mouse move handler
-  document.addEventListener('mousemove', (e) => {
-    if (!isResizing || currentIndex === -1) return;
-
-    e.preventDefault();
-
-    const deltaX = e.clientX - startX;
-    const containerWidth = iframeContainer?.clientWidth || 1;
-
-    // Get all wrappers sorted by order
-    const wrappers = Array.from(
-      document.querySelectorAll('.iframe-wrapper'),
-    ).sort(
-      (a, b) =>
-        parseInt(/** @type {HTMLElement} */ (a).style.order) -
-        parseInt(/** @type {HTMLElement} */ (b).style.order),
-    );
-
-    // Split wrappers into left and right groups
-    const leftWrappers = wrappers.slice(0, currentIndex + 1);
-    const rightWrappers = wrappers.slice(currentIndex + 1);
-
-    if (leftWrappers.length > 0 && rightWrappers.length > 0) {
-      // Calculate new widths based on initial widths + delta
-      const newLeftWidth = startLeftWidth + deltaX;
-      const newRightWidth = startRightWidth - deltaX;
-
-      // Convert to percentages
-      const totalWidth = startLeftWidth + startRightWidth;
-      let leftPercent = (newLeftWidth / totalWidth) * 100;
-      let rightPercent = (newRightWidth / totalWidth) * 100;
-
-      // Apply constraints (min 10%, max 90%)
-      leftPercent = Math.max(10, Math.min(90, leftPercent));
-      rightPercent = 100 - leftPercent;
-
-      // Distribute left space equally among left iframes
-      const leftPercentPerIframe = leftPercent / leftWrappers.length;
-      leftWrappers.forEach((wrapper) => {
-        /** @type {HTMLElement} */ (
-          wrapper
-        ).style.flex = `0 0 ${leftPercentPerIframe}%`;
-      });
-
-      // Distribute right space equally among right iframes
-      const rightPercentPerIframe = rightPercent / rightWrappers.length;
-      rightWrappers.forEach((wrapper) => {
-        /** @type {HTMLElement} */ (
-          wrapper
-        ).style.flex = `0 0 ${rightPercentPerIframe}%`;
-      });
-    }
-  });
-
-  // Global mouse up handler
-  document.addEventListener('mouseup', () => {
-    if (!isResizing) return;
-
-    isResizing = false;
-    currentIndex = -1;
-
-    // Reset visual feedback
-    dividers.forEach((divider) => {
-      const dividerEl = /** @type {HTMLElement} */ (divider);
-      dividerEl.style.backgroundColor = '';
-    });
-
-    document.body.style.cursor = '';
-    document.body.style.userSelect = '';
-
-    // Re-enable pointer events on iframes
-    const iframes = document.querySelectorAll('iframe');
-    iframes.forEach((iframe) => {
-      /** @type {HTMLElement} */ (iframe).style.pointerEvents = '';
     });
   });
 }
@@ -730,28 +819,27 @@ function insertIframeAtDivider(divider, tab) {
   if (!iframeContainer) return;
 
   const dividerOrder = parseInt(divider.style.order);
-  const leftWrapperOrder = dividerOrder - 1;
 
-  // Create new iframe wrapper
-  const iframeWrapper = createIframeWrapper(tab.url, dividerOrder);
-
-  // Update orders: shift all wrappers and dividers after this position by 2
+  // Update orders: shift all wrappers and dividers after this divider by 2
   const allElements = Array.from(iframeContainer.children);
   allElements.forEach((el) => {
     const htmlEl = /** @type {HTMLElement} */ (el);
     const currentOrder = parseInt(htmlEl.style.order);
-    if (currentOrder > leftWrapperOrder) {
+    if (currentOrder > dividerOrder) {
       htmlEl.style.order = String(currentOrder + 2);
     }
   });
 
-  // Insert new wrapper and its right divider
+  // Keep the clicked divider at its position (dividerOrder)
+  // Insert new wrapper after the divider
+  const iframeWrapper = createIframeWrapper(tab.url, dividerOrder + 1);
   iframeContainer.appendChild(iframeWrapper);
 
+  // Insert new divider after the new wrapper
   const newDivider = document.createElement('div');
   newDivider.className =
     'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
-  newDivider.style.order = String(dividerOrder + 1);
+  newDivider.style.order = String(dividerOrder + 2);
   newDivider.style.width = '4px';
   newDivider.style.flexShrink = '0';
   addPlusButtonToDivider(newDivider);
@@ -789,15 +877,16 @@ function insertIframeAtEdge(position, tab) {
   let newOrder;
   if (position === 'left') {
     // Insert at the beginning
-    newOrder = -2;
-
-    // Shift all existing elements by 2
+    // Shift all existing elements by 2 first
     const allElements = Array.from(iframeContainer.children);
     allElements.forEach((el) => {
       const htmlEl = /** @type {HTMLElement} */ (el);
       const currentOrder = parseInt(htmlEl.style.order);
       htmlEl.style.order = String(currentOrder + 2);
     });
+
+    // Now insert at order 0 (after shifting, old 0 is now at 2)
+    newOrder = 0;
   } else {
     // Insert at the end
     const maxOrder = Math.max(
@@ -892,6 +981,28 @@ function createIframeWrapper(url, order) {
   controlBar.className =
     'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center z-50';
 
+  // Move left button
+  const moveLeftButton = document.createElement('button');
+  moveLeftButton.className =
+    'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
+  moveLeftButton.innerHTML = '◀️';
+  moveLeftButton.title = 'Move left';
+  moveLeftButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    swapIframeWithNeighbor(iframeWrapper, 'left');
+  });
+
+  // Move right button
+  const moveRightButton = document.createElement('button');
+  moveRightButton.className =
+    'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
+  moveRightButton.innerHTML = '▶️';
+  moveRightButton.title = 'Move right';
+  moveRightButton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    swapIframeWithNeighbor(iframeWrapper, 'right');
+  });
+
   // Restore as tab button
   const restoreButton = document.createElement('button');
   restoreButton.className =
@@ -922,8 +1033,21 @@ function createIframeWrapper(url, order) {
     removeIframeWrapper(iframeWrapper);
   });
 
+  // Update button states on hover to reflect current position
+  iframeWrapper.addEventListener('mouseenter', () => {
+    updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+  });
+
+  controlBar.appendChild(moveLeftButton);
+  controlBar.appendChild(moveRightButton);
   controlBar.appendChild(restoreButton);
   controlBar.appendChild(deleteButton);
+
+  // Set initial button states
+  // Use setTimeout to ensure all iframes are in the DOM first
+  setTimeout(() => {
+    updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+  }, 0);
 
   // Add URL display at the bottom
   const urlDisplay = document.createElement('div');
@@ -991,6 +1115,26 @@ function rebalanceIframeSizes() {
 }
 
 /**
+ * Renormalize the order values of all wrappers and dividers to be sequential
+ * This fixes issues where gaps in order values prevent dividers from finding adjacent wrappers
+ */
+function renormalizeOrders() {
+  if (!iframeContainer) return;
+
+  // Get all children (wrappers and dividers) and sort by current order
+  const allElements = Array.from(iframeContainer.children).sort(
+    (a, b) =>
+      parseInt(/** @type {HTMLElement} */ (a).style.order) -
+      parseInt(/** @type {HTMLElement} */ (b).style.order),
+  );
+
+  // Reassign sequential orders
+  allElements.forEach((el, index) => {
+    /** @type {HTMLElement} */ (el).style.order = String(index);
+  });
+}
+
+/**
  * Remove an iframe wrapper and clean up related elements
  * @param {HTMLElement} iframeWrapper - The wrapper element to remove
  */
@@ -1042,6 +1186,9 @@ function removeIframeWrapper(iframeWrapper) {
       }
     });
   } else {
+    // Renormalize orders to ensure sequential values (0, 1, 2, 3...)
+    renormalizeOrders();
+
     // Rebalance remaining iframes
     rebalanceIframeSizes();
 
@@ -1054,4 +1201,109 @@ function removeIframeWrapper(iframeWrapper) {
     // Re-setup resizing
     setupResizing();
   }
+}
+
+/**
+ * Swap an iframe with its neighbor (left or right)
+ * @param {HTMLElement} iframeWrapper - The iframe wrapper to move
+ * @param {'left' | 'right'} direction - Direction to move
+ */
+function swapIframeWithNeighbor(iframeWrapper, direction) {
+  if (!iframeContainer) return;
+
+  // Get all wrappers sorted by order
+  const allWrappers = Array.from(
+    document.querySelectorAll('.iframe-wrapper'),
+  ).sort(
+    (a, b) =>
+      parseInt(/** @type {HTMLElement} */ (a).style.order) -
+      parseInt(/** @type {HTMLElement} */ (b).style.order),
+  );
+
+  // Find current wrapper index
+  const currentIndex = allWrappers.indexOf(iframeWrapper);
+  if (currentIndex === -1) return;
+
+  // Find neighbor wrapper
+  const neighborIndex =
+    direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+
+  // Check boundaries
+  if (neighborIndex < 0 || neighborIndex >= allWrappers.length) return;
+
+  const neighborWrapper = /** @type {HTMLElement} */ (
+    allWrappers[neighborIndex]
+  );
+
+  // Swap order values
+  const currentOrder = iframeWrapper.style.order;
+  const neighborOrder = neighborWrapper.style.order;
+
+  iframeWrapper.style.order = neighborOrder;
+  neighborWrapper.style.order = currentOrder;
+
+  // Update URL state parameter to reflect new order
+  updateUrlStateParameter();
+
+  // Update all move button states after swap
+  updateAllMoveButtonStates();
+
+  // Re-setup resizing to update divider event listeners with new iframe positions
+  setupResizing();
+}
+
+/**
+ * Update the disabled state of move buttons based on wrapper position
+ * @param {HTMLElement} iframeWrapper - The iframe wrapper
+ * @param {HTMLButtonElement} moveLeftButton - The move left button
+ * @param {HTMLButtonElement} moveRightButton - The move right button
+ */
+function updateMoveButtonStates(
+  iframeWrapper,
+  moveLeftButton,
+  moveRightButton,
+) {
+  // Get all wrappers sorted by order
+  const allWrappers = Array.from(
+    document.querySelectorAll('.iframe-wrapper'),
+  ).sort(
+    (a, b) =>
+      parseInt(/** @type {HTMLElement} */ (a).style.order) -
+      parseInt(/** @type {HTMLElement} */ (b).style.order),
+  );
+
+  // Find current wrapper index
+  const currentIndex = allWrappers.indexOf(iframeWrapper);
+
+  // Update button states
+  moveLeftButton.disabled = currentIndex === 0;
+  moveRightButton.disabled = currentIndex === allWrappers.length - 1;
+}
+
+/**
+ * Update all move button states for all iframes
+ */
+function updateAllMoveButtonStates() {
+  const allWrappers = Array.from(
+    document.querySelectorAll('.iframe-wrapper'),
+  ).sort(
+    (a, b) =>
+      parseInt(/** @type {HTMLElement} */ (a).style.order) -
+      parseInt(/** @type {HTMLElement} */ (b).style.order),
+  );
+
+  allWrappers.forEach((wrapper, index) => {
+    const htmlWrapper = /** @type {HTMLElement} */ (wrapper);
+    const controlBar = htmlWrapper.querySelector('.absolute.top-2');
+    if (!controlBar) return;
+
+    const buttons = controlBar.querySelectorAll('button');
+    const moveLeftButton = /** @type {HTMLButtonElement} */ (buttons[0]);
+    const moveRightButton = /** @type {HTMLButtonElement} */ (buttons[1]);
+
+    if (moveLeftButton && moveRightButton) {
+      moveLeftButton.disabled = index === 0;
+      moveRightButton.disabled = index === allWrappers.length - 1;
+    }
+  });
 }
