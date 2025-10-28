@@ -11,6 +11,7 @@
 - Use **JSDoc** to type all JavaScript source code.
 - Use **single quotes** for all string literals.
 - Follow clear, readable code conventions (avoid unnecessary abstractions).
+- **Wrap all content scripts in IIFEs** (Immediately Invoking Function Expressions) to prevent global variable pollution and ensure proper encapsulation.
 
 ## Preferred Frameworks & Libraries
 
