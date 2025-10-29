@@ -181,6 +181,7 @@ export async function showTabPicker(position, onTabSelected) {
     if (e.key === 'Escape') {
       overlay.remove();
       document.removeEventListener('keydown', handleEscape);
+      e.stopPropagation();
     }
   };
   document.addEventListener('keydown', handleEscape);

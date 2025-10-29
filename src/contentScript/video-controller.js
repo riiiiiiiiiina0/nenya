@@ -347,6 +347,7 @@
       const fullscreenVideo = document.querySelector('.video-fullscreen');
       if (fullscreenVideo && fullscreenVideo instanceof HTMLVideoElement) {
         exitFullscreen(fullscreenVideo);
+        e.stopPropagation();
       }
     }
   });

@@ -7,11 +7,15 @@ import { showTabPicker } from './tab-picker.js';
 // Parse URL state from query parameters
 const urlParams = new URLSearchParams(window.location.search);
 const stateParam = urlParams.get('state');
-let state = { urls: [] };
+let state = { urls: [], layout: 'horizontal' };
 
 if (stateParam) {
   try {
     state = JSON.parse(decodeURIComponent(stateParam));
+    // Ensure layout field exists with default value
+    if (!state.layout) {
+      state.layout = 'horizontal';
+    }
   } catch (e) {
     console.error('Failed to parse state parameter:', e);
   }
@@ -23,6 +27,63 @@ const iframeContainer = document.getElementById('iframe-container');
 // Track current theme (light or dark)
 /** @type {'light' | 'dark'} */
 let currentTheme = 'light';
+
+// Track current layout (horizontal or vertical)
+/** @type {'horizontal' | 'vertical'} */
+let currentLayout = state.layout === 'vertical' ? 'vertical' : 'horizontal';
+
+/**
+ * Get the icon for moving an iframe backward in the current layout
+ * @returns {string}
+ */
+function getBackwardMoveIcon() {
+  return currentLayout === 'horizontal' ? '◀️' : '🔼';
+}
+
+/**
+ * Get the icon for moving an iframe forward in the current layout
+ * @returns {string}
+ */
+function getForwardMoveIcon() {
+  return currentLayout === 'horizontal' ? '▶️' : '🔽';
+}
+
+/**
+ * Get the tooltip label for moving an iframe backward in the current layout
+ * @returns {string}
+ */
+function getBackwardMoveTooltip() {
+  return currentLayout === 'horizontal' ? 'Move left' : 'Move up';
+}
+
+/**
+ * Get the tooltip label for moving an iframe forward in the current layout
+ * @returns {string}
+ */
+function getForwardMoveTooltip() {
+  return currentLayout === 'horizontal' ? 'Move right' : 'Move down';
+}
+
+/**
+ * Create a control bar button with tooltip wrapper
+ * @param {{ icon: string, title: string, className?: string, onClick: (e: MouseEvent) => void | Promise<void> }} opts
+ * @returns {{ btn: HTMLButtonElement, tooltip: HTMLDivElement }}
+ */
+function createControlButton({ icon, title, className = '', onClick }) {
+  const btn = document.createElement('button');
+  btn.className =
+    (className ? className : '') +
+    ' size-5 p-1 flex items-center justify-center rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
+  btn.innerHTML = icon;
+  btn.addEventListener('click', onClick);
+
+  const tooltip = document.createElement('div');
+  tooltip.classList = 'tooltip tooltip-bottom';
+  tooltip.setAttribute('data-tip', title);
+  tooltip.appendChild(btn);
+
+  return { btn, tooltip };
+}
 
 /**
  * Get the current theme based on system preference
@@ -64,7 +125,7 @@ function initializeThemeMonitoring() {
 
   // Listen for OS theme changes
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
-  
+
   const handleThemeChange = (event) => {
     const newTheme = event.matches ? 'dark' : 'light';
     console.log('[split] Theme changed to:', newTheme);
@@ -76,6 +137,113 @@ function initializeThemeMonitoring() {
   } else if (typeof prefersDark.addListener === 'function') {
     prefersDark.addListener(handleThemeChange);
   }
+}
+
+/**
+ * Switch between horizontal and vertical layout
+ */
+function toggleLayout() {
+  currentLayout = currentLayout === 'horizontal' ? 'vertical' : 'horizontal';
+  applyLayout();
+  updateAllLayoutButtons();
+  setupResizing(); // Re-setup resizing for new layout
+  updateUrlStateParameter(); // Persist layout state
+}
+
+/**
+ * Apply the current layout to the container and dividers
+ */
+function applyLayout() {
+  if (!iframeContainer) return;
+
+  // Update container flex direction
+  if (currentLayout === 'horizontal') {
+    iframeContainer.className = 'flex flex-row h-screen w-screen';
+  } else {
+    iframeContainer.className = 'flex flex-col h-screen w-screen';
+  }
+
+  // Update dividers
+  const dividers = document.querySelectorAll('.iframe-divider');
+  dividers.forEach((divider) => {
+    const dividerEl = /** @type {HTMLElement} */ (divider);
+    dividerEl.className = `iframe-divider bg-gray-300 dark:bg-gray-600 ${currentLayout}`;
+
+    if (currentLayout === 'horizontal') {
+      dividerEl.style.width = '4px';
+      dividerEl.style.height = '';
+    } else {
+      dividerEl.style.width = '';
+      dividerEl.style.height = '4px';
+    }
+  });
+
+  // Rebalance iframe sizes
+  rebalanceIframeSizes();
+}
+
+/**
+ * Update all layout toggle buttons across all iframes
+ */
+function updateAllLayoutButtons() {
+  const allWrappers = document.querySelectorAll('.iframe-wrapper');
+  allWrappers.forEach((wrapper) => {
+    const controlBar = /** @type {HTMLElement} */ (wrapper).querySelector(
+      '.absolute.top-2',
+    );
+    if (!controlBar) return;
+
+    const layoutButton = controlBar.querySelector('.layout-toggle-btn');
+    if (layoutButton) {
+      const btn = /** @type {HTMLButtonElement} */ (layoutButton);
+      const layoutTooltip = btn.parentElement;
+      const layoutTooltipText =
+        currentLayout === 'horizontal'
+          ? 'Switch to vertical layout'
+          : 'Switch to horizontal layout';
+
+      if (currentLayout === 'horizontal') {
+        btn.innerHTML = '🇱🇺';
+      } else {
+        btn.innerHTML = '🇫🇷';
+      }
+
+      if (layoutTooltip && layoutTooltip.classList.contains('tooltip')) {
+        layoutTooltip.setAttribute('data-tip', layoutTooltipText);
+      }
+    }
+
+    const tooltipElements = Array.from(
+      controlBar.querySelectorAll('.tooltip'),
+    );
+    const buttonElements = Array.from(controlBar.querySelectorAll('button'));
+
+    const moveBackwardTooltip = /** @type {HTMLElement | undefined} */ (
+      tooltipElements[0]
+    );
+    const moveForwardTooltip = /** @type {HTMLElement | undefined} */ (
+      tooltipElements[1]
+    );
+    const moveBackwardButton = /** @type {HTMLButtonElement | undefined} */ (
+      buttonElements[0]
+    );
+    const moveForwardButton = /** @type {HTMLButtonElement | undefined} */ (
+      buttonElements[1]
+    );
+
+    if (moveBackwardButton && moveBackwardTooltip) {
+      moveBackwardButton.innerHTML = getBackwardMoveIcon();
+      moveBackwardTooltip.setAttribute(
+        'data-tip',
+        getBackwardMoveTooltip(),
+      );
+    }
+
+    if (moveForwardButton && moveForwardTooltip) {
+      moveForwardButton.innerHTML = getForwardMoveIcon();
+      moveForwardTooltip.setAttribute('data-tip', getForwardMoveTooltip());
+    }
+  });
 }
 
 // Initialize theme monitoring
@@ -125,14 +293,14 @@ if (!iframeContainer) {
       'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads',
     );
     iframe.setAttribute('allow', 'fullscreen');
-    
+
     // Apply current theme to iframe
     applyThemeToIframe(iframe, currentTheme);
 
     // Inject monitoring script when iframe loads
     iframe.addEventListener('load', async () => {
       requestBackgroundInjection(iframe);
-      
+
       // After iframe loads, wait briefly for content script to send message
       // If no message arrives, the iframe is likely blocked
       setupIframeLoadedCheck(iframe.name, iframeWrapper, iframe, url);
@@ -153,36 +321,12 @@ if (!iframeContainer) {
       'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-50';
 
     const buttonsWrapper = document.createElement('div');
-    buttonsWrapper.className = 'flex flex-row gap-2 items-center justify-center bg-black/50 backdrop-blur-sm rounded-full p-1';
-
-    /**
-     * Create a control bar button for an iframe wrapper
-     * @param {Object} opts
-     * @param {string} opts.icon - Button innerHTML (emoji or svg)
-     * @param {string} opts.title - Tooltip for the button
-     * @param {string} [opts.className] - Additional classes for styling
-     * @param {(e: MouseEvent) => void | Promise<void>} opts.onClick - Click handler function
-     * @returns {{ btn: HTMLButtonElement, tooltip: HTMLDivElement }}
-     */
-    function createControlButton({ icon, title, className = '', onClick }) {
-      const btn = document.createElement('button');
-      btn.className =
-        (className ? className : '') +
-        ' size-5 p-1 flex items-center justify-center rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
-      btn.innerHTML = icon;
-      btn.addEventListener('click', onClick);
-
-      const tooltip = document.createElement('div');
-      tooltip.classList = 'tooltip tooltip-bottom';
-      tooltip.setAttribute('data-tip', title);
-      tooltip.appendChild(btn);
-
-      return { btn, tooltip };
-    }
+    buttonsWrapper.className =
+      'flex flex-row gap-2 items-center justify-center bg-black/50 backdrop-blur-sm rounded-full p-1';
 
     const moveLeftButton = createControlButton({
-      icon: '◀️',
-      title: 'Move left',
+      icon: getBackwardMoveIcon(),
+      title: getBackwardMoveTooltip(),
       onClick: (e) => {
         e.stopPropagation();
         swapIframeWithNeighbor(iframeWrapper, 'left');
@@ -190,11 +334,24 @@ if (!iframeContainer) {
     });
 
     const moveRightButton = createControlButton({
-      icon: '▶️',
-      title: 'Move right',
+      icon: getForwardMoveIcon(),
+      title: getForwardMoveTooltip(),
       onClick: (e) => {
         e.stopPropagation();
         swapIframeWithNeighbor(iframeWrapper, 'right');
+      },
+    });
+
+    const layoutToggleButton = createControlButton({
+      icon: currentLayout === 'horizontal' ? '🇱🇺' : '🇫🇷',
+      title:
+        currentLayout === 'horizontal'
+          ? 'Switch to vertical layout'
+          : 'Switch to horizontal layout',
+      className: 'layout-toggle-btn',
+      onClick: (e) => {
+        e.stopPropagation();
+        toggleLayout();
       },
     });
 
@@ -216,8 +373,7 @@ if (!iframeContainer) {
     const deleteButton = createControlButton({
       icon: '🗑️',
       title: 'Delete from split page',
-      className:
-        'bg-red-500/70 hover:bg-red-600/90 text-white',
+      className: 'bg-red-500/70 hover:bg-red-600/90 text-white',
       onClick: (e) => {
         e.stopPropagation();
         removeIframeWrapper(iframeWrapper);
@@ -226,19 +382,28 @@ if (!iframeContainer) {
 
     // Update button states on hover to reflect current position
     iframeWrapper.addEventListener('mouseenter', () => {
-      updateMoveButtonStates(iframeWrapper, moveLeftButton.btn, moveRightButton.btn);
+      updateMoveButtonStates(
+        iframeWrapper,
+        moveLeftButton.btn,
+        moveRightButton.btn,
+      );
     });
 
     controlBar.appendChild(buttonsWrapper);
     buttonsWrapper.appendChild(moveLeftButton.tooltip);
     buttonsWrapper.appendChild(moveRightButton.tooltip);
+    buttonsWrapper.appendChild(layoutToggleButton.tooltip);
     buttonsWrapper.appendChild(restoreButton.tooltip);
     buttonsWrapper.appendChild(deleteButton.tooltip);
 
     // Set initial button states
     // Use setTimeout to ensure all iframes are in the DOM first
     setTimeout(() => {
-      updateMoveButtonStates(iframeWrapper, moveLeftButton.btn, moveRightButton.btn);
+      updateMoveButtonStates(
+        iframeWrapper,
+        moveLeftButton.btn,
+        moveRightButton.btn,
+      );
     }, 0);
 
     // Add URL display at the bottom
@@ -299,10 +464,13 @@ if (!iframeContainer) {
     // Add divider between iframes (except for the last one)
     if (index < urls.length - 1) {
       const divider = document.createElement('div');
-      divider.className =
-        'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+      divider.className = `iframe-divider bg-gray-300 dark:bg-gray-600 ${currentLayout}`;
       divider.style.order = String(index * 2 + 1);
-      divider.style.width = '4px';
+      if (currentLayout === 'horizontal') {
+        divider.style.width = '4px';
+      } else {
+        divider.style.height = '4px';
+      }
       divider.style.flexShrink = '0';
 
       // Add + button to divider
@@ -311,6 +479,9 @@ if (!iframeContainer) {
       iframeContainer.appendChild(divider);
     }
   });
+
+  // Apply the current layout (in case it was loaded from URL state)
+  applyLayout();
 
   // Set up basic resizing functionality
   setupResizing();
@@ -326,52 +497,87 @@ if (!iframeContainer) {
 let isResizing = false;
 let resizeCurrentIndex = -1;
 let resizeStartX = 0;
+let resizeStartY = 0;
 let resizeStartLeftWidth = 0;
 let resizeStartRightWidth = 0;
+let resizeStartTopHeight = 0;
+let resizeStartBottomHeight = 0;
 let resizeLeftWrapper = null;
 let resizeRightWrapper = null;
+let resizeTopWrapper = null;
+let resizeBottomWrapper = null;
 let resizeOtherWrapperWidths = [];
+let resizeOtherWrapperHeights = [];
 
 /**
  * Handle mouse move during resize
  * @param {MouseEvent} e
  */
 function handleResizeMouseMove(e) {
-  if (
-    !isResizing ||
-    resizeCurrentIndex === -1 ||
-    !resizeLeftWrapper ||
-    !resizeRightWrapper
-  )
-    return;
+  if (!isResizing || resizeCurrentIndex === -1) return;
 
   e.preventDefault();
 
-  const deltaX = e.clientX - resizeStartX;
+  if (currentLayout === 'horizontal') {
+    // Horizontal layout: resize widths
+    if (!resizeLeftWrapper || !resizeRightWrapper) return;
 
-  // Calculate new widths for the two adjacent iframes
-  let newLeftWidth = resizeStartLeftWidth + deltaX;
-  let newRightWidth = resizeStartRightWidth - deltaX;
+    const deltaX = e.clientX - resizeStartX;
 
-  // Apply minimum width constraint (50px)
-  const minWidth = 50;
-  if (newLeftWidth < minWidth) {
-    newLeftWidth = minWidth;
-    newRightWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+    // Calculate new widths for the two adjacent iframes
+    let newLeftWidth = resizeStartLeftWidth + deltaX;
+    let newRightWidth = resizeStartRightWidth - deltaX;
+
+    // Apply minimum width constraint (50px)
+    const minWidth = 50;
+    if (newLeftWidth < minWidth) {
+      newLeftWidth = minWidth;
+      newRightWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+    }
+    if (newRightWidth < minWidth) {
+      newRightWidth = minWidth;
+      newLeftWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+    }
+
+    // Set fixed pixel widths for the two adjacent iframes
+    resizeLeftWrapper.style.flex = `0 0 ${newLeftWidth}px`;
+    resizeRightWrapper.style.flex = `0 0 ${newRightWidth}px`;
+
+    // Keep all other iframes at their original widths
+    resizeOtherWrapperWidths.forEach(({ wrapper, width }) => {
+      wrapper.style.flex = `0 0 ${width}px`;
+    });
+  } else {
+    // Vertical layout: resize heights
+    if (!resizeTopWrapper || !resizeBottomWrapper) return;
+
+    const deltaY = e.clientY - resizeStartY;
+
+    // Calculate new heights for the two adjacent iframes
+    let newTopHeight = resizeStartTopHeight + deltaY;
+    let newBottomHeight = resizeStartBottomHeight - deltaY;
+
+    // Apply minimum height constraint (50px)
+    const minHeight = 50;
+    if (newTopHeight < minHeight) {
+      newTopHeight = minHeight;
+      newBottomHeight =
+        resizeStartTopHeight + resizeStartBottomHeight - minHeight;
+    }
+    if (newBottomHeight < minHeight) {
+      newBottomHeight = minHeight;
+      newTopHeight = resizeStartTopHeight + resizeStartBottomHeight - minHeight;
+    }
+
+    // Set fixed pixel heights for the two adjacent iframes
+    resizeTopWrapper.style.flex = `0 0 ${newTopHeight}px`;
+    resizeBottomWrapper.style.flex = `0 0 ${newBottomHeight}px`;
+
+    // Keep all other iframes at their original heights
+    resizeOtherWrapperHeights.forEach(({ wrapper, height }) => {
+      wrapper.style.flex = `0 0 ${height}px`;
+    });
   }
-  if (newRightWidth < minWidth) {
-    newRightWidth = minWidth;
-    newLeftWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
-  }
-
-  // Set fixed pixel widths for the two adjacent iframes
-  resizeLeftWrapper.style.flex = `0 0 ${newLeftWidth}px`;
-  resizeRightWrapper.style.flex = `0 0 ${newRightWidth}px`;
-
-  // Keep all other iframes at their original widths
-  resizeOtherWrapperWidths.forEach(({ wrapper, width }) => {
-    wrapper.style.flex = `0 0 ${width}px`;
-  });
 }
 
 /**
@@ -384,7 +590,10 @@ function handleResizeMouseUp() {
   resizeCurrentIndex = -1;
   resizeLeftWrapper = null;
   resizeRightWrapper = null;
+  resizeTopWrapper = null;
+  resizeBottomWrapper = null;
   resizeOtherWrapperWidths = [];
+  resizeOtherWrapperHeights = [];
 
   // Reset visual feedback
   const dividers = document.querySelectorAll('.iframe-divider');
@@ -452,6 +661,7 @@ function setupResizing() {
       isResizing = true;
       resizeCurrentIndex = index;
       resizeStartX = mouseEvent.clientX;
+      resizeStartY = mouseEvent.clientY;
 
       // Get the order of this divider
       const dividerOrder = parseInt(newDivider.style.order);
@@ -466,20 +676,18 @@ function setupResizing() {
       );
 
       // Find the wrappers immediately before and after this divider based on order
-      // Divider order should be between left wrapper and right wrapper
-      // For example: leftWrapper.order = 0, divider.order = 1, rightWrapper.order = 2
-      const leftWrapperEl = wrappers.find(
+      const firstWrapperEl = wrappers.find(
         (w) =>
           parseInt(/** @type {HTMLElement} */ (w).style.order) ===
           dividerOrder - 1,
       );
-      const rightWrapperEl = wrappers.find(
+      const secondWrapperEl = wrappers.find(
         (w) =>
           parseInt(/** @type {HTMLElement} */ (w).style.order) ===
           dividerOrder + 1,
       );
 
-      if (!leftWrapperEl || !rightWrapperEl) {
+      if (!firstWrapperEl || !secondWrapperEl) {
         console.error(
           'Could not find adjacent wrappers for divider',
           dividerOrder,
@@ -487,32 +695,64 @@ function setupResizing() {
         return;
       }
 
-      resizeLeftWrapper = /** @type {HTMLElement} */ (leftWrapperEl);
-      resizeRightWrapper = /** @type {HTMLElement} */ (rightWrapperEl);
+      if (currentLayout === 'horizontal') {
+        // Horizontal layout: resize widths (left/right)
+        resizeLeftWrapper = /** @type {HTMLElement} */ (firstWrapperEl);
+        resizeRightWrapper = /** @type {HTMLElement} */ (secondWrapperEl);
 
-      // Store initial widths of the two adjacent iframes
-      resizeStartLeftWidth = resizeLeftWrapper.getBoundingClientRect().width;
-      resizeStartRightWidth = resizeRightWrapper.getBoundingClientRect().width;
+        // Store initial widths of the two adjacent iframes
+        resizeStartLeftWidth = resizeLeftWrapper.getBoundingClientRect().width;
+        resizeStartRightWidth =
+          resizeRightWrapper.getBoundingClientRect().width;
 
-      // Store widths of all other iframes to keep them fixed
-      resizeOtherWrapperWidths = wrappers
-        .filter((wrapper) => {
-          const wrapperOrder = parseInt(
-            /** @type {HTMLElement} */ (wrapper).style.order,
-          );
-          return (
-            wrapperOrder !== dividerOrder - 1 &&
-            wrapperOrder !== dividerOrder + 1
-          );
-        })
-        .map((wrapper) => ({
-          wrapper: /** @type {HTMLElement} */ (wrapper),
-          width: wrapper.getBoundingClientRect().width,
-        }));
+        // Store widths of all other iframes to keep them fixed
+        resizeOtherWrapperWidths = wrappers
+          .filter((wrapper) => {
+            const wrapperOrder = parseInt(
+              /** @type {HTMLElement} */ (wrapper).style.order,
+            );
+            return (
+              wrapperOrder !== dividerOrder - 1 &&
+              wrapperOrder !== dividerOrder + 1
+            );
+          })
+          .map((wrapper) => ({
+            wrapper: /** @type {HTMLElement} */ (wrapper),
+            width: wrapper.getBoundingClientRect().width,
+          }));
+
+        document.body.style.cursor = 'col-resize';
+      } else {
+        // Vertical layout: resize heights (top/bottom)
+        resizeTopWrapper = /** @type {HTMLElement} */ (firstWrapperEl);
+        resizeBottomWrapper = /** @type {HTMLElement} */ (secondWrapperEl);
+
+        // Store initial heights of the two adjacent iframes
+        resizeStartTopHeight = resizeTopWrapper.getBoundingClientRect().height;
+        resizeStartBottomHeight =
+          resizeBottomWrapper.getBoundingClientRect().height;
+
+        // Store heights of all other iframes to keep them fixed
+        resizeOtherWrapperHeights = wrappers
+          .filter((wrapper) => {
+            const wrapperOrder = parseInt(
+              /** @type {HTMLElement} */ (wrapper).style.order,
+            );
+            return (
+              wrapperOrder !== dividerOrder - 1 &&
+              wrapperOrder !== dividerOrder + 1
+            );
+          })
+          .map((wrapper) => ({
+            wrapper: /** @type {HTMLElement} */ (wrapper),
+            height: wrapper.getBoundingClientRect().height,
+          }));
+
+        document.body.style.cursor = 'row-resize';
+      }
 
       // Visual feedback
       newDivider.style.backgroundColor = 'rgba(59, 130, 246, 0.8)';
-      document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
       // Disable pointer events on iframes to prevent losing mouse tracking
@@ -555,17 +795,17 @@ window.addEventListener('message', (event) => {
   if (event.data.type === 'iframe-loaded') {
     const { frameName } = event.data;
     console.log('[split] Iframe loaded successfully:', frameName);
-    
+
     // Clear the timeout since iframe loaded
     clearIframeLoadTimeout(frameName);
-    
+
     // Mark as loaded
     const data = iframeData.get(frameName);
     if (data) {
       data.loaded = true;
     }
   }
-  
+
   // Handle iframe update
   if (event.data.type === 'iframe-update') {
     const { frameName, url, title, loaded } = event.data;
@@ -575,7 +815,7 @@ window.addEventListener('message', (event) => {
     if (data) {
       data.url = url;
       data.title = title;
-      
+
       // Mark as loaded if indicated
       if (loaded) {
         data.loaded = true;
@@ -612,7 +852,7 @@ function updatePageTitle() {
 }
 
 /**
- * Update the URL state parameter to reflect current iframe URLs
+ * Update the URL state parameter to reflect current iframe URLs and layout
  */
 function updateUrlStateParameter() {
   // Collect current URLs from all iframes in order
@@ -629,8 +869,8 @@ function updateUrlStateParameter() {
     })
     .filter((url) => url && url !== 'about:blank');
 
-  // Update state object
-  const newState = { urls: currentUrls };
+  // Update state object with URLs and layout
+  const newState = { urls: currentUrls, layout: currentLayout };
   const newUrl = `${window.location.pathname}?state=${encodeURIComponent(
     JSON.stringify(newState),
   )}`;
@@ -647,10 +887,16 @@ function updateUrlStateParameter() {
  * @param {string} url - The URL being loaded
  * @param {number} timeoutMs - Timeout in milliseconds
  */
-function setupIframeLoadTimeout(frameName, wrapper, iframe, url, timeoutMs = 10000) {
+function setupIframeLoadTimeout(
+  frameName,
+  wrapper,
+  iframe,
+  url,
+  timeoutMs = 10000,
+) {
   // Clear any existing timeout
   clearIframeLoadTimeout(frameName);
-  
+
   // Set timeout - if iframe hasn't loaded at all by then, show error
   const timeoutId = setTimeout(() => {
     const data = iframeData.get(frameName);
@@ -659,7 +905,7 @@ function setupIframeLoadTimeout(frameName, wrapper, iframe, url, timeoutMs = 100
       showIframeError(wrapper, iframe, url, 'Failed to load page');
     }
   }, timeoutMs);
-  
+
   iframeLoadTimeouts.set(frameName, timeoutId);
 }
 
@@ -674,16 +920,19 @@ function setupIframeLoadTimeout(frameName, wrapper, iframe, url, timeoutMs = 100
 function setupIframeLoadedCheck(frameName, wrapper, iframe, url) {
   // Clear the initial load timeout since iframe has loaded
   clearIframeLoadTimeout(frameName);
-  
+
   // Now set a short timeout to check if content script sent a message
   const timeoutId = setTimeout(() => {
     const data = iframeData.get(frameName);
     if (data && !data.loaded) {
-      console.log('[split] Iframe loaded but content script did not run - likely blocked:', url);
+      console.log(
+        '[split] Iframe loaded but content script did not run - likely blocked:',
+        url,
+      );
       showIframeError(wrapper, iframe, url, 'This site cannot be embedded');
     }
   }, 1000); // Only 1 second after load event
-  
+
   iframeLoadTimeouts.set(frameName, timeoutId);
 }
 
@@ -745,7 +994,7 @@ function showIframeError(iframeWrapper, iframe, url, message) {
 
   if (removeBtn) {
     removeBtn.addEventListener('click', () => {
-      removeIframeWrapper(iframeWrapper); 
+      removeIframeWrapper(iframeWrapper);
     });
   }
 
@@ -912,10 +1161,13 @@ function insertIframeAtDivider(divider, tab) {
 
   // Insert new divider after the new wrapper
   const newDivider = document.createElement('div');
-  newDivider.className =
-    'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+  newDivider.className = `iframe-divider bg-gray-300 dark:bg-gray-600 ${currentLayout}`;
   newDivider.style.order = String(dividerOrder + 2);
-  newDivider.style.width = '4px';
+  if (currentLayout === 'horizontal') {
+    newDivider.style.width = '4px';
+  } else {
+    newDivider.style.height = '4px';
+  }
   newDivider.style.flexShrink = '0';
   addPlusButtonToDivider(newDivider);
   iframeContainer.appendChild(newDivider);
@@ -978,11 +1230,14 @@ function insertIframeAtEdge(position, tab) {
 
   // Add divider
   const divider = document.createElement('div');
-  divider.className =
-    'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+  divider.className = `iframe-divider bg-gray-300 dark:bg-gray-600 ${currentLayout}`;
   divider.style.order =
     position === 'left' ? String(newOrder + 1) : String(newOrder - 1);
-  divider.style.width = '4px';
+  if (currentLayout === 'horizontal') {
+    divider.style.width = '4px';
+  } else {
+    divider.style.height = '4px';
+  }
   divider.style.flexShrink = '0';
   addPlusButtonToDivider(divider);
   iframeContainer.appendChild(divider);
@@ -1027,14 +1282,14 @@ function createIframeWrapper(url, order) {
     'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads',
   );
   iframe.setAttribute('allow', 'fullscreen');
-  
+
   // Apply current theme to iframe
   applyThemeToIframe(iframe, currentTheme);
 
   // Inject monitoring script when iframe loads
   iframe.addEventListener('load', async () => {
     requestBackgroundInjection(iframe);
-    
+
     // After iframe loads, wait briefly for content script to send message
     // If no message arrives, the iframe is likely blocked
     setupIframeLoadedCheck(iframe.name, iframeWrapper, iframe, url);
@@ -1052,74 +1307,89 @@ function createIframeWrapper(url, order) {
   // Add control bar at the top
   const controlBar = document.createElement('div');
   controlBar.className =
-    'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-row gap-2 items-center justify-center z-50';
+    'absolute top-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-50';
 
-  // Move left button
-  const moveLeftButton = document.createElement('button');
-  moveLeftButton.className =
-    'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
-  moveLeftButton.innerHTML = '◀️';
-  moveLeftButton.title = 'Move left';
-  moveLeftButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    swapIframeWithNeighbor(iframeWrapper, 'left');
+  const buttonsWrapper = document.createElement('div');
+  buttonsWrapper.className =
+    'flex flex-row gap-2 items-center justify-center bg-black/50 backdrop-blur-sm rounded-full p-1';
+
+  const moveLeftButton = createControlButton({
+    icon: getBackwardMoveIcon(),
+    title: getBackwardMoveTooltip(),
+    onClick: (e) => {
+      e.stopPropagation();
+      swapIframeWithNeighbor(iframeWrapper, 'left');
+    },
   });
 
-  // Move right button
-  const moveRightButton = document.createElement('button');
-  moveRightButton.className =
-    'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed';
-  moveRightButton.innerHTML = '▶️';
-  moveRightButton.title = 'Move right';
-  moveRightButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    swapIframeWithNeighbor(iframeWrapper, 'right');
+  const moveRightButton = createControlButton({
+    icon: getForwardMoveIcon(),
+    title: getForwardMoveTooltip(),
+    onClick: (e) => {
+      e.stopPropagation();
+      swapIframeWithNeighbor(iframeWrapper, 'right');
+    },
   });
 
-  // Restore as tab button
-  const restoreButton = document.createElement('button');
-  restoreButton.className =
-    'bg-black/70 hover:bg-black/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
-  restoreButton.innerHTML = '↗️';
-  restoreButton.title = 'Restore as browser tab';
-  restoreButton.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    // Get the current URL from iframe data
-    const data = iframeData.get(iframe.name);
-    const currentUrl = data ? data.url : iframe.src;
-
-    // Open the URL in a new tab
-    await chrome.tabs.create({ url: currentUrl });
-
-    // Remove this iframe
-    removeIframeWrapper(iframeWrapper);
+  const layoutToggleButton = createControlButton({
+    icon: currentLayout === 'horizontal' ? '🇱🇺' : '🇫🇷',
+    title:
+      currentLayout === 'horizontal'
+        ? 'Switch to vertical layout'
+        : 'Switch to horizontal layout',
+    className: 'layout-toggle-btn',
+    onClick: (e) => {
+      e.stopPropagation();
+      toggleLayout();
+    },
   });
 
-  // Delete button
-  const deleteButton = document.createElement('button');
-  deleteButton.className =
-    'bg-red-500/70 hover:bg-red-600/90 backdrop-blur-sm text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200';
-  deleteButton.innerHTML = '🗑️';
-  deleteButton.title = 'Delete from split page';
-  deleteButton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    removeIframeWrapper(iframeWrapper);
+  const restoreButton = createControlButton({
+    icon: '↗️',
+    title: 'Restore as browser tab',
+    onClick: async (e) => {
+      e.stopPropagation();
+      const data = iframeData.get(iframe.name);
+      const currentUrl = data ? data.url : iframe.src;
+      await chrome.tabs.create({ url: currentUrl });
+      removeIframeWrapper(iframeWrapper);
+    },
+  });
+
+  const deleteButton = createControlButton({
+    icon: '🗑️',
+    title: 'Delete from split page',
+    className: 'bg-red-500/70 hover:bg-red-600/90 text-white',
+    onClick: (e) => {
+      e.stopPropagation();
+      removeIframeWrapper(iframeWrapper);
+    },
   });
 
   // Update button states on hover to reflect current position
   iframeWrapper.addEventListener('mouseenter', () => {
-    updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+    updateMoveButtonStates(
+      iframeWrapper,
+      moveLeftButton.btn,
+      moveRightButton.btn,
+    );
   });
 
-  controlBar.appendChild(moveLeftButton);
-  controlBar.appendChild(moveRightButton);
-  controlBar.appendChild(restoreButton);
-  controlBar.appendChild(deleteButton);
+  controlBar.appendChild(buttonsWrapper);
+  buttonsWrapper.appendChild(moveLeftButton.tooltip);
+  buttonsWrapper.appendChild(moveRightButton.tooltip);
+  buttonsWrapper.appendChild(layoutToggleButton.tooltip);
+  buttonsWrapper.appendChild(restoreButton.tooltip);
+  buttonsWrapper.appendChild(deleteButton.tooltip);
 
   // Set initial button states
   // Use setTimeout to ensure all iframes are in the DOM first
   setTimeout(() => {
-    updateMoveButtonStates(iframeWrapper, moveLeftButton, moveRightButton);
+    updateMoveButtonStates(
+      iframeWrapper,
+      moveLeftButton.btn,
+      moveRightButton.btn,
+    );
   }, 0);
 
   // Add URL display at the bottom
@@ -1220,10 +1490,10 @@ function removeIframeWrapper(iframeWrapper) {
   if (iframe) {
     // Clean up iframe data
     const iframeName = /** @type {HTMLIFrameElement} */ (iframe).name;
-    
+
     // Clear any pending timeout
     clearIframeLoadTimeout(iframeName);
-    
+
     // Remove from data tracking
     iframeData.delete(iframeName);
 

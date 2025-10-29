@@ -52,103 +52,40 @@ const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 
-/**
- * Ensure the repeating alarm is scheduled.
- * @returns {Promise<void>}
- */
-async function scheduleMirrorAlarm() {
-  chrome.alarms.create(MIRROR_ALARM_NAME, {
-    periodInMinutes: MIRROR_PULL_INTERVAL_MINUTES,
-  });
-}
+// ============================================================================
+// KEYBOARD SHORTCUTS (COMMANDS)
+// Set up command listeners as early as possible to ensure they're ready
+// when the service worker wakes up from a keyboard shortcut
+// ============================================================================
 
 /**
- * Set up header removal rules for iframe functionality
- * @returns {Promise<void>}
- */
-async function setupHeaderRemovalRules() {
-  try {
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: [1],
-      addRules: [
-        {
-          id: 1,
-          condition: {
-            urlFilter: '*',
-            resourceTypes: ['sub_frame', 'main_frame'],
-          },
-          action: {
-            type: 'modifyHeaders',
-            responseHeaders: [
-              { header: 'X-Frame-Options', operation: 'remove' },
-              { header: 'Frame-Options', operation: 'remove' },
-              { header: 'Content-Security-Policy', operation: 'remove' },
-              {
-                header: 'Content-Security-Policy-Report-Only',
-                operation: 'remove',
-              },
-            ],
-          },
-        },
-      ],
-    });
-    console.log('Header removal rules installed successfully');
-  } catch (error) {
-    console.error('Failed to install header removal rules:', error);
-  }
-}
-
-/**
- * Handle one-time initialization tasks.
- * @param {string} trigger
+ * Handle keyboard shortcut changes.
+ * This ensures the extension responds properly when users modify keyboard shortcuts
+ * in chrome://extensions/shortcuts
+ * @param {chrome.commands.Command} command
  * @returns {void}
  */
-function handleLifecycleEvent(trigger) {
-  setupContextMenus();
-  setupClipboardContextMenus();
-  void scheduleMirrorAlarm();
-  void setupHeaderRemovalRules();
-  initializeOptionsBackupService();
-  void handleOptionsBackupLifecycle(trigger)
-    .then(async () => {
-      // Re-evaluate auto reload rules after options backup restore completes
-      try {
-        await evaluateAllTabs();
-      } catch (error) {
-        console.warn(
-          '[background] Failed to re-evaluate auto reload rules after options backup:',
-          error,
-        );
-      }
-    })
-    .catch((error) => {
-      console.warn(
-        '[options-backup] Lifecycle restore skipped:',
-        error instanceof Error ? error.message : error,
-      );
-    });
-  void runMirrorPull(trigger).catch((error) => {
-    console.warn(
-      '[mirror] Initial pull skipped:',
-      error instanceof Error ? error.message : error,
+if (chrome.commands.onChanged) {
+  chrome.commands.onChanged.addListener((command) => {
+    console.log(
+      '[commands] Keyboard shortcut changed:',
+      command.name,
+      'new shortcut:',
+      command.shortcut,
     );
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
-  handleLifecycleEvent('install');
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  handleLifecycleEvent('startup');
-});
-
 /**
  * Handle keyboard shortcuts (commands).
+ * This listener is set up early to ensure it's ready when the service worker
+ * wakes up from a keyboard shortcut press.
  * @param {string} command
  * @returns {void}
  */
 chrome.commands.onCommand.addListener((command) => {
+  console.log('[commands] Received command:', command);
+
   if (
     command === 'tabs-activate-left-tab' ||
     command === 'tabs-activate-right-tab'
@@ -508,6 +445,101 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Ensure the repeating alarm is scheduled.
+ * @returns {Promise<void>}
+ */
+async function scheduleMirrorAlarm() {
+  chrome.alarms.create(MIRROR_ALARM_NAME, {
+    periodInMinutes: MIRROR_PULL_INTERVAL_MINUTES,
+  });
+}
+
+/**
+ * Set up header removal rules for iframe functionality
+ * @returns {Promise<void>}
+ */
+async function setupHeaderRemovalRules() {
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [1],
+      addRules: [
+        {
+          id: 1,
+          condition: {
+            urlFilter: '*',
+            resourceTypes: ['sub_frame', 'main_frame'],
+          },
+          action: {
+            type: 'modifyHeaders',
+            responseHeaders: [
+              { header: 'X-Frame-Options', operation: 'remove' },
+              { header: 'Frame-Options', operation: 'remove' },
+              { header: 'Content-Security-Policy', operation: 'remove' },
+              {
+                header: 'Content-Security-Policy-Report-Only',
+                operation: 'remove',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    console.log('Header removal rules installed successfully');
+  } catch (error) {
+    console.error('Failed to install header removal rules:', error);
+  }
+}
+
+/**
+ * Handle one-time initialization tasks.
+ * @param {string} trigger
+ * @returns {void}
+ */
+function handleLifecycleEvent(trigger) {
+  setupContextMenus();
+  setupClipboardContextMenus();
+  void scheduleMirrorAlarm();
+  void setupHeaderRemovalRules();
+  initializeOptionsBackupService();
+  void handleOptionsBackupLifecycle(trigger)
+    .then(async () => {
+      // Re-evaluate auto reload rules after options backup restore completes
+      try {
+        await evaluateAllTabs();
+      } catch (error) {
+        console.warn(
+          '[background] Failed to re-evaluate auto reload rules after options backup:',
+          error,
+        );
+      }
+    })
+    .catch((error) => {
+      console.warn(
+        '[options-backup] Lifecycle restore skipped:',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  void runMirrorPull(trigger).catch((error) => {
+    console.warn(
+      '[mirror] Initial pull skipped:',
+      error instanceof Error ? error.message : error,
+    );
+  });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  handleLifecycleEvent('install');
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  handleLifecycleEvent('startup');
 });
 
 void initializeAutoReloadFeature().catch((error) => {
