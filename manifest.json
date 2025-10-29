@@ -68,7 +68,8 @@
       ],
       "js": [
         "src/contentScript/bright-mode.js",
-        "src/contentScript/block-elements.js"
+        "src/contentScript/block-elements.js",
+        "src/contentScript/custom-js-css.js"
       ],
       "run_at": "document_start"
     },

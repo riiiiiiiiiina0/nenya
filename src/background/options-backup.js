@@ -157,6 +157,23 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} CustomCodeRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string} css
+ * @property {string} js
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
+ * @typedef {Object} CustomCodeRulesBackupPayload
+ * @property {'custom-code-rules'} kind
+ * @property {CustomCodeRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
  * @typedef {Object} BackupCategoryState
  * @property {number | undefined} lastBackupAt
  * @property {string | undefined} lastBackupTrigger
@@ -191,6 +208,7 @@ const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
+const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -233,6 +251,7 @@ const CATEGORY_IDS = [
   'bright-mode-settings',
   'highlight-text-rules',
   'block-element-rules',
+  'custom-code-rules',
 ];
 
 /**
@@ -1263,6 +1282,75 @@ function normalizeBlockElementRules(value) {
 }
 
 /**
+ * Normalize custom code rules.
+ * @param {unknown} value
+ * @returns {{ rules: CustomCodeRuleSettings[], mutated: boolean }}
+ */
+function normalizeCustomCodeRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!pattern) {
+        return;
+      }
+
+      try {
+        // eslint-disable-next-line no-new
+        new URLPattern(pattern);
+      } catch (error) {
+        console.warn(
+          '[options-backup] Ignoring invalid custom code pattern:',
+          pattern,
+          error,
+        );
+        return;
+      }
+
+      const css = typeof raw.css === 'string' ? raw.css : '';
+      const js = typeof raw.js === 'string' ? raw.js : '';
+
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {CustomCodeRuleSettings} */
+      const rule = {
+        id,
+        pattern,
+        css,
+        js,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+      sanitized.push(rule);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) =>
+    a.pattern.localeCompare(b.pattern),
+  );
+  if (!mutated && sanitized.length !== originalLength) {
+    mutated = true;
+  }
+  return { rules: sorted, mutated };
+}
+
+/**
  * Collect block element rules from storage.
  * @returns {Promise<BlockElementRuleSettings[]>}
  */
@@ -1275,6 +1363,24 @@ async function collectBlockElementRules() {
     suppressBackup('block-element-rules');
     await chrome.storage.sync.set({
       [BLOCK_ELEMENT_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Collect custom code rules from storage.
+ * @returns {Promise<CustomCodeRuleSettings[]>}
+ */
+async function collectCustomCodeRules() {
+  const result = await chrome.storage.sync.get(CUSTOM_CODE_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeCustomCodeRules(
+    result?.[CUSTOM_CODE_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('custom-code-rules');
+    await chrome.storage.sync.set({
+      [CUSTOM_CODE_RULES_KEY]: sanitized,
     });
   }
   return sanitized;
@@ -1405,6 +1511,37 @@ async function buildBlockElementRulesPayload(trigger) {
   const metadata = await buildMetadata(trigger);
   return {
     kind: 'block-element-rules',
+    rules,
+    metadata,
+  };
+}
+
+/**
+ * Apply custom code rules to storage.
+ * @param {CustomCodeRulesBackupPayload} payload
+ * @returns {Promise<void>}
+ */
+async function applyCustomCodeRules(payload) {
+  if (!payload || !Array.isArray(payload.rules)) {
+    return;
+  }
+  const { rules: sanitized } = normalizeCustomCodeRules(payload.rules);
+  suppressBackup('custom-code-rules');
+  await chrome.storage.sync.set({
+    [CUSTOM_CODE_RULES_KEY]: sanitized,
+  });
+}
+
+/**
+ * Build custom code rules payload.
+ * @param {string} trigger
+ * @returns {Promise<CustomCodeRulesBackupPayload>}
+ */
+async function buildCustomCodeRulesPayload(trigger) {
+  const rules = await collectCustomCodeRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'custom-code-rules',
     rules,
     metadata,
   };
@@ -1796,6 +1933,66 @@ function parseBlockElementRulesItem(item) {
 }
 
 /**
+ * Attempt to parse custom code rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: CustomCodeRulesBackupPayload | null, lastModified: number }}
+ */
+function parseCustomCodeRulesItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedRules = normalizeCustomCodeRules(parsed?.rules).rules;
+
+    const payload = /** @type {CustomCodeRulesBackupPayload} */ ({
+      kind: 'custom-code-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Configuration for each backup category.
  */
 const CATEGORY_CONFIG = {
@@ -1840,6 +2037,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildBlockElementRulesPayload,
     parseItem: parseBlockElementRulesItem,
     applyPayload: applyBlockElementRules,
+  },
+  'custom-code-rules': {
+    title: 'custom-code-rules',
+    link: 'nenya://options/custom-code',
+    buildPayload: buildCustomCodeRulesPayload,
+    parseItem: parseCustomCodeRulesItem,
+    applyPayload: applyCustomCodeRules,
   },
 };
 
@@ -2333,6 +2537,8 @@ export async function resetOptionsToDefaults() {
   suppressBackup('auto-reload-rules');
   suppressBackup('bright-mode-settings');
   suppressBackup('highlight-text-rules');
+  suppressBackup('block-element-rules');
+  suppressBackup('custom-code-rules');
 
   const defaultPreferences = JSON.parse(
     JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES),
@@ -2351,6 +2557,7 @@ export async function resetOptionsToDefaults() {
     [BRIGHT_MODE_BLACKLIST_KEY]: [],
     [HIGHLIGHT_TEXT_RULES_KEY]: [],
     [BLOCK_ELEMENT_RULES_KEY]: [],
+    [CUSTOM_CODE_RULES_KEY]: [],
   });
 
   await updateState((state) => {

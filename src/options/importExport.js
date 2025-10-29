@@ -101,6 +101,16 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  */
 
 /**
+ * @typedef {Object} CustomCodeRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string} css
+ * @property {string} js
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
@@ -109,6 +119,7 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  * @property {BrightModeSettings} brightModeSettings
  * @property {HighlightTextRuleSettings[]} highlightTextRules
  * @property {BlockElementRuleSettings[]} blockElementRules
+ * @property {CustomCodeRuleSettings[]} customCodeRules
  */
 
 /**
@@ -118,7 +129,7 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 6;
+const EXPORT_VERSION = 7;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
@@ -126,6 +137,7 @@ const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
+const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
@@ -532,6 +544,70 @@ function normalizeBlockElementRules(value) {
 }
 
 /**
+ * Normalize custom code rules from storage or input.
+ * @param {unknown} value
+ * @returns {CustomCodeRuleSettings[]}
+ */
+function normalizeCustomCodeRules(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {CustomCodeRuleSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw =
+      /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        entry
+      );
+    const pattern =
+      typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    if (!pattern) {
+      return;
+    }
+
+    if (!isValidUrlPattern(pattern)) {
+      console.warn(
+        '[importExport:customCode] Ignoring invalid pattern:',
+        pattern,
+      );
+      return;
+    }
+
+    const css = typeof raw.css === 'string' ? raw.css : '';
+    const js = typeof raw.js === 'string' ? raw.js : '';
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {CustomCodeRuleSettings} */
+    const normalized = {
+      id,
+      pattern,
+      css,
+      js,
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -600,7 +676,7 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[] }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[] }>}
  */
 async function readCurrentOptions() {
   const [
@@ -611,6 +687,7 @@ async function readCurrentOptions() {
     blacklistPatterns,
     highlightTextRules,
     blockElementResp,
+    customCodeResp,
   ] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
@@ -619,6 +696,7 @@ async function readCurrentOptions() {
     getBlacklistPatterns(),
     loadHighlightTextRules(),
     chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
+    chrome.storage.sync.get(CUSTOM_CODE_RULES_KEY),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -671,6 +749,10 @@ async function readCurrentOptions() {
     blockElementResp?.[BLOCK_ELEMENT_RULES_KEY],
   );
 
+  const customCodeRules = normalizeCustomCodeRules(
+    customCodeResp?.[CUSTOM_CODE_RULES_KEY],
+  );
+
   return {
     rootFolder,
     notifications,
@@ -678,6 +760,7 @@ async function readCurrentOptions() {
     brightModeSettings,
     highlightTextRules,
     blockElementRules,
+    customCodeRules,
   };
 }
 
@@ -715,6 +798,7 @@ async function handleExportClick() {
       brightModeSettings,
       highlightTextRules,
       blockElementRules,
+      customCodeRules,
     } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
@@ -727,6 +811,7 @@ async function handleExportClick() {
         brightModeSettings,
         highlightTextRules,
         blockElementRules,
+        customCodeRules,
       },
     };
     const now = new Date();
@@ -753,6 +838,7 @@ async function handleExportClick() {
  * @param {BrightModeSettings} brightModeSettings
  * @param {HighlightTextRuleSettings[]} highlightTextRules
  * @param {BlockElementRuleSettings[]} blockElementRules
+ * @param {CustomCodeRuleSettings[]} customCodeRules
  * @returns {Promise<void>}
  */
 async function applyImportedOptions(
@@ -762,6 +848,7 @@ async function applyImportedOptions(
   brightModeSettings,
   highlightTextRules,
   blockElementRules,
+  customCodeRules,
 ) {
   let parentFolderId = '';
   const desiredPath =
@@ -813,6 +900,10 @@ async function applyImportedOptions(
     blockElementRules || [],
   );
 
+  const sanitizedCustomCodeRules = normalizeCustomCodeRules(
+    customCodeRules || [],
+  );
+
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
   let sanitizedBlacklist = [];
@@ -846,6 +937,7 @@ async function applyImportedOptions(
     [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
     [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
     [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
+    [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
   });
 }
 
@@ -888,6 +980,9 @@ async function handleFileChosen() {
     const blockElementRules = /** @type {BlockElementRuleSettings[]} */ (
       data.blockElementRules || []
     );
+    const customCodeRules = /** @type {CustomCodeRuleSettings[]} */ (
+      data.customCodeRules || []
+    );
 
     // Handle bright mode settings - support both old and new format
     let brightModeSettings = data.brightModeSettings;
@@ -910,6 +1005,7 @@ async function handleFileChosen() {
       brightModeSettings,
       highlightTextRules,
       blockElementRules,
+      customCodeRules,
     );
     showToast('Options imported successfully.', 'success');
   } catch (error) {
