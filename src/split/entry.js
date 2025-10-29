@@ -7,7 +7,7 @@ import { showTabPicker } from './tab-picker.js';
 // Parse URL state from query parameters
 const urlParams = new URLSearchParams(window.location.search);
 const stateParam = urlParams.get('state');
-let state = { urls: [], layout: 'horizontal' };
+let state = { urls: [], layout: 'horizontal', sizes: [] };
 
 if (stateParam) {
   try {
@@ -16,12 +16,16 @@ if (stateParam) {
     if (!state.layout) {
       state.layout = 'horizontal';
     }
+    if (!Array.isArray(state.sizes)) {
+      state.sizes = [];
+    }
   } catch (e) {
     console.error('Failed to parse state parameter:', e);
   }
 }
 
 const urls = Array.isArray(state.urls) ? state.urls : [];
+const storedSizes = normalizeStateSizes(state.sizes, urls.length);
 const iframeContainer = document.getElementById('iframe-container');
 
 // Track current theme (light or dark)
@@ -31,6 +35,36 @@ let currentTheme = 'light';
 // Track current layout (horizontal or vertical)
 /** @type {'horizontal' | 'vertical'} */
 let currentLayout = state.layout === 'vertical' ? 'vertical' : 'horizontal';
+
+const DIVIDER_THICKNESS_PX = 4;
+
+/**
+ * Normalize stored size values from URL state
+ * @param {unknown} rawSizes
+ * @param {number} expectedLength
+ * @returns {number[] | null}
+ */
+function normalizeStateSizes(rawSizes, expectedLength) {
+  if (!Array.isArray(rawSizes) || rawSizes.length !== expectedLength) {
+    return null;
+  }
+
+  const numericSizes = rawSizes.map((value) => {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : NaN;
+  });
+
+  if (numericSizes.some((value) => Number.isNaN(value))) {
+    return null;
+  }
+
+  const total = numericSizes.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) {
+    return null;
+  }
+
+  return numericSizes.map((value) => (value / total) * 100);
+}
 
 /**
  * Get the icon for moving an iframe backward in the current layout
@@ -152,8 +186,9 @@ function toggleLayout() {
 
 /**
  * Apply the current layout to the container and dividers
+ * @param {number[] | null | undefined} sizesToApply
  */
-function applyLayout() {
+function applyLayout(sizesToApply) {
   if (!iframeContainer) return;
 
   // Update container flex direction
@@ -179,7 +214,17 @@ function applyLayout() {
   });
 
   // Rebalance iframe sizes
-  rebalanceIframeSizes();
+  const wrappers = document.querySelectorAll('.iframe-wrapper');
+  const shouldApplyStoredSizes =
+    Array.isArray(sizesToApply) &&
+    sizesToApply.length === wrappers.length &&
+    sizesToApply.length > 0;
+
+  if (shouldApplyStoredSizes) {
+    applyStoredIframeSizes(/** @type {number[]} */ (sizesToApply));
+  } else {
+    rebalanceIframeSizes();
+  }
 }
 
 /**
@@ -481,7 +526,7 @@ if (!iframeContainer) {
   });
 
   // Apply the current layout (in case it was loaded from URL state)
-  applyLayout();
+  applyLayout(storedSizes);
 
   // Set up basic resizing functionality
   setupResizing();
@@ -610,6 +655,8 @@ function handleResizeMouseUp() {
   iframes.forEach((iframe) => {
     /** @type {HTMLElement} */ (iframe).style.pointerEvents = '';
   });
+
+  updateUrlStateParameter();
 }
 
 /**
@@ -852,30 +899,68 @@ function updatePageTitle() {
 }
 
 /**
- * Update the URL state parameter to reflect current iframe URLs and layout
+ * Update the URL state parameter to reflect iframe URLs, layout, and size ratios
  */
 function updateUrlStateParameter() {
-  // Collect current URLs from all iframes in order
-  const currentUrls = Array.from(
-    document.querySelectorAll('.iframe-wrapper iframe'),
-  )
-    .map((iframe) => {
-      const iframeName = /** @type {HTMLIFrameElement} */ (iframe).name;
-      const data = iframeData.get(iframeName);
-      // Use tracked URL if available, otherwise fall back to iframe.src
-      return data && data.url
-        ? data.url
-        : /** @type {HTMLIFrameElement} */ (iframe).src;
-    })
-    .filter((url) => url && url !== 'about:blank');
+  if (!iframeContainer) return;
 
-  // Update state object with URLs and layout
-  const newState = { urls: currentUrls, layout: currentLayout };
+  /** @type {{ url: string, size: number }[]} */
+  const entries = [];
+
+  const wrappers = Array.from(document.querySelectorAll('.iframe-wrapper')).sort(
+    (a, b) => {
+      const orderA = Number.parseInt(
+        /** @type {HTMLElement} */ (a).style.order || '0',
+        10,
+      );
+      const orderB = Number.parseInt(
+        /** @type {HTMLElement} */ (b).style.order || '0',
+        10,
+      );
+      return orderA - orderB;
+    },
+  );
+
+  wrappers.forEach((wrapper) => {
+    const iframe = wrapper.querySelector('iframe');
+    if (!iframe) return;
+
+    const iframeEl = /** @type {HTMLIFrameElement} */ (iframe);
+    const iframeName = iframeEl.name;
+    const data = iframeData.get(iframeName);
+    const url = data && data.url ? data.url : iframeEl.src;
+
+    if (!url || url === 'about:blank') {
+      return;
+    }
+
+    const rect = /** @type {HTMLElement} */ (wrapper).getBoundingClientRect();
+    const size =
+      currentLayout === 'horizontal' ? rect.width : rect.height;
+
+    entries.push({ url, size });
+  });
+
+  const sizeTotal = entries.reduce((sum, entry) => sum + entry.size, 0);
+  const sizes =
+    entries.length > 0 && sizeTotal > 0
+      ? entries.map((entry) =>
+          Number(((entry.size / sizeTotal) * 100).toFixed(4)),
+        )
+      : [];
+
+  const currentUrls = entries.map((entry) => entry.url);
+
+  const newState = {
+    urls: currentUrls,
+    layout: currentLayout,
+    sizes,
+  };
+
   const newUrl = `${window.location.pathname}?state=${encodeURIComponent(
     JSON.stringify(newState),
   )}`;
 
-  // Update browser URL without reload using replaceState
   window.history.replaceState(null, '', newUrl);
 }
 
@@ -1447,6 +1532,56 @@ function createIframeWrapper(url, order) {
   iframeWrapper.appendChild(urlDisplay);
 
   return iframeWrapper;
+}
+
+/**
+ * Apply stored iframe size percentages to the current layout
+ * @param {number[]} sizes
+ */
+function applyStoredIframeSizes(sizes) {
+  if (!iframeContainer) return;
+
+  window.requestAnimationFrame(() => {
+    const wrappers = Array.from(
+      document.querySelectorAll('.iframe-wrapper'),
+    );
+
+    if (wrappers.length !== sizes.length) {
+      rebalanceIframeSizes();
+      return;
+    }
+
+    const sanitizedSizes = sizes.map((value) =>
+      Number.isFinite(value) && value >= 0 ? value : 0,
+    );
+    const total = sanitizedSizes.reduce((sum, value) => sum + value, 0);
+
+    if (total <= 0) {
+      rebalanceIframeSizes();
+      return;
+    }
+
+    const dividerCount = Math.max(0, wrappers.length - 1);
+    const dividerSpace = dividerCount * DIVIDER_THICKNESS_PX;
+    const containerRect = iframeContainer.getBoundingClientRect();
+    const containerSize =
+      currentLayout === 'horizontal'
+        ? containerRect.width
+        : containerRect.height;
+    const availableSpace = Math.max(0, containerSize - dividerSpace);
+
+    if (availableSpace <= 0) {
+      rebalanceIframeSizes();
+      return;
+    }
+
+    wrappers.forEach((wrapper, index) => {
+      const ratio = sanitizedSizes[index] / total;
+      const pixelSize = Math.max(0, availableSpace * ratio);
+      const basisValue = pixelSize.toFixed(2);
+      /** @type {HTMLElement} */ (wrapper).style.flex = `0 0 ${basisValue}px`;
+    });
+  });
 }
 
 /**
