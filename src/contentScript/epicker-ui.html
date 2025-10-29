@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light dark">
+  <title>Nenya Element Picker</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-size: 14px;
+    }
+
+    body {
+      background: transparent;
+      pointer-events: none;
+    }
+
+    aside {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      width: 400px;
+      max-width: calc(100vw - 40px);
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+      pointer-events: auto;
+      z-index: 2147483647;
+    }
+
+    #windowbar {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      background: #f5f5f5;
+      border-radius: 8px 8px 0 0;
+      cursor: move;
+      user-select: none;
+    }
+
+    #move {
+      flex: 1;
+      text-align: center;
+      font-weight: 600;
+      color: #333;
+    }
+
+    #move::before {
+      content: '🎯 Element Picker';
+    }
+
+    #quit {
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    #quit:hover {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    section {
+      padding: 16px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+    }
+
+    .selector-display {
+      background: #f9fafb;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 13px;
+      color: #1f2937;
+      word-break: break-all;
+    }
+
+    .slider-container {
+      margin-bottom: 16px;
+    }
+
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: #6b7280;
+    }
+
+    .slider-count {
+      font-weight: 600;
+      color: #4f46e5;
+    }
+
+    #specificitySlider {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #e5e7eb;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+    }
+
+    #specificitySlider::-webkit-slider-thumb {
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #4f46e5;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #specificitySlider::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      background: #4338ca;
+    }
+
+    #specificitySlider::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #4f46e5;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #specificitySlider::-moz-range-thumb:hover {
+      transform: scale(1.2);
+      background: #4338ca;
+    }
+
+    .candidates-list {
+      margin-bottom: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+    }
+
+    .candidate-item {
+      padding: 10px 12px;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #e5e7eb;
+      transition: background 0.15s;
+      word-break: break-all;
+    }
+
+    .candidate-item:last-child {
+      border-bottom: none;
+    }
+
+    .candidate-item:hover {
+      background: #f3f4f6;
+    }
+
+    .candidate-item.active {
+      background: #eef2ff;
+      color: #4f46e5;
+      font-weight: 500;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    #pick {
+      background: #6b7280;
+      color: white;
+    }
+
+    #pick:hover {
+      background: #4b5563;
+    }
+
+    #preview {
+      background: #f59e0b;
+      color: white;
+    }
+
+    #preview:hover {
+      background: #d97706;
+    }
+
+    #preview.active {
+      background: #dc2626;
+    }
+
+    #create {
+      background: #4f46e5;
+      color: white;
+    }
+
+    #create:hover {
+      background: #4338ca;
+    }
+
+    #create:disabled {
+      background: #d1d5db;
+      cursor: not-allowed;
+    }
+
+    svg#sea {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: auto;
+      z-index: 2147483646;
+    }
+
+    svg#sea path:first-child {
+      fill: rgba(0, 0, 0, 0.2);
+      fill-rule: evenodd;
+    }
+
+    svg#sea path:last-child {
+      fill: rgba(79, 70, 229, 0.3);
+      stroke: #4f46e5;
+      stroke-width: 1;
+      fill-rule: evenodd;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      aside {
+        background: #1f2937;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+      }
+
+      #windowbar {
+        background: #111827;
+      }
+
+      #move {
+        color: #f3f4f6;
+      }
+
+      .selector-display {
+        background: #374151;
+        color: #f3f4f6;
+      }
+
+      .slider-label {
+        color: #9ca3af;
+      }
+
+      .slider-count {
+        color: #818cf8;
+      }
+
+      #specificitySlider {
+        background: #4b5563;
+      }
+
+      #specificitySlider::-webkit-slider-thumb {
+        background: #6366f1;
+      }
+
+      #specificitySlider::-webkit-slider-thumb:hover {
+        background: #818cf8;
+      }
+
+      #specificitySlider::-moz-range-thumb {
+        background: #6366f1;
+      }
+
+      #specificitySlider::-moz-range-thumb:hover {
+        background: #818cf8;
+      }
+
+      .candidates-list {
+        border-color: #4b5563;
+      }
+
+      .candidate-item {
+        border-bottom-color: #4b5563;
+        color: #d1d5db;
+      }
+
+      .candidate-item:hover {
+        background: #374151;
+      }
+
+      .candidate-item.active {
+        background: #312e81;
+        color: #818cf8;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <aside id="dialog" class="hidden">
+    <div id="windowbar">
+      <div id="move"></div>
+      <div id="quit">✕</div>
+    </div>
+    <section>
+      <div id="selectorDisplay" class="selector-display">
+        Click an element to select...
+      </div>
+
+      <div class="slider-container">
+        <div class="slider-label">
+          <span>Move the slider to select the best match</span>
+          <span class="slider-count" id="matchCount">0</span>
+        </div>
+        <input type="range" id="specificitySlider" min="0" max="0" value="0" step="1">
+      </div>
+
+      <div id="candidatesList" class="candidates-list"></div>
+
+      <div class="button-group">
+        <button id="pick" type="button">Pick</button>
+        <button id="preview" type="button">Preview</button>
+        <button id="create" type="button" disabled>Create</button>
+      </div>
+    </section>
+  </aside>
+  <svg id="sea">
+    <path d=""></path>
+    <path d=""></path>
+  </svg>
+
+  <script src="./epicker-ui.js"></script>
+</body>
+
+</html>

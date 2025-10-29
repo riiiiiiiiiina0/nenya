@@ -445,6 +445,29 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
+
+  if (command === 'block-element-picker') {
+    void (async () => {
+      try {
+        // Get the current active tab
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const currentTab = tabs && tabs[0];
+        if (!currentTab || !currentTab.id) {
+          console.warn('[commands] No active tab found for element picker');
+          return;
+        }
+
+        // Launch the element picker
+        await launchElementPicker(currentTab.id);
+      } catch (error) {
+        console.warn('[commands] Element picker failed:', error);
+      }
+    })();
+    return;
+  }
 });
 
 // ============================================================================
@@ -683,6 +706,90 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return handleRestoreProjectTabsMessage(message, sendResponse);
   }
 
+  if (message.type === 'launchElementPicker') {
+    const tabId = typeof message.tabId === 'number' ? message.tabId : null;
+    if (tabId === null) {
+      sendResponse({ success: false, error: 'Invalid tab ID' });
+      return false;
+    }
+    void launchElementPicker(tabId)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error('[background] Failed to launch element picker:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'blockElement:addSelector') {
+    const selector =
+      typeof message.selector === 'string' ? message.selector : '';
+    const url = typeof message.url === 'string' ? message.url : '';
+
+    if (!selector || !url) {
+      sendResponse({ success: false, error: 'Invalid selector or URL' });
+      return false;
+    }
+
+    void (async () => {
+      try {
+        // Extract URL pattern from the URL
+        const urlObj = new URL(url);
+        const urlPattern = `${urlObj.protocol}//${urlObj.hostname}/*`;
+
+        // Load existing rules
+        const STORAGE_KEY = 'blockElementRules';
+        const stored = await chrome.storage.sync.get(STORAGE_KEY);
+        const rules = Array.isArray(stored?.[STORAGE_KEY])
+          ? stored[STORAGE_KEY]
+          : [];
+
+        // Find existing rule for this URL pattern or create new one
+        let rule = rules.find((r) => r.urlPattern === urlPattern);
+        const now = new Date().toISOString();
+
+        if (rule) {
+          // Add selector if not already present
+          if (!rule.selectors.includes(selector)) {
+            rule.selectors.push(selector);
+            rule.updatedAt = now;
+          }
+        } else {
+          // Create new rule
+          const generateRuleId = () => {
+            if (typeof crypto?.randomUUID === 'function') {
+              return crypto.randomUUID();
+            }
+            const random = Math.random().toString(36).slice(2);
+            return 'rule-' + Date.now().toString(36) + '-' + random;
+          };
+
+          rule = {
+            id: generateRuleId(),
+            urlPattern,
+            selectors: [selector],
+            createdAt: now,
+            updatedAt: now,
+          };
+          rules.push(rule);
+        }
+
+        // Save rules
+        await chrome.storage.sync.set({
+          [STORAGE_KEY]: rules,
+        });
+
+        sendResponse({ success: true, rule });
+      } catch (error) {
+        console.error('[background] Failed to save blocking rule:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.action === 'inject-iframe-monitor') {
     // Handle iframe monitoring script injection for cross-origin frames
     return handleIframeMonitorInjection(message, sender, sendResponse);
@@ -726,6 +833,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+/**
+ * Launch the element picker in the specified tab.
+ * @param {number} tabId - The tab ID to inject the picker into
+ * @returns {Promise<void>}
+ */
+async function launchElementPicker(tabId) {
+  try {
+    // Inject the element picker content script
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['/src/contentScript/epicker.js'],
+    });
+  } catch (error) {
+    console.error('[background] Failed to inject element picker:', error);
+    throw error;
+  }
+}
 
 /**
  * Handle iframe monitor injection request from split page

@@ -51,7 +51,9 @@
       "resources": [
         "src/split.html",
         "src/split/*",
-        "src/libs/*"
+        "src/libs/*",
+        "src/contentScript/epicker-ui.html",
+        "src/contentScript/epicker-ui.js"
       ],
       "matches": [
         "<all_urls>"
@@ -59,6 +61,26 @@
     }
   ],
   "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/contentScript/bright-mode.js",
+        "src/contentScript/block-elements.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/split/iframe-monitor.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": true
+    },
     {
       "matches": [
         "<all_urls>"
@@ -72,25 +94,6 @@
         "src/contentScript/video-controller.css"
       ],
       "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "src/contentScript/bright-mode.js"
-      ],
-      "run_at": "document_start"
-    },
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "src/split/iframe-monitor.js"
-      ],
-      "run_at": "document_end",
-      "all_frames": true
     }
   ],
   "commands": {
@@ -135,6 +138,9 @@
     },
     "split-screen-toggle": {
       "description": "🖥️ Toggle split screen"
+    },
+    "block-element-picker": {
+      "description": "🎯 Element Picker"
     }
   }
 }

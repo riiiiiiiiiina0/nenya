@@ -6,6 +6,7 @@ import './importExport.js';
 import './autoReload.js';
 import './brightMode.js';
 import './highlightText.js';
+import './blockElements.js';
 
 /**
  * Navigation functionality for the options page
@@ -47,19 +48,19 @@ class NavigationManager {
    * Setup smooth scrolling for navigation links
    */
   setupSmoothScrolling() {
-    this.navLinks.forEach(link => {
+    this.navLinks.forEach((link) => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
         const href = link.getAttribute('href');
         if (!href) return;
-        
+
         const targetId = href.substring(1);
         const targetElement = document.getElementById(targetId);
-        
+
         if (targetElement) {
           // Update URL hash
           window.history.pushState(null, '', `#${targetId}`);
-          
+
           this.scrollToSection(targetElement);
         }
       });
@@ -73,11 +74,11 @@ class NavigationManager {
     const observerOptions = {
       root: null,
       rootMargin: '-10% 0px -80% 0px',
-      threshold: 0
+      threshold: 0,
     };
 
     const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
+      entries.forEach((entry) => {
         if (entry.isIntersecting) {
           const sectionId = entry.target.getAttribute('aria-labelledby');
           if (sectionId) {
@@ -87,7 +88,7 @@ class NavigationManager {
       });
     }, observerOptions);
 
-    this.sections.forEach(section => {
+    this.sections.forEach((section) => {
       observer.observe(section);
     });
   }
@@ -97,10 +98,10 @@ class NavigationManager {
    * @param {string} sectionId - The ID of the active section
    */
   updateActiveLink(sectionId) {
-    this.navLinks.forEach(link => {
+    this.navLinks.forEach((link) => {
       const href = link.getAttribute('href');
       if (!href) return;
-      
+
       const linkTarget = href.substring(1);
       if (linkTarget === sectionId) {
         link.classList.add('bg-primary', 'text-primary-content');
@@ -119,7 +120,7 @@ class NavigationManager {
     if (window.location.hash) {
       const targetId = window.location.hash.substring(1);
       const targetElement = document.getElementById(targetId);
-      
+
       if (targetElement) {
         // Small delay to ensure page is fully loaded
         setTimeout(() => {
