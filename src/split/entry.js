@@ -2,7 +2,7 @@
  * Split screen entry point - handles URL parsing and iframe creation
  */
 
-import { showTabPicker } from './tab-picker.js';
+import { showTabPicker, createEmbeddedTabPicker } from './tab-picker.js';
 
 // Parse URL state from query parameters
 const urlParams = new URLSearchParams(window.location.search);
@@ -531,6 +531,9 @@ if (!iframeContainer) {
 
   // Update plus button visibility based on iframe count
   updatePlusButtonVisibility();
+
+  // Check if we should show the embedded tab picker (only one iframe)
+  checkAndShowEmbeddedTabPicker();
 }
 
 // Global resize state and handlers (to avoid duplicate event listeners)
@@ -1216,7 +1219,8 @@ function addEdgePlusButtons() {
  */
 function updatePlusButtonVisibility() {
   const wrappers = document.querySelectorAll('.iframe-wrapper');
-  const shouldHide = wrappers.length >= 4;
+  // Hide plus buttons if there are 4+ iframes OR if there's only 1 (embedded picker shows)
+  const shouldHide = wrappers.length >= 4 || wrappers.length === 1;
 
   // Hide/show divider plus buttons
   const dividerPlusButtons = document.querySelectorAll('.divider-plus-btn');
@@ -1281,6 +1285,9 @@ function insertIframeAtDivider(divider, tab) {
 
   // Update visibility
   updatePlusButtonVisibility();
+
+  // Check if we should show/hide embedded tab picker
+  checkAndShowEmbeddedTabPicker();
 
   // Close the source tab after iframe loads
   const iframe = iframeWrapper.querySelector('iframe');
@@ -1351,6 +1358,9 @@ function insertIframeAtEdge(position, tab) {
 
   // Update visibility
   updatePlusButtonVisibility();
+
+  // Check if we should show/hide embedded tab picker
+  checkAndShowEmbeddedTabPicker();
 
   // Close the source tab after iframe loads
   const iframe = iframeWrapper.querySelector('iframe');
@@ -1680,6 +1690,9 @@ function removeIframeWrapper(iframeWrapper) {
     // Update plus button visibility
     updatePlusButtonVisibility();
 
+    // Check if we should show/hide embedded tab picker
+    checkAndShowEmbeddedTabPicker();
+
     // Re-setup resizing
     setupResizing();
   }
@@ -1788,4 +1801,69 @@ function updateAllMoveButtonStates() {
       moveRightButton.disabled = index === allWrappers.length - 1;
     }
   });
+}
+
+/**
+ * Check if we should show the embedded tab picker (only when there's one iframe)
+ */
+async function checkAndShowEmbeddedTabPicker() {
+  const wrappers = document.querySelectorAll('.iframe-wrapper');
+
+  if (wrappers.length === 1) {
+    await showEmbeddedTabPickerPanel();
+  } else {
+    hideEmbeddedTabPickerPanel();
+  }
+}
+
+/**
+ * Show the embedded tab picker panel on the right half
+ */
+async function showEmbeddedTabPickerPanel() {
+  if (!iframeContainer) return;
+
+  // Remove any existing embedded picker
+  const existing = document.getElementById('nenya-embedded-tab-picker-wrapper');
+  if (existing) {
+    existing.remove();
+  }
+
+  // Create wrapper for the embedded picker with padding
+  const pickerWrapper = document.createElement('div');
+  pickerWrapper.id = 'nenya-embedded-tab-picker-wrapper';
+  pickerWrapper.className =
+    'flex-shrink-0 flex-grow-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-900';
+  pickerWrapper.style.flex = '1';
+  pickerWrapper.style.order = '1000'; // Place it at the end
+
+  // Create card container for the picker
+  const cardContainer = document.createElement('div');
+  cardContainer.className =
+    'w-full h-full max-w-2xl max-h-[90vh] rounded-xl shadow-2xl overflow-hidden';
+
+  // Create the embedded picker
+  const picker = await createEmbeddedTabPicker((tab) => {
+    // When a tab is selected, add it as a new iframe
+    insertIframeAtEdge('right', tab);
+  });
+
+  cardContainer.appendChild(picker);
+  pickerWrapper.appendChild(cardContainer);
+  iframeContainer.appendChild(pickerWrapper);
+
+  // Adjust the single iframe to take up half the space
+  const wrapper = document.querySelector('.iframe-wrapper');
+  if (wrapper) {
+    /** @type {HTMLElement} */ (wrapper).style.flex = '1';
+  }
+}
+
+/**
+ * Hide the embedded tab picker panel
+ */
+function hideEmbeddedTabPickerPanel() {
+  const existing = document.getElementById('nenya-embedded-tab-picker-wrapper');
+  if (existing) {
+    existing.remove();
+  }
 }
