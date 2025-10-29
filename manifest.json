@@ -51,7 +51,9 @@
       "resources": [
         "src/split.html",
         "src/split/*",
-        "src/libs/*"
+        "src/libs/*",
+        "src/contentScript/epicker-ui.html",
+        "src/contentScript/epicker-ui.js"
       ],
       "matches": [
         "<all_urls>"

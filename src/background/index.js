@@ -683,6 +683,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return handleRestoreProjectTabsMessage(message, sendResponse);
   }
 
+  if (message.type === 'launchElementPicker') {
+    const tabId = typeof message.tabId === 'number' ? message.tabId : null;
+    if (tabId === null) {
+      sendResponse({ success: false, error: 'Invalid tab ID' });
+      return false;
+    }
+    void launchElementPicker(tabId)
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error('[background] Failed to launch element picker:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
   if (message.action === 'inject-iframe-monitor') {
     // Handle iframe monitoring script injection for cross-origin frames
     return handleIframeMonitorInjection(message, sender, sendResponse);
@@ -726,6 +743,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+/**
+ * Launch the element picker in the specified tab.
+ * @param {number} tabId - The tab ID to inject the picker into
+ * @returns {Promise<void>}
+ */
+async function launchElementPicker(tabId) {
+  try {
+    // Inject the element picker content script
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['/src/contentScript/epicker.js'],
+    });
+  } catch (error) {
+    console.error('[background] Failed to inject element picker:', error);
+    throw error;
+  }
+}
 
 /**
  * Handle iframe monitor injection request from split page
