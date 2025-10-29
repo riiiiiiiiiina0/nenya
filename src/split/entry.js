@@ -178,7 +178,7 @@ function initializeThemeMonitoring() {
  */
 function toggleLayout() {
   currentLayout = currentLayout === 'horizontal' ? 'vertical' : 'horizontal';
-  applyLayout();
+  applyLayout(undefined);
   updateAllLayoutButtons();
   setupResizing(); // Re-setup resizing for new layout
   updateUrlStateParameter(); // Persist layout state
@@ -258,9 +258,7 @@ function updateAllLayoutButtons() {
       }
     }
 
-    const tooltipElements = Array.from(
-      controlBar.querySelectorAll('.tooltip'),
-    );
+    const tooltipElements = Array.from(controlBar.querySelectorAll('.tooltip'));
     const buttonElements = Array.from(controlBar.querySelectorAll('button'));
 
     const moveBackwardTooltip = /** @type {HTMLElement | undefined} */ (
@@ -278,10 +276,7 @@ function updateAllLayoutButtons() {
 
     if (moveBackwardButton && moveBackwardTooltip) {
       moveBackwardButton.innerHTML = getBackwardMoveIcon();
-      moveBackwardTooltip.setAttribute(
-        'data-tip',
-        getBackwardMoveTooltip(),
-      );
+      moveBackwardTooltip.setAttribute('data-tip', getBackwardMoveTooltip());
     }
 
     if (moveForwardButton && moveForwardTooltip) {
@@ -584,13 +579,24 @@ function handleResizeMouseMove(e) {
       newLeftWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
     }
 
-    // Set fixed pixel widths for the two adjacent iframes
-    resizeLeftWrapper.style.flex = `0 0 ${newLeftWidth}px`;
-    resizeRightWrapper.style.flex = `0 0 ${newRightWidth}px`;
+    // Get total width including all iframes
+    const totalWidth =
+      newLeftWidth +
+      newRightWidth +
+      resizeOtherWrapperWidths.reduce((sum, { width }) => sum + width, 0);
 
-    // Keep all other iframes at their original widths
+    // Calculate percentages
+    const leftPercent = (newLeftWidth / totalWidth) * 100;
+    const rightPercent = (newRightWidth / totalWidth) * 100;
+
+    // Set percentage-based flex values for the two adjacent iframes
+    resizeLeftWrapper.style.flex = `${leftPercent} 0 0`;
+    resizeRightWrapper.style.flex = `${rightPercent} 0 0`;
+
+    // Keep all other iframes at their proportional widths
     resizeOtherWrapperWidths.forEach(({ wrapper, width }) => {
-      wrapper.style.flex = `0 0 ${width}px`;
+      const percent = (width / totalWidth) * 100;
+      wrapper.style.flex = `${percent} 0 0`;
     });
   } else {
     // Vertical layout: resize heights
@@ -614,13 +620,24 @@ function handleResizeMouseMove(e) {
       newTopHeight = resizeStartTopHeight + resizeStartBottomHeight - minHeight;
     }
 
-    // Set fixed pixel heights for the two adjacent iframes
-    resizeTopWrapper.style.flex = `0 0 ${newTopHeight}px`;
-    resizeBottomWrapper.style.flex = `0 0 ${newBottomHeight}px`;
+    // Get total height including all iframes
+    const totalHeight =
+      newTopHeight +
+      newBottomHeight +
+      resizeOtherWrapperHeights.reduce((sum, { height }) => sum + height, 0);
 
-    // Keep all other iframes at their original heights
+    // Calculate percentages
+    const topPercent = (newTopHeight / totalHeight) * 100;
+    const bottomPercent = (newBottomHeight / totalHeight) * 100;
+
+    // Set percentage-based flex values for the two adjacent iframes
+    resizeTopWrapper.style.flex = `${topPercent} 0 0`;
+    resizeBottomWrapper.style.flex = `${bottomPercent} 0 0`;
+
+    // Keep all other iframes at their proportional heights
     resizeOtherWrapperHeights.forEach(({ wrapper, height }) => {
-      wrapper.style.flex = `0 0 ${height}px`;
+      const percent = (height / totalHeight) * 100;
+      wrapper.style.flex = `${percent} 0 0`;
     });
   }
 }
@@ -907,19 +924,19 @@ function updateUrlStateParameter() {
   /** @type {{ url: string, size: number }[]} */
   const entries = [];
 
-  const wrappers = Array.from(document.querySelectorAll('.iframe-wrapper')).sort(
-    (a, b) => {
-      const orderA = Number.parseInt(
-        /** @type {HTMLElement} */ (a).style.order || '0',
-        10,
-      );
-      const orderB = Number.parseInt(
-        /** @type {HTMLElement} */ (b).style.order || '0',
-        10,
-      );
-      return orderA - orderB;
-    },
-  );
+  const wrappers = Array.from(
+    document.querySelectorAll('.iframe-wrapper'),
+  ).sort((a, b) => {
+    const orderA = Number.parseInt(
+      /** @type {HTMLElement} */ (a).style.order || '0',
+      10,
+    );
+    const orderB = Number.parseInt(
+      /** @type {HTMLElement} */ (b).style.order || '0',
+      10,
+    );
+    return orderA - orderB;
+  });
 
   wrappers.forEach((wrapper) => {
     const iframe = wrapper.querySelector('iframe');
@@ -935,8 +952,7 @@ function updateUrlStateParameter() {
     }
 
     const rect = /** @type {HTMLElement} */ (wrapper).getBoundingClientRect();
-    const size =
-      currentLayout === 'horizontal' ? rect.width : rect.height;
+    const size = currentLayout === 'horizontal' ? rect.width : rect.height;
 
     entries.push({ url, size });
   });
@@ -1119,9 +1135,9 @@ function requestBackgroundInjection(iframe) {
 function addPlusButtonToDivider(divider) {
   const plusButton = document.createElement('button');
   plusButton.className =
-    'divider-plus-btn absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 hover:opacity-100 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center shadow-lg transition-all duration-200 z-10';
+    'divider-plus-btn absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 hover:opacity-100 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all duration-200 z-10 cursor-pointer';
   plusButton.innerHTML = `
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
   `;
@@ -1157,9 +1173,9 @@ function addEdgePlusButtons() {
   const leftEdgeButton = document.createElement('button');
   leftEdgeButton.id = 'nenya-edge-plus-left';
   leftEdgeButton.className =
-    'edge-plus-btn fixed left-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100';
+    'edge-plus-btn fixed left-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100 cursor-pointer';
   leftEdgeButton.innerHTML = `
-    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
   `;
@@ -1176,9 +1192,9 @@ function addEdgePlusButtons() {
   const rightEdgeButton = document.createElement('button');
   rightEdgeButton.id = 'nenya-edge-plus-right';
   rightEdgeButton.className =
-    'edge-plus-btn fixed right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100';
+    'edge-plus-btn fixed right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100 cursor-pointer';
   rightEdgeButton.innerHTML = `
-    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
   `;
@@ -1541,46 +1557,27 @@ function createIframeWrapper(url, order) {
 function applyStoredIframeSizes(sizes) {
   if (!iframeContainer) return;
 
-  window.requestAnimationFrame(() => {
-    const wrappers = Array.from(
-      document.querySelectorAll('.iframe-wrapper'),
-    );
+  const wrappers = Array.from(document.querySelectorAll('.iframe-wrapper'));
 
-    if (wrappers.length !== sizes.length) {
-      rebalanceIframeSizes();
-      return;
-    }
+  if (wrappers.length !== sizes.length) {
+    rebalanceIframeSizes();
+    return;
+  }
 
-    const sanitizedSizes = sizes.map((value) =>
-      Number.isFinite(value) && value >= 0 ? value : 0,
-    );
-    const total = sanitizedSizes.reduce((sum, value) => sum + value, 0);
+  const sanitizedSizes = sizes.map((value) =>
+    Number.isFinite(value) && value >= 0 ? value : 0,
+  );
+  const total = sanitizedSizes.reduce((sum, value) => sum + value, 0);
 
-    if (total <= 0) {
-      rebalanceIframeSizes();
-      return;
-    }
+  if (total <= 0) {
+    rebalanceIframeSizes();
+    return;
+  }
 
-    const dividerCount = Math.max(0, wrappers.length - 1);
-    const dividerSpace = dividerCount * DIVIDER_THICKNESS_PX;
-    const containerRect = iframeContainer.getBoundingClientRect();
-    const containerSize =
-      currentLayout === 'horizontal'
-        ? containerRect.width
-        : containerRect.height;
-    const availableSpace = Math.max(0, containerSize - dividerSpace);
-
-    if (availableSpace <= 0) {
-      rebalanceIframeSizes();
-      return;
-    }
-
-    wrappers.forEach((wrapper, index) => {
-      const ratio = sanitizedSizes[index] / total;
-      const pixelSize = Math.max(0, availableSpace * ratio);
-      const basisValue = pixelSize.toFixed(2);
-      /** @type {HTMLElement} */ (wrapper).style.flex = `0 0 ${basisValue}px`;
-    });
+  // Apply percentage-based flex values directly
+  wrappers.forEach((wrapper, index) => {
+    const percent = (sanitizedSizes[index] / total) * 100;
+    /** @type {HTMLElement} */ (wrapper).style.flex = `${percent} 0 0`;
   });
 }
 
