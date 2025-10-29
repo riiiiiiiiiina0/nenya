@@ -10,7 +10,9 @@
 
   const dialog = document.getElementById('dialog');
   const selectorDisplay = document.getElementById('selectorDisplay');
-  const specificitySlider = document.getElementById('specificitySlider');
+  const specificitySlider = /** @type {HTMLInputElement|null} */ (
+    document.getElementById('specificitySlider')
+  );
   const matchCount = document.getElementById('matchCount');
   const candidatesList = document.getElementById('candidatesList');
   const pickButton = document.getElementById('pick');
@@ -18,8 +20,8 @@
   const createButton = document.getElementById('create');
   const quitButton = document.getElementById('quit');
   const svgRoot = document.getElementById('sea');
-  const svgOcean = svgRoot.children[0];
-  const svgIslands = svgRoot.children[1];
+  const svgOcean = svgRoot?.children[0];
+  const svgIslands = svgRoot?.children[1];
 
   let pickerContentPort = null;
   let selectorCandidates = [];
@@ -62,7 +64,7 @@
 
     return (ev) => {
       // Only highlight if dialog is hidden
-      if (!dialog.classList.contains('hidden')) {
+      if (!dialog || !dialog.classList.contains('hidden')) {
         return;
       }
       mx = ev.clientX;
@@ -89,16 +91,24 @@
    */
   const onPickClicked = () => {
     // Hide dialog and go back to picking mode
-    dialog.classList.add('hidden');
-    selectorDisplay.textContent = 'Click an element to select...';
+    if (dialog) {
+      dialog.classList.add('hidden');
+    }
+    if (selectorDisplay) {
+      selectorDisplay.textContent = 'Click an element to select...';
+    }
     selectorCandidates = [];
     currentSelectorIndex = 0;
-    createButton.disabled = true;
+    if (createButton) {
+      /** @type {HTMLButtonElement} */ (createButton).disabled = true;
+    }
 
     // Turn off preview if active
     if (previewActive) {
       previewActive = false;
-      previewButton.classList.remove('active');
+      if (previewButton) {
+        previewButton.classList.remove('active');
+      }
       if (pickerContentPort) {
         pickerContentPort.postMessage({ what: 'togglePreview', state: false });
       }
@@ -114,7 +124,9 @@
    */
   const onPreviewClicked = () => {
     previewActive = !previewActive;
-    previewButton.classList.toggle('active', previewActive);
+    if (previewButton) {
+      previewButton.classList.toggle('active', previewActive);
+    }
 
     if (pickerContentPort) {
       const selector = selectorCandidates[currentSelectorIndex];
@@ -148,6 +160,10 @@
    * @param {string} selector
    */
   const updateMatchCount = (selector) => {
+    if (!matchCount) {
+      return;
+    }
+
     if (!selector) {
       matchCount.textContent = '0';
       return;
@@ -165,11 +181,17 @@
    * Handle slider change
    */
   const onSliderChanged = () => {
+    if (!specificitySlider) {
+      return;
+    }
+
     const index = parseInt(specificitySlider.value, 10);
     if (index >= 0 && index < selectorCandidates.length) {
       currentSelectorIndex = index;
       const selector = selectorCandidates[index];
-      selectorDisplay.textContent = selector;
+      if (selectorDisplay) {
+        selectorDisplay.textContent = selector;
+      }
       updateMatchCount(selector);
       updateCandidatesList();
 
@@ -195,6 +217,10 @@
    * Update the candidates list display
    */
   const updateCandidatesList = () => {
+    if (!candidatesList) {
+      return;
+    }
+
     candidatesList.innerHTML = '';
 
     for (let i = 0; i < selectorCandidates.length; i++) {
@@ -205,8 +231,10 @@
       }
       item.textContent = selectorCandidates[i];
       item.addEventListener('click', () => {
-        specificitySlider.value = i.toString();
-        onSliderChanged();
+        if (specificitySlider) {
+          specificitySlider.value = i.toString();
+          onSliderChanged();
+        }
       });
       candidatesList.appendChild(item);
     }
@@ -221,8 +249,12 @@
 
     switch (msg.what) {
       case 'svgPaths':
-        svgOcean.setAttribute('d', msg.ocean || '');
-        svgIslands.setAttribute('d', msg.islands || '');
+        if (svgOcean) {
+          svgOcean.setAttribute('d', msg.ocean || '');
+        }
+        if (svgIslands) {
+          svgIslands.setAttribute('d', msg.islands || '');
+        }
         break;
 
       case 'showDialog':
@@ -232,13 +264,23 @@
 
           if (selectorCandidates.length > 0) {
             const selector = selectorCandidates[currentSelectorIndex];
-            selectorDisplay.textContent = selector;
-            specificitySlider.max = (selectorCandidates.length - 1).toString();
-            specificitySlider.value = currentSelectorIndex.toString();
+            if (selectorDisplay) {
+              selectorDisplay.textContent = selector;
+            }
+            if (specificitySlider) {
+              specificitySlider.max = (
+                selectorCandidates.length - 1
+              ).toString();
+              specificitySlider.value = currentSelectorIndex.toString();
+            }
             updateMatchCount(selector);
             updateCandidatesList();
-            createButton.disabled = false;
-            dialog.classList.remove('hidden');
+            if (createButton) {
+              /** @type {HTMLButtonElement} */ (createButton).disabled = false;
+            }
+            if (dialog) {
+              dialog.classList.remove('hidden');
+            }
 
             // Highlight all matching elements for the initial selector
             if (pickerContentPort) {
@@ -261,13 +303,29 @@
    */
   const startPicker = () => {
     // Set up event listeners
-    svgRoot.addEventListener('click', onSvgClicked);
-    svgRoot.addEventListener('mousemove', onSvgHover, { passive: true });
-    quitButton.addEventListener('click', onQuitClicked);
-    pickButton.addEventListener('click', onPickClicked);
-    previewButton.addEventListener('click', onPreviewClicked);
-    createButton.addEventListener('click', onCreateClicked);
-    specificitySlider.addEventListener('input', onSliderChanged);
+    if (svgRoot) {
+      svgRoot.addEventListener('click', onSvgClicked);
+      svgRoot.addEventListener(
+        'mousemove',
+        onSvgHover,
+        /** @type {AddEventListenerOptions} */ ({ passive: true }),
+      );
+    }
+    if (quitButton) {
+      quitButton.addEventListener('click', onQuitClicked);
+    }
+    if (pickButton) {
+      pickButton.addEventListener('click', onPickClicked);
+    }
+    if (previewButton) {
+      previewButton.addEventListener('click', onPreviewClicked);
+    }
+    if (createButton) {
+      createButton.addEventListener('click', onCreateClicked);
+    }
+    if (specificitySlider) {
+      specificitySlider.addEventListener('input', onSliderChanged);
+    }
 
     // Notify content script that we're ready
     if (pickerContentPort) {

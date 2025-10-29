@@ -9,11 +9,11 @@
   'use strict';
 
   // Prevent double-injection
-  if (window.__nenyaPickerActive) {
+  if (/** @type {any} */ (window).__nenyaPickerActive) {
     console.log('[epicker] Picker already active');
     return;
   }
-  window.__nenyaPickerActive = true;
+  /** @type {any} */ (window).__nenyaPickerActive = true;
 
   const pickerUniqueId = `nenya-picker-${Date.now()}`;
   let pickerFrame = null;
@@ -73,7 +73,7 @@
       return null;
     }
 
-    return elem;
+    return /** @type {HTMLElement} */ (elem);
   };
 
   /**
@@ -93,7 +93,9 @@
     let bottom = top + rect.height;
 
     for (const child of elem.children) {
-      const childRect = getElementBoundingClientRect(child);
+      const childRect = getElementBoundingClientRect(
+        /** @type {HTMLElement} */ (child),
+      );
       if (childRect.width === 0 || childRect.height === 0) {
         continue;
       }
@@ -295,7 +297,10 @@
       let i = 1;
       let sibling = elem.previousSibling;
       while (sibling !== null) {
-        if (sibling.nodeType === 1 && sibling.localName === tagName) {
+        if (
+          sibling.nodeType === 1 &&
+          /** @type {Element} */ (sibling).localName === tagName
+        ) {
           i++;
         }
         sibling = sibling.previousSibling;
@@ -395,12 +400,17 @@
         }
 
         parts.unshift(part);
-        current = current.parentElement;
+        const parentElem = current.parentElement;
         d++;
 
-        if (current === document.body || current === document.documentElement) {
+        if (
+          !parentElem ||
+          parentElem === document.body ||
+          parentElem === document.documentElement
+        ) {
           break;
         }
+        current = parentElem;
       }
 
       return parts.join(' > ');
@@ -433,12 +443,17 @@
         }
 
         parts.unshift(part);
-        current = current.parentElement;
+        const parentElem = current.parentElement;
         d++;
 
-        if (current === document.body || current === document.documentElement) {
+        if (
+          !parentElem ||
+          parentElem === document.body ||
+          parentElem === document.documentElement
+        ) {
           break;
         }
+        current = parentElem;
       }
 
       return parts.join(' ');
@@ -524,9 +539,9 @@
     }
 
     try {
-      const elems = Array.from(document.querySelectorAll(selector)).filter(
-        (el) => el !== pickerFrame,
-      );
+      const elems = Array.from(document.querySelectorAll(selector))
+        .filter((el) => el !== pickerFrame)
+        .map((el) => /** @type {HTMLElement} */ (el));
       highlightElements(elems);
     } catch (e) {
       highlightElements([]);
@@ -542,13 +557,16 @@
     if (!state) {
       // Restore all hidden elements
       document.querySelectorAll('[data-nenya-preview]').forEach((el) => {
-        el.removeAttribute('data-nenya-preview');
-        const originalDisplay = el.getAttribute('data-nenya-original-display');
+        const htmlEl = /** @type {HTMLElement} */ (el);
+        htmlEl.removeAttribute('data-nenya-preview');
+        const originalDisplay = htmlEl.getAttribute(
+          'data-nenya-original-display',
+        );
         if (originalDisplay !== null) {
-          el.style.display = originalDisplay;
-          el.removeAttribute('data-nenya-original-display');
+          htmlEl.style.display = originalDisplay;
+          htmlEl.removeAttribute('data-nenya-original-display');
         } else {
-          el.style.display = '';
+          htmlEl.style.display = '';
         }
       });
       return;
@@ -561,13 +579,14 @@
     try {
       const elems = document.querySelectorAll(selector);
       elems.forEach((el) => {
-        if (el !== pickerFrame) {
-          el.setAttribute('data-nenya-preview', '');
+        const htmlEl = /** @type {HTMLElement} */ (el);
+        if (htmlEl !== pickerFrame) {
+          htmlEl.setAttribute('data-nenya-preview', '');
           // Save original display value
-          const currentDisplay = el.style.display;
-          el.setAttribute('data-nenya-original-display', currentDisplay);
+          const currentDisplay = htmlEl.style.display;
+          htmlEl.setAttribute('data-nenya-original-display', currentDisplay);
           // Hide the element
-          el.style.display = 'none';
+          htmlEl.style.display = 'none';
         }
       });
     } catch (e) {
@@ -675,7 +694,11 @@
     document.documentElement.style.overflow = 'hidden';
 
     // Listen for mousemove events
-    document.addEventListener('mousemove', onSvgHover, { passive: true });
+    document.addEventListener(
+      'mousemove',
+      onSvgHover,
+      /** @type {AddEventListenerOptions} */ ({ passive: true }),
+    );
     document.addEventListener('keydown', onKeyPressed, true);
   };
 
@@ -683,7 +706,11 @@
    * Quit the picker and clean up
    */
   const quitPicker = () => {
-    document.removeEventListener('mousemove', onSvgHover, { passive: true });
+    document.removeEventListener(
+      'mousemove',
+      onSvgHover,
+      /** @type {EventListenerOptions} */ ({ passive: true }),
+    );
     document.removeEventListener('keydown', onKeyPressed, true);
 
     // Restore page scrolling
@@ -692,13 +719,16 @@
 
     // Clean up preview - restore hidden elements
     document.querySelectorAll('[data-nenya-preview]').forEach((el) => {
-      el.removeAttribute('data-nenya-preview');
-      const originalDisplay = el.getAttribute('data-nenya-original-display');
+      const htmlEl = /** @type {HTMLElement} */ (el);
+      htmlEl.removeAttribute('data-nenya-preview');
+      const originalDisplay = htmlEl.getAttribute(
+        'data-nenya-original-display',
+      );
       if (originalDisplay !== null) {
-        el.style.display = originalDisplay;
-        el.removeAttribute('data-nenya-original-display');
+        htmlEl.style.display = originalDisplay;
+        htmlEl.removeAttribute('data-nenya-original-display');
       } else {
-        el.style.display = '';
+        htmlEl.style.display = '';
       }
     });
 
@@ -716,7 +746,7 @@
       styleElement.parentNode.removeChild(styleElement);
     }
 
-    window.__nenyaPickerActive = false;
+    /** @type {any} */ (window).__nenyaPickerActive = false;
   };
 
   /**
@@ -770,18 +800,22 @@
             quitPicker();
           };
 
-          iframe.contentWindow.postMessage(
-            { what: 'epickerStart' },
-            pickerUrl,
-            [channel.port2],
-          );
+          if (iframe.contentWindow) {
+            iframe.contentWindow.postMessage(
+              { what: 'epickerStart' },
+              pickerUrl,
+              [channel.port2],
+            );
+          }
 
           resolve(iframe);
         },
         { once: true },
       );
 
-      iframe.contentWindow.location = pickerUrl;
+      if (iframe.contentWindow) {
+        iframe.contentWindow.location = pickerUrl;
+      }
     });
   };
 
