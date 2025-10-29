@@ -72,6 +72,13 @@
             <span class="text-sm">Notifications</span>
           </a>
         </li>
+        <li>
+          <a href="#debug-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🐛</span>
+            <span class="text-sm">Debug</span>
+          </a>
+        </li>
       </ul>
     </div>
   </nav>
@@ -667,6 +674,32 @@
                 </label>
               </div>
             </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- Debug section -->
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="debug-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="debug-heading" class="card-title text-3xl">🐛 Debug</h2>
+            <p class="text-base-content/70">Development and debugging utilities.</p>
+          </div>
+          <div class="space-y-4">
+            <div class="rounded-lg border border-base-300 p-4 space-y-4">
+              <div class="space-y-1">
+                <h3 class="text-lg font-semibold">Tab Operations</h3>
+                <p class="text-sm text-base-content/70">Tools for managing tabs across all windows.</p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button id="debugReloadAllTabsButton" class="btn btn-primary" type="button">
+                  <span class="text-lg">🔄</span>
+                  Reload All Tabs
+                </button>
+              </div>
+              <div id="debugOperationStatus" class="text-sm text-base-content/70 min-h-6" role="status"
+                aria-live="polite"></div>
+            </div>
           </div>
         </div>
       </section>

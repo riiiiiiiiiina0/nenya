@@ -40,6 +40,7 @@ import {
   updateClipboardContextMenuVisibility,
   handleClipboardCommand,
 } from './clipboard.js';
+import { initializeTabSnapshots } from './tab-snapshots.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -57,24 +58,6 @@ const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 // Set up command listeners as early as possible to ensure they're ready
 // when the service worker wakes up from a keyboard shortcut
 // ============================================================================
-
-/**
- * Handle keyboard shortcut changes.
- * This ensures the extension responds properly when users modify keyboard shortcuts
- * in chrome://extensions/shortcuts
- * @param {chrome.commands.Command} command
- * @returns {void}
- */
-if (chrome.commands.onChanged) {
-  chrome.commands.onChanged.addListener((command) => {
-    console.log(
-      '[commands] Keyboard shortcut changed:',
-      command.name,
-      'new shortcut:',
-      command.shortcut,
-    );
-  });
-}
 
 /**
  * Handle keyboard shortcuts (commands).
@@ -468,6 +451,31 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
+
+  if (command === 'tab-switcher') {
+    void (async () => {
+      try {
+        // Get the current active tab
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const currentTab = tabs && tabs[0];
+        if (!currentTab || !currentTab.id) {
+          console.warn('[commands] No active tab found for tab switcher');
+          return;
+        }
+
+        // Send message to content script to toggle tab switcher
+        await chrome.tabs.sendMessage(currentTab.id, {
+          type: 'tab-switcher:toggle',
+        });
+      } catch (error) {
+        console.warn('[commands] Tab switcher failed:', error);
+      }
+    })();
+    return;
+  }
 });
 
 // ============================================================================
@@ -531,6 +539,7 @@ function handleLifecycleEvent(trigger) {
   void scheduleMirrorAlarm();
   void setupHeaderRemovalRules();
   initializeOptionsBackupService();
+  initializeTabSnapshots();
   void handleOptionsBackupLifecycle(trigger)
     .then(async () => {
       // Re-evaluate auto reload rules after options backup restore completes
@@ -828,6 +837,129 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           error instanceof Error ? error.message : String(error);
         sendResponse({ ok: false, error: messageText });
       });
+    return true;
+  }
+
+  if (message.type === 'tab-switcher:activate') {
+    const tabId = typeof message.tabId === 'number' ? message.tabId : null;
+    if (tabId === null) {
+      sendResponse({ success: false, error: 'Invalid tab ID' });
+      return false;
+    }
+    void chrome.tabs
+      .update(tabId, { active: true })
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.error('[tab-switcher] Failed to activate tab:', error);
+        sendResponse({ success: false, error: error.message });
+      });
+    return true;
+  }
+
+  if (message.type === 'tab-switcher:cleanup') {
+    const invalidTabIds = Array.isArray(message.invalidTabIds)
+      ? message.invalidTabIds
+      : [];
+    if (invalidTabIds.length === 0) {
+      sendResponse({ success: true });
+      return false;
+    }
+
+    void (async () => {
+      try {
+        const result = await chrome.storage.local.get('tabSnapshots');
+        let snapshots = Array.isArray(result.tabSnapshots)
+          ? result.tabSnapshots
+          : [];
+
+        const beforeCount = snapshots.length;
+        snapshots = snapshots.filter(
+          (snapshot) => !invalidTabIds.includes(snapshot.tabId),
+        );
+        const afterCount = snapshots.length;
+
+        await chrome.storage.local.set({ tabSnapshots: snapshots });
+
+        console.log(
+          '[tab-switcher] Cleaned up',
+          beforeCount - afterCount,
+          'invalid snapshots',
+        );
+        sendResponse({ success: true, removed: beforeCount - afterCount });
+      } catch (error) {
+        console.error('[tab-switcher] Failed to cleanup snapshots:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === 'tab-switcher:getCurrentWindowId') {
+    if (sender.tab && typeof sender.tab.windowId === 'number') {
+      sendResponse({ success: true, windowId: sender.tab.windowId });
+    } else {
+      console.error('[tab-switcher] No window ID available from sender');
+      sendResponse({ success: false, windowId: -1 });
+    }
+    return false;
+  }
+
+  if (message.type === 'tab-switcher:getTabInfo') {
+    const tabId = typeof message.tabId === 'number' ? message.tabId : null;
+    if (tabId === null) {
+      sendResponse({ success: false, exists: false, windowId: null });
+      return false;
+    }
+
+    void chrome.tabs
+      .get(tabId)
+      .then((tab) => {
+        sendResponse({
+          success: true,
+          exists: true,
+          windowId: tab.windowId,
+        });
+      })
+      .catch(() => {
+        // Tab doesn't exist
+        sendResponse({
+          success: true,
+          exists: false,
+          windowId: null,
+        });
+      });
+    return true;
+  }
+
+  // Batch version: get info for multiple tabs at once (performance optimization)
+  if (message.type === 'tab-switcher:getTabsInfo') {
+    const tabIds = Array.isArray(message.tabIds) ? message.tabIds : [];
+    if (tabIds.length === 0) {
+      sendResponse({ success: true, results: [] });
+      return false;
+    }
+
+    // Fetch all tab info in parallel
+    void Promise.all(
+      tabIds.map((tabId) =>
+        chrome.tabs
+          .get(tabId)
+          .then((tab) => ({
+            tabId: tabId,
+            exists: true,
+            windowId: tab.windowId,
+          }))
+          .catch(() => ({
+            tabId: tabId,
+            exists: false,
+            windowId: null,
+          })),
+      ),
+    ).then((results) => {
+      sendResponse({ success: true, results: results });
+    });
     return true;
   }
 
