@@ -13,111 +13,6 @@
   // Store restoration timeouts to prevent infinite loops
   const restorationTimeouts = new WeakMap();
 
-  // Store reference to active context menu
-  let activeContextMenu = null;
-
-  /**
-   * Creates and shows a context menu for video controls
-   * @param {HTMLVideoElement} video
-   * @param {MouseEvent} event
-   */
-  function showContextMenu(video, event) {
-    event.preventDefault();
-
-    // Remove any existing context menu
-    if (activeContextMenu) {
-      activeContextMenu.remove();
-      activeContextMenu = null;
-    }
-
-    // Create context menu
-    const menu = document.createElement('div');
-    menu.classList.add('video-context-menu');
-    menu.style.left = `${event.pageX}px`;
-    menu.style.top = `${event.pageY}px`;
-
-    // Picture-in-Picture option
-    const pipOption = document.createElement('div');
-    pipOption.classList.add('video-context-menu-item');
-    pipOption.textContent = document.pictureInPictureElement
-      ? '📺 Exit Picture-in-Picture'
-      : '📺 Picture-in-Picture';
-    pipOption.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      try {
-        if (document.pictureInPictureElement) {
-          await document.exitPictureInPicture();
-        } else {
-          await video.requestPictureInPicture();
-          const response = await chrome.runtime.sendMessage({
-            type: 'getCurrentTabId',
-          });
-          if (response && response.tabId) {
-            await chrome.storage.local.set({ pipTabId: response.tabId });
-          }
-        }
-      } catch (error) {
-        console.error('[video-controller] PiP failed:', error);
-        chrome.storage.local.remove('pipTabId');
-      }
-      menu.remove();
-      activeContextMenu = null;
-    });
-
-    // Fullscreen option
-    const fullscreenOption = document.createElement('div');
-    fullscreenOption.classList.add('video-context-menu-item');
-    fullscreenOption.textContent = video.classList.contains('video-fullscreen')
-      ? '🔲 Exit Fullscreen'
-      : '⛶ Fullscreen';
-    fullscreenOption.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (video.classList.contains('video-fullscreen')) {
-        exitFullscreen(video);
-      } else {
-        enterFullscreen(video);
-      }
-      menu.remove();
-      activeContextMenu = null;
-    });
-
-    // Add options to menu
-    menu.appendChild(pipOption);
-    menu.appendChild(fullscreenOption);
-
-    // Add menu to body
-    document.body.appendChild(menu);
-    activeContextMenu = menu;
-
-    // Adjust menu position if it goes off screen
-    const menuRect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    if (menuRect.right > viewportWidth) {
-      menu.style.left = `${event.pageX - menuRect.width}px`;
-    }
-    if (menuRect.bottom > viewportHeight) {
-      menu.style.top = `${event.pageY - menuRect.height}px`;
-    }
-
-    // Close menu on any click outside
-    const closeMenu = (e) => {
-      if (!menu.contains(e.target)) {
-        menu.remove();
-        activeContextMenu = null;
-        document.removeEventListener('click', closeMenu);
-        document.removeEventListener('contextmenu', closeMenu);
-      }
-    };
-
-    // Use setTimeout to avoid immediate closure from the same click
-    setTimeout(() => {
-      document.addEventListener('click', closeMenu);
-      document.addEventListener('contextmenu', closeMenu);
-    }, 0);
-  }
-
   /**
    * @param {HTMLVideoElement} video
    */
@@ -335,11 +230,6 @@
 
     video.setAttribute('data-video-controller', 'true');
 
-    // Add context menu on right-click
-    video.addEventListener('contextmenu', (e) => {
-      showContextMenu(video, e);
-    });
-
     const container = document.createElement('div');
     container.classList.add('video-controller-container');
 
@@ -394,25 +284,13 @@
       }
     });
 
-    // Create a wrapper to properly contain the video and buttons
     const parent = video.parentElement;
     if (parent) {
-      // Create wrapper div
-      const wrapper = document.createElement('div');
-      wrapper.classList.add('video-controller-wrapper');
-      wrapper.style.position = 'relative';
-      wrapper.style.display = 'inline-block';
-      wrapper.style.width = '100%';
-      wrapper.style.lineHeight = '0'; // Prevent extra space below video
-
-      // Insert wrapper before video
-      parent.insertBefore(wrapper, video);
-
-      // Move video into wrapper
-      wrapper.appendChild(video);
-
-      // Add button container to wrapper
-      wrapper.appendChild(container);
+      const parentStyle = window.getComputedStyle(parent);
+      if (parentStyle.position === 'static') {
+        parent.style.position = 'relative';
+      }
+      parent.appendChild(container);
     }
   }
 
