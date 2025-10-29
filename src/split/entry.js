@@ -92,6 +92,60 @@ let activeIframeName = null;
 /** @type {Map<string, number>} */
 const iframeLoadTimeouts = new Map();
 
+// Track current layout
+/** @type {'horizontal' | 'vertical'} */
+let currentLayout = 'horizontal';
+
+/**
+ * Update the layout of the iframe container and dividers
+ * @param {'horizontal' | 'vertical'} layout
+ */
+function updateLayout(layout) {
+  if (!iframeContainer) return;
+
+  currentLayout = layout;
+
+  const dividers = document.querySelectorAll('.iframe-divider');
+  const layoutSwitchBtn = document.getElementById('layout-switch-btn');
+  const layoutSwitchTooltip = document.getElementById('layout-switch-tooltip');
+
+  if (layout === 'horizontal') {
+    iframeContainer.style.flexDirection = 'row';
+    dividers.forEach((divider) => {
+      const d = /** @type {HTMLElement} */ (divider);
+      d.style.width = '4px';
+      d.style.height = '';
+      d.classList.remove('vertical');
+      d.classList.add('horizontal');
+    });
+    if (layoutSwitchBtn) layoutSwitchBtn.textContent = '🇱🇺';
+    if (layoutSwitchTooltip) layoutSwitchTooltip.dataset.tip = 'Switch to vertical layout';
+  } else {
+    iframeContainer.style.flexDirection = 'column';
+    dividers.forEach((divider) => {
+      const d = /** @type {HTMLElement} */ (divider);
+      d.style.width = '';
+      d.style.height = '4px';
+      d.classList.remove('horizontal');
+      d.classList.add('vertical');
+    });
+    if (layoutSwitchBtn) layoutSwitchBtn.textContent = '🇫🇷';
+    if (layoutSwitchTooltip) layoutSwitchTooltip.dataset.tip = 'Switch to horizontal layout';
+  }
+
+  // After layout change, re-setup resizing logic
+  setupResizing();
+}
+
+// Set up layout switch button
+const layoutSwitchBtn = document.getElementById('layout-switch-btn');
+if (layoutSwitchBtn) {
+  layoutSwitchBtn.addEventListener('click', () => {
+    const newLayout = currentLayout === 'horizontal' ? 'vertical' : 'horizontal';
+    updateLayout(newLayout);
+  });
+}
+
 if (!iframeContainer) {
   console.error('iframe-container not found');
 } else if (urls.length === 0) {
@@ -299,11 +353,16 @@ if (!iframeContainer) {
     // Add divider between iframes (except for the last one)
     if (index < urls.length - 1) {
       const divider = document.createElement('div');
-      divider.className =
-        'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+      divider.className = 'iframe-divider bg-gray-300 dark:bg-gray-600';
       divider.style.order = String(index * 2 + 1);
-      divider.style.width = '4px';
       divider.style.flexShrink = '0';
+      if (currentLayout === 'horizontal') {
+        divider.style.width = '4px';
+        divider.classList.add('horizontal');
+      } else {
+        divider.style.height = '4px';
+        divider.classList.add('vertical');
+      }
 
       // Add + button to divider
       addPlusButtonToDivider(divider);
@@ -325,12 +384,12 @@ if (!iframeContainer) {
 // Global resize state and handlers (to avoid duplicate event listeners)
 let isResizing = false;
 let resizeCurrentIndex = -1;
-let resizeStartX = 0;
-let resizeStartLeftWidth = 0;
-let resizeStartRightWidth = 0;
-let resizeLeftWrapper = null;
-let resizeRightWrapper = null;
-let resizeOtherWrapperWidths = [];
+let resizeStart = 0;
+let resizeStartPrimarySize = 0;
+let resizeStartSecondarySize = 0;
+let resizePrimaryWrapper = null;
+let resizeSecondaryWrapper = null;
+let resizeOtherWrappers = [];
 
 /**
  * Handle mouse move during resize
@@ -340,38 +399,58 @@ function handleResizeMouseMove(e) {
   if (
     !isResizing ||
     resizeCurrentIndex === -1 ||
-    !resizeLeftWrapper ||
-    !resizeRightWrapper
+    !resizePrimaryWrapper ||
+    !resizeSecondaryWrapper
   )
     return;
 
   e.preventDefault();
 
-  const deltaX = e.clientX - resizeStartX;
+  if (currentLayout === 'horizontal') {
+    const delta = e.clientX - resizeStart;
+    const minSize = 50; // min width
 
-  // Calculate new widths for the two adjacent iframes
-  let newLeftWidth = resizeStartLeftWidth + deltaX;
-  let newRightWidth = resizeStartRightWidth - deltaX;
+    let newPrimarySize = resizeStartPrimarySize + delta;
+    let newSecondarySize = resizeStartSecondarySize - delta;
 
-  // Apply minimum width constraint (50px)
-  const minWidth = 50;
-  if (newLeftWidth < minWidth) {
-    newLeftWidth = minWidth;
-    newRightWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
+    if (newPrimarySize < minSize) {
+      newPrimarySize = minSize;
+      newSecondarySize = resizeStartPrimarySize + resizeStartSecondarySize - minSize;
+    }
+    if (newSecondarySize < minSize) {
+      newSecondarySize = minSize;
+      newPrimarySize = resizeStartPrimarySize + resizeStartSecondarySize - minSize;
+    }
+
+    resizePrimaryWrapper.style.flex = `0 0 ${newPrimarySize}px`;
+    resizeSecondaryWrapper.style.flex = `0 0 ${newSecondarySize}px`;
+
+    resizeOtherWrappers.forEach(({ wrapper, size }) => {
+      wrapper.style.flex = `0 0 ${size}px`;
+    });
+  } else {
+    const delta = e.clientY - resizeStart;
+    const minSize = 50; // min height
+
+    let newPrimarySize = resizeStartPrimarySize + delta;
+    let newSecondarySize = resizeStartSecondarySize - delta;
+
+    if (newPrimarySize < minSize) {
+      newPrimarySize = minSize;
+      newSecondarySize = resizeStartPrimarySize + resizeStartSecondarySize - minSize;
+    }
+    if (newSecondarySize < minSize) {
+      newSecondarySize = minSize;
+      newPrimarySize = resizeStartPrimarySize + resizeStartSecondarySize - minSize;
+    }
+
+    resizePrimaryWrapper.style.flex = `0 0 ${newPrimarySize}px`;
+    resizeSecondaryWrapper.style.flex = `0 0 ${newSecondarySize}px`;
+
+    resizeOtherWrappers.forEach(({ wrapper, size }) => {
+      wrapper.style.flex = `0 0 ${size}px`;
+    });
   }
-  if (newRightWidth < minWidth) {
-    newRightWidth = minWidth;
-    newLeftWidth = resizeStartLeftWidth + resizeStartRightWidth - minWidth;
-  }
-
-  // Set fixed pixel widths for the two adjacent iframes
-  resizeLeftWrapper.style.flex = `0 0 ${newLeftWidth}px`;
-  resizeRightWrapper.style.flex = `0 0 ${newRightWidth}px`;
-
-  // Keep all other iframes at their original widths
-  resizeOtherWrapperWidths.forEach(({ wrapper, width }) => {
-    wrapper.style.flex = `0 0 ${width}px`;
-  });
 }
 
 /**
@@ -382,9 +461,9 @@ function handleResizeMouseUp() {
 
   isResizing = false;
   resizeCurrentIndex = -1;
-  resizeLeftWrapper = null;
-  resizeRightWrapper = null;
-  resizeOtherWrapperWidths = [];
+  resizePrimaryWrapper = null;
+  resizeSecondaryWrapper = null;
+  resizeOtherWrappers = [];
 
   // Reset visual feedback
   const dividers = document.querySelectorAll('.iframe-divider');
@@ -451,68 +530,51 @@ function setupResizing() {
       mouseEvent.preventDefault();
       isResizing = true;
       resizeCurrentIndex = index;
-      resizeStartX = mouseEvent.clientX;
+      resizeStart = currentLayout === 'horizontal' ? mouseEvent.clientX : mouseEvent.clientY;
 
-      // Get the order of this divider
       const dividerOrder = parseInt(newDivider.style.order);
-
-      // Get all wrappers sorted by order
-      const wrappers = Array.from(
-        document.querySelectorAll('.iframe-wrapper'),
-      ).sort(
+      const wrappers = Array.from(document.querySelectorAll('.iframe-wrapper')).sort(
         (a, b) =>
           parseInt(/** @type {HTMLElement} */ (a).style.order) -
           parseInt(/** @type {HTMLElement} */ (b).style.order),
       );
 
-      // Find the wrappers immediately before and after this divider based on order
-      // Divider order should be between left wrapper and right wrapper
-      // For example: leftWrapper.order = 0, divider.order = 1, rightWrapper.order = 2
-      const leftWrapperEl = wrappers.find(
-        (w) =>
-          parseInt(/** @type {HTMLElement} */ (w).style.order) ===
-          dividerOrder - 1,
+      const primaryWrapperEl = wrappers.find(
+        (w) => parseInt(/** @type {HTMLElement} */ (w).style.order) === dividerOrder - 1,
       );
-      const rightWrapperEl = wrappers.find(
-        (w) =>
-          parseInt(/** @type {HTMLElement} */ (w).style.order) ===
-          dividerOrder + 1,
+      const secondaryWrapperEl = wrappers.find(
+        (w) => parseInt(/** @type {HTMLElement} */ (w).style.order) === dividerOrder + 1,
       );
 
-      if (!leftWrapperEl || !rightWrapperEl) {
-        console.error(
-          'Could not find adjacent wrappers for divider',
-          dividerOrder,
-        );
+      if (!primaryWrapperEl || !secondaryWrapperEl) {
+        console.error('Could not find adjacent wrappers for divider', dividerOrder);
         return;
       }
 
-      resizeLeftWrapper = /** @type {HTMLElement} */ (leftWrapperEl);
-      resizeRightWrapper = /** @type {HTMLElement} */ (rightWrapperEl);
+      resizePrimaryWrapper = /** @type {HTMLElement} */ (primaryWrapperEl);
+      resizeSecondaryWrapper = /** @type {HTMLElement} */ (secondaryWrapperEl);
 
-      // Store initial widths of the two adjacent iframes
-      resizeStartLeftWidth = resizeLeftWrapper.getBoundingClientRect().width;
-      resizeStartRightWidth = resizeRightWrapper.getBoundingClientRect().width;
+      if (currentLayout === 'horizontal') {
+        resizeStartPrimarySize = resizePrimaryWrapper.getBoundingClientRect().width;
+        resizeStartSecondarySize = resizeSecondaryWrapper.getBoundingClientRect().width;
+      } else {
+        resizeStartPrimarySize = resizePrimaryWrapper.getBoundingClientRect().height;
+        resizeStartSecondarySize = resizeSecondaryWrapper.getBoundingClientRect().height;
+      }
 
-      // Store widths of all other iframes to keep them fixed
-      resizeOtherWrapperWidths = wrappers
+      resizeOtherWrappers = wrappers
         .filter((wrapper) => {
-          const wrapperOrder = parseInt(
-            /** @type {HTMLElement} */ (wrapper).style.order,
-          );
-          return (
-            wrapperOrder !== dividerOrder - 1 &&
-            wrapperOrder !== dividerOrder + 1
-          );
+          const wrapperOrder = parseInt(/** @type {HTMLElement} */ (wrapper).style.order);
+          return wrapperOrder !== dividerOrder - 1 && wrapperOrder !== dividerOrder + 1;
         })
-        .map((wrapper) => ({
-          wrapper: /** @type {HTMLElement} */ (wrapper),
-          width: wrapper.getBoundingClientRect().width,
-        }));
+        .map((wrapper) => {
+          const size = currentLayout === 'horizontal' ? wrapper.getBoundingClientRect().width : wrapper.getBoundingClientRect().height;
+          return { wrapper: /** @type {HTMLElement} */ (wrapper), size };
+        });
 
       // Visual feedback
       newDivider.style.backgroundColor = 'rgba(59, 130, 246, 0.8)';
-      document.body.style.cursor = 'col-resize';
+      document.body.style.cursor = currentLayout === 'horizontal' ? 'col-resize' : 'row-resize';
       document.body.style.userSelect = 'none';
 
       // Disable pointer events on iframes to prevent losing mouse tracking
@@ -912,11 +974,16 @@ function insertIframeAtDivider(divider, tab) {
 
   // Insert new divider after the new wrapper
   const newDivider = document.createElement('div');
-  newDivider.className =
-    'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+  newDivider.className = 'iframe-divider bg-gray-300 dark:bg-gray-600';
   newDivider.style.order = String(dividerOrder + 2);
-  newDivider.style.width = '4px';
   newDivider.style.flexShrink = '0';
+  if (currentLayout === 'horizontal') {
+    newDivider.style.width = '4px';
+    newDivider.classList.add('horizontal');
+  } else {
+    newDivider.style.height = '4px';
+    newDivider.classList.add('vertical');
+  }
   addPlusButtonToDivider(newDivider);
   iframeContainer.appendChild(newDivider);
 
@@ -978,12 +1045,17 @@ function insertIframeAtEdge(position, tab) {
 
   // Add divider
   const divider = document.createElement('div');
-  divider.className =
-    'iframe-divider bg-gray-300 dark:bg-gray-600 cursor-col-resize';
+  divider.className = 'iframe-divider bg-gray-300 dark:bg-gray-600';
   divider.style.order =
     position === 'left' ? String(newOrder + 1) : String(newOrder - 1);
-  divider.style.width = '4px';
   divider.style.flexShrink = '0';
+  if (currentLayout === 'horizontal') {
+    divider.style.width = '4px';
+    divider.classList.add('horizontal');
+  } else {
+    divider.style.height = '4px';
+    divider.classList.add('vertical');
+  }
   addPlusButtonToDivider(divider);
   iframeContainer.appendChild(divider);
 

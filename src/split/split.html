@@ -37,7 +37,14 @@
     .iframe-divider {
       transition: background-color 0.15s ease;
       position: relative;
+    }
+
+    .iframe-divider.horizontal {
       cursor: col-resize;
+    }
+
+    .iframe-divider.vertical {
+      cursor: row-resize;
     }
 
     .iframe-divider:hover {
@@ -67,6 +74,16 @@
 </head>
 
 <body class="m-0 p-0 h-full w-full overflow-hidden">
+  <!-- Top-level controls -->
+  <div id="top-controls" class="absolute top-2 right-2 z-50">
+    <div class="flex flex-row gap-2 items-center justify-center bg-black/50 backdrop-blur-sm rounded-full p-1">
+      <div id="layout-switch-tooltip" class="tooltip tooltip-bottom" data-tip="Switch to vertical layout">
+        <button id="layout-switch-btn"
+          class="size-8 p-1 flex items-center justify-center rounded-full cursor-pointer">🇱🇺</button>
+      </div>
+    </div>
+  </div>
+
   <div id="iframe-container" class="flex h-screen w-screen"></div>
   <script type="module" src="entry.js"></script>
 </body>
