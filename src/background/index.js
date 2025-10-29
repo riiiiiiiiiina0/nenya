@@ -46,66 +46,50 @@ const RESET_PULL_MESSAGE = 'mirror:resetPull';
 const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
+const CONTEXT_MENU_SPLIT_TABS_ID = 'nenya-split-tabs';
+const CONTEXT_MENU_UNSPLIT_TABS_ID = 'nenya-unsplit-tabs';
 const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 
-/**
- * Ensure the repeating alarm is scheduled.
- * @returns {Promise<void>}
- */
-async function scheduleMirrorAlarm() {
-  chrome.alarms.create(MIRROR_ALARM_NAME, {
-    periodInMinutes: MIRROR_PULL_INTERVAL_MINUTES,
-  });
-}
+// ============================================================================
+// KEYBOARD SHORTCUTS (COMMANDS)
+// Set up command listeners as early as possible to ensure they're ready
+// when the service worker wakes up from a keyboard shortcut
+// ============================================================================
 
 /**
- * Handle one-time initialization tasks.
- * @param {string} trigger
+ * Handle keyboard shortcut changes.
+ * This ensures the extension responds properly when users modify keyboard shortcuts
+ * in chrome://extensions/shortcuts
+ * @param {chrome.commands.Command} command
  * @returns {void}
  */
-function handleLifecycleEvent(trigger) {
-  setupContextMenus();
-  setupClipboardContextMenus();
-  void scheduleMirrorAlarm();
-  initializeOptionsBackupService();
-  void handleOptionsBackupLifecycle(trigger).then(async () => {
-    // Re-evaluate auto reload rules after options backup restore completes
-    try {
-      await evaluateAllTabs();
-    } catch (error) {
-      console.warn('[background] Failed to re-evaluate auto reload rules after options backup:', error);
-    }
-  }).catch((error) => {
-    console.warn(
-      '[options-backup] Lifecycle restore skipped:',
-      error instanceof Error ? error.message : error,
-    );
-  });
-  void runMirrorPull(trigger).catch((error) => {
-    console.warn(
-      '[mirror] Initial pull skipped:',
-      error instanceof Error ? error.message : error,
+if (chrome.commands.onChanged) {
+  chrome.commands.onChanged.addListener((command) => {
+    console.log(
+      '[commands] Keyboard shortcut changed:',
+      command.name,
+      'new shortcut:',
+      command.shortcut,
     );
   });
 }
-
-chrome.runtime.onInstalled.addListener(() => {
-  handleLifecycleEvent('install');
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  handleLifecycleEvent('startup');
-});
 
 /**
  * Handle keyboard shortcuts (commands).
+ * This listener is set up early to ensure it's ready when the service worker
+ * wakes up from a keyboard shortcut press.
  * @param {string} command
  * @returns {void}
  */
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'activate-left-tab' || command === 'activate-right-tab') {
+  console.log('[commands] Received command:', command);
+
+  if (
+    command === 'tabs-activate-left-tab' ||
+    command === 'tabs-activate-right-tab'
+  ) {
     void (async () => {
       try {
         const window = await chrome.windows.getCurrent({ populate: true });
@@ -118,9 +102,11 @@ chrome.commands.onCommand.addListener((command) => {
         }
 
         let newIndex;
-        if (command === 'activate-left-tab') {
-          newIndex = (activeTabIndex - 1 + window.tabs.length) % window.tabs.length;
-        } else { // 'activate-right-tab'
+        if (command === 'tabs-activate-left-tab') {
+          newIndex =
+            (activeTabIndex - 1 + window.tabs.length) % window.tabs.length;
+        } else {
+          // 'tabs-activate-right-tab'
           newIndex = (activeTabIndex + 1) % window.tabs.length;
         }
 
@@ -134,18 +120,21 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
-  if (command === 'pull-raindrop') {
+  if (command === 'bookmarks-pull-raindrop') {
     void runMirrorPull('manual').catch((error) => {
       console.warn('[commands] Pull failed:', error);
     });
     return;
   }
 
-  if (command === 'save-to-unsorted') {
+  if (command === 'bookmarks-save-to-unsorted') {
     void (async () => {
       try {
         /** @type {chrome.tabs.Tab[]} */
-        let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+        let tabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
         if (!tabs || tabs.length === 0) {
           tabs = await chrome.tabs.query({ currentWindow: true, active: true });
         }
@@ -153,12 +142,17 @@ chrome.commands.onCommand.addListener((command) => {
         /** @type {{ url: string, title?: string }[]} */
         const entries = [];
         tabs.forEach((tab) => {
-          const normalized = normalizeHttpUrl(typeof tab.url === 'string' ? tab.url : '');
+          const normalized = normalizeHttpUrl(
+            typeof tab.url === 'string' ? tab.url : '',
+          );
           if (!normalized || seen.has(normalized)) {
             return;
           }
           seen.add(normalized);
-          entries.push({ url: normalized, title: typeof tab.title === 'string' ? tab.title : '' });
+          entries.push({
+            url: normalized,
+            title: typeof tab.title === 'string' ? tab.title : '',
+          });
         });
         if (entries.length > 0) {
           await saveUrlsToUnsorted(entries);
@@ -170,11 +164,14 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'save-project') {
+  if (command === 'bookmarks-save-project') {
     void (async () => {
       try {
         /** @type {chrome.tabs.Tab[]} */
-        let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+        let tabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
         if (!tabs || tabs.length === 0) {
           tabs = await chrome.tabs.query({ currentWindow: true, active: true });
         }
@@ -184,16 +181,24 @@ chrome.commands.onCommand.addListener((command) => {
           if (!tab || typeof tab.id !== 'number') {
             return;
           }
-          const normalized = normalizeHttpUrl(typeof tab.url === 'string' ? tab.url : '');
+          const normalized = normalizeHttpUrl(
+            typeof tab.url === 'string' ? tab.url : '',
+          );
           if (!normalized || seen.has(normalized)) {
             return;
           }
           seen.add(normalized);
           descriptors.push({
             id: tab.id,
-            windowId: typeof tab.windowId === 'number' ? tab.windowId : (chrome.windows?.WINDOW_ID_NONE ?? -1),
+            windowId:
+              typeof tab.windowId === 'number'
+                ? tab.windowId
+                : chrome.windows?.WINDOW_ID_NONE ?? -1,
             index: typeof tab.index === 'number' ? tab.index : -1,
-            groupId: typeof tab.groupId === 'number' ? tab.groupId : (chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1),
+            groupId:
+              typeof tab.groupId === 'number'
+                ? tab.groupId
+                : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1,
             pinned: Boolean(tab.pinned),
             url: normalized,
             title: typeof tab.title === 'string' ? tab.title : '',
@@ -206,19 +211,33 @@ chrome.commands.onCommand.addListener((command) => {
         // Prompt user for project name in the active tab
         let projectName = '';
         try {
-          const activeTabs = await chrome.tabs.query({ currentWindow: true, active: true });
+          const activeTabs = await chrome.tabs.query({
+            currentWindow: true,
+            active: true,
+          });
           const active = activeTabs && activeTabs[0];
           if (active && typeof active.id === 'number') {
             const results = await chrome.scripting.executeScript({
               target: { tabId: active.id },
               func: () => {
-                const base = document.title || (typeof location?.href === 'string' ? (() => { try { return new URL(location.href).hostname; } catch { return 'project'; } })() : 'project');
+                const base =
+                  document.title ||
+                  (typeof location?.href === 'string'
+                    ? (() => {
+                        try {
+                          return new URL(location.href).hostname;
+                        } catch {
+                          return 'project';
+                        }
+                      })()
+                    : 'project');
                 const input = window.prompt('Project name', base);
                 return input && input.trim() ? input.trim() : null;
               },
               world: 'ISOLATED',
             });
-            const value = Array.isArray(results) && results[0] ? results[0].result : null;
+            const value =
+              Array.isArray(results) && results[0] ? results[0].result : null;
             if (!value) {
               return;
             }
@@ -252,10 +271,13 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'rename-tab') {
+  if (command === 'bookmarks-rename-tab') {
     void (async () => {
       try {
-        const tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
         const active = tabs && tabs[0];
         if (!active || typeof active.id !== 'number') {
           return;
@@ -268,12 +290,16 @@ chrome.commands.onCommand.addListener((command) => {
             target: { tabId: active.id },
             func: () => {
               const current = document.title || '';
-              const input = window.prompt('Enter custom title for this tab:', current);
+              const input = window.prompt(
+                'Enter custom title for this tab:',
+                current,
+              );
               return input && input.trim() ? input.trim() : null;
             },
             world: 'ISOLATED',
           });
-          newTitle = Array.isArray(results) && results[0] ? results[0].result : null;
+          newTitle =
+            Array.isArray(results) && results[0] ? results[0].result : null;
         } catch (e) {
           newTitle = null;
         }
@@ -298,7 +324,10 @@ chrome.commands.onCommand.addListener((command) => {
 
         // Apply via content script if available
         try {
-          await chrome.tabs.sendMessage(active.id, { type: 'renameTab', title: newTitle });
+          await chrome.tabs.sendMessage(active.id, {
+            type: 'renameTab',
+            title: newTitle,
+          });
         } catch (e) {
           // Fallback: apply directly in the page
           try {
@@ -331,7 +360,7 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'quit-pip') {
+  if (command === 'pip-quit') {
     void (async () => {
       try {
         const { pipTabId } = await chrome.storage.local.get('pipTabId');
@@ -354,13 +383,163 @@ chrome.commands.onCommand.addListener((command) => {
   }
 
   // Handle clipboard commands
-  if (command === 'copy-title-url' || command === 'copy-title-dash-url' || 
-      command === 'copy-markdown-link' || command === 'copy-screenshot') {
+  if (
+    command === 'copy-title-url' ||
+    command === 'copy-title-dash-url' ||
+    command === 'copy-markdown-link' ||
+    command === 'copy-screenshot'
+  ) {
     void handleClipboardCommand(command).catch((error) => {
       console.warn('[commands] Clipboard command failed:', error);
     });
     return;
   }
+
+  if (command === 'split-screen-toggle') {
+    void (async () => {
+      try {
+        const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+
+        // Get all highlighted tabs
+        const highlightedTabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
+
+        // Check if any highlighted tab is a split.html page
+        const existingSplitTab = highlightedTabs.find(
+          (tab) => tab.url && tab.url.startsWith(splitBaseUrl),
+        );
+
+        if (existingSplitTab && highlightedTabs.length > 1) {
+          // If there are multiple highlighted tabs and one is split.html, activate it
+          if (existingSplitTab.id) {
+            await chrome.tabs.update(existingSplitTab.id, { active: true });
+          }
+          return;
+        }
+
+        // Get current active tab
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const currentTab = tabs && tabs[0];
+        if (!currentTab) {
+          return;
+        }
+
+        const isSplitPage =
+          currentTab.url && currentTab.url.startsWith(splitBaseUrl);
+
+        if (isSplitPage) {
+          // Current tab is split.html - unsplit it
+          await handleUnsplitTabsContextMenu(currentTab);
+        } else {
+          // Current tab is NOT split.html - create split page
+          await handleSplitTabsContextMenu(currentTab);
+        }
+      } catch (error) {
+        console.warn('[commands] Toggle split screen failed:', error);
+      }
+    })();
+    return;
+  }
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Ensure the repeating alarm is scheduled.
+ * @returns {Promise<void>}
+ */
+async function scheduleMirrorAlarm() {
+  chrome.alarms.create(MIRROR_ALARM_NAME, {
+    periodInMinutes: MIRROR_PULL_INTERVAL_MINUTES,
+  });
+}
+
+/**
+ * Set up header removal rules for iframe functionality
+ * @returns {Promise<void>}
+ */
+async function setupHeaderRemovalRules() {
+  try {
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [1],
+      addRules: [
+        {
+          id: 1,
+          condition: {
+            urlFilter: '*',
+            resourceTypes: ['sub_frame', 'main_frame'],
+          },
+          action: {
+            type: 'modifyHeaders',
+            responseHeaders: [
+              { header: 'X-Frame-Options', operation: 'remove' },
+              { header: 'Frame-Options', operation: 'remove' },
+              { header: 'Content-Security-Policy', operation: 'remove' },
+              {
+                header: 'Content-Security-Policy-Report-Only',
+                operation: 'remove',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    console.log('Header removal rules installed successfully');
+  } catch (error) {
+    console.error('Failed to install header removal rules:', error);
+  }
+}
+
+/**
+ * Handle one-time initialization tasks.
+ * @param {string} trigger
+ * @returns {void}
+ */
+function handleLifecycleEvent(trigger) {
+  setupContextMenus();
+  setupClipboardContextMenus();
+  void scheduleMirrorAlarm();
+  void setupHeaderRemovalRules();
+  initializeOptionsBackupService();
+  void handleOptionsBackupLifecycle(trigger)
+    .then(async () => {
+      // Re-evaluate auto reload rules after options backup restore completes
+      try {
+        await evaluateAllTabs();
+      } catch (error) {
+        console.warn(
+          '[background] Failed to re-evaluate auto reload rules after options backup:',
+          error,
+        );
+      }
+    })
+    .catch((error) => {
+      console.warn(
+        '[options-backup] Lifecycle restore skipped:',
+        error instanceof Error ? error.message : error,
+      );
+    });
+  void runMirrorPull(trigger).catch((error) => {
+    console.warn(
+      '[mirror] Initial pull skipped:',
+      error instanceof Error ? error.message : error,
+    );
+  });
+}
+
+chrome.runtime.onInstalled.addListener(() => {
+  handleLifecycleEvent('install');
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  handleLifecycleEvent('startup');
 });
 
 void initializeAutoReloadFeature().catch((error) => {
@@ -376,12 +555,34 @@ void initializeAutoReloadFeature().catch((error) => {
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   // Clean up custom title record for the closed tab
   void chrome.storage.local.remove([`customTitle_${tabId}`]).catch((error) => {
-    console.warn('[background] Failed to clean up custom title for tab:', tabId, error);
+    console.warn(
+      '[background] Failed to clean up custom title for tab:',
+      tabId,
+      error,
+    );
   });
 });
 
 chrome.tabs.onHighlighted.addListener(() => {
   void updateClipboardContextMenuVisibility();
+});
+
+// Update context menu visibility when tabs change
+chrome.tabs.onActivated.addListener(async (activeInfo) => {
+  try {
+    const tab = await chrome.tabs.get(activeInfo.tabId);
+    if (tab) {
+      void updateContextMenuVisibility(tab);
+    }
+  } catch (error) {
+    console.warn('Failed to get tab for context menu update:', error);
+  }
+});
+
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab) {
+    void updateContextMenuVisibility(tab);
+  }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
@@ -419,12 +620,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === AUTO_RELOAD_RE_EVALUATE_MESSAGE) {
-    void evaluateAllTabs().then(() => {
-      sendResponse({ success: true });
-    }).catch((error) => {
-      console.warn('[background] Failed to re-evaluate auto reload rules:', error);
-      sendResponse({ success: false, error: error.message });
-    });
+    void evaluateAllTabs()
+      .then(() => {
+        sendResponse({ success: true });
+      })
+      .catch((error) => {
+        console.warn(
+          '[background] Failed to re-evaluate auto reload rules:',
+          error,
+        );
+        sendResponse({ success: false, error: error.message });
+      });
     return true;
   }
 
@@ -477,6 +683,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return handleRestoreProjectTabsMessage(message, sendResponse);
   }
 
+  if (message.action === 'inject-iframe-monitor') {
+    // Handle iframe monitoring script injection for cross-origin frames
+    return handleIframeMonitorInjection(message, sender, sendResponse);
+  }
+
+  if (message.action === 'unsplit-tabs') {
+    // Handle keyboard shortcut for unsplitting
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs && tabs[0]) {
+        void handleUnsplitTabsContextMenu(tabs[0]);
+      }
+    });
+    return true;
+  }
+
   if (message.type === MANUAL_PULL_MESSAGE) {
     runMirrorPull('manual')
       .then((result) => {
@@ -507,6 +728,294 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
+ * Handle iframe monitor injection request from split page
+ * @param {object} message - The message object
+ * @param {chrome.runtime.MessageSender} sender - The message sender
+ * @param {Function} sendResponse - Response callback
+ * @returns {boolean} True to indicate async response
+ */
+function handleIframeMonitorInjection(message, sender, sendResponse) {
+  const { frameName, url } = message;
+
+  if (!sender.tab || !sender.tab.id) {
+    sendResponse({ success: false, error: 'No tab ID' });
+    return false;
+  }
+
+  const tabId = sender.tab.id;
+
+  // Find the frame by matching the URL
+  // We'll inject the script into all frames and let it filter by name
+  chrome.scripting
+    .executeScript({
+      target: { tabId, allFrames: true },
+      func: (targetFrameName) => {
+        // Only run in the target iframe
+        if (window.name !== targetFrameName) {
+          return;
+        }
+
+        // This is the monitoring script (inline version)
+        (function () {
+          'use strict';
+
+          // Prevent double-injection
+          if (window['__nenyaIframeMonitorInstalled']) {
+            return;
+          }
+          window['__nenyaIframeMonitorInstalled'] = true;
+
+          let lastUrl = window.location.href;
+          let lastTitle = '';
+
+          function sendUpdate() {
+            const currentUrl = window.location.href;
+            // Get title, but prefer a non-empty title over falling back to URL
+            let currentTitle = document.title;
+            if (!currentTitle || currentTitle.trim() === '') {
+              // If title is empty, try to extract from meta tags
+              const ogTitle = document.querySelector(
+                'meta[property="og:title"]',
+              );
+              if (ogTitle && ogTitle instanceof HTMLMetaElement) {
+                currentTitle = ogTitle.content;
+              } else {
+                // Only use URL as last resort
+                currentTitle = currentUrl;
+              }
+            }
+
+            if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
+              lastUrl = currentUrl;
+              lastTitle = currentTitle;
+              console.log('sendUpdate', currentUrl, currentTitle);
+
+              window.parent.postMessage(
+                {
+                  type: 'iframe-update',
+                  url: currentUrl,
+                  title: currentTitle,
+                  frameName: window.name,
+                },
+                '*',
+              );
+            }
+          }
+
+          function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+              const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+              };
+              clearTimeout(timeout);
+              timeout = setTimeout(later, wait);
+            };
+          }
+
+          const debouncedUpdate = debounce(sendUpdate, 100);
+
+          // Monitor page load
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', sendUpdate);
+          } else {
+            sendUpdate();
+          }
+
+          window.addEventListener('load', sendUpdate);
+
+          // Monitor SPA navigation
+          const originalPushState = history.pushState;
+          const originalReplaceState = history.replaceState;
+
+          history.pushState = function (...args) {
+            originalPushState.apply(this, args);
+            sendUpdate();
+          };
+
+          history.replaceState = function (...args) {
+            originalReplaceState.apply(this, args);
+            sendUpdate();
+          };
+
+          window.addEventListener('popstate', sendUpdate);
+          window.addEventListener('hashchange', sendUpdate);
+
+          // Monitor DOM mutations for title changes
+          const titleObserver = new MutationObserver(() => {
+            const newTitle = document.title;
+            if (newTitle !== lastTitle) {
+              debouncedUpdate();
+            }
+          });
+
+          titleObserver.observe(document.documentElement, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+          });
+
+          // Send initial update with retries to catch the title as it loads
+          let retryCount = 0;
+          const maxRetries = 5;
+          const retryDelays = [50, 200, 500, 1000, 2000];
+
+          function sendInitialUpdate() {
+            const hadTitle = document.title && document.title.trim() !== '';
+            sendUpdate();
+
+            // If we still don't have a title and haven't exhausted retries, try again
+            if (!hadTitle && retryCount < maxRetries) {
+              setTimeout(sendInitialUpdate, retryDelays[retryCount]);
+              retryCount++;
+            }
+          }
+
+          // Start initial update sequence
+          setTimeout(sendInitialUpdate, 50);
+        })();
+      },
+      args: [frameName],
+    })
+    .then(() => {
+      sendResponse({ success: true });
+    })
+    .catch((error) => {
+      console.error('Failed to inject iframe monitor:', error);
+      sendResponse({ success: false, error: error.message });
+    });
+
+  // Return true to indicate we'll respond asynchronously
+  return true;
+}
+
+/**
+ * Handle split tabs context menu click
+ * @param {chrome.tabs.Tab} tab - The current tab
+ * @returns {Promise<void>}
+ */
+async function handleSplitTabsContextMenu(tab) {
+  try {
+    // Get highlighted tabs first, fallback to current tab
+    let tabs = await chrome.tabs.query({
+      currentWindow: true,
+      highlighted: true,
+    });
+    if (!tabs || tabs.length === 0) {
+      tabs = await chrome.tabs.query({ currentWindow: true, active: true });
+    }
+
+    // Filter to http/https tabs, sort by tab index, take first 4
+    const httpTabs = tabs
+      .filter(
+        (t) =>
+          typeof t.url === 'string' &&
+          (t.url.startsWith('http://') || t.url.startsWith('https://')),
+      )
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+      .slice(0, 4);
+
+    if (httpTabs.length < 1) {
+      console.log('No HTTP(S) tabs found to split');
+      return;
+    }
+
+    const state = {
+      urls: httpTabs.map((t) => String(t.url)),
+    };
+
+    const splitUrl = `${chrome.runtime.getURL(
+      'src/split/split.html',
+    )}?state=${encodeURIComponent(JSON.stringify(state))}`;
+
+    // Create new tab with split page
+    const newTab = await chrome.tabs.create({
+      url: splitUrl,
+      windowId: tab.windowId,
+    });
+
+    // Close the original tab(s) after creating split page
+    const tabIdsToClose = httpTabs
+      .map((t) => t.id)
+      .filter((id) => typeof id === 'number');
+
+    if (tabIdsToClose.length > 0) {
+      await chrome.tabs.remove(tabIdsToClose);
+    }
+  } catch (error) {
+    console.error('Failed to split tabs:', error);
+  }
+}
+
+/**
+ * Handle unsplit tabs context menu click
+ * @param {chrome.tabs.Tab} tab - The current tab (should be split page)
+ * @returns {Promise<void>}
+ */
+async function handleUnsplitTabsContextMenu(tab) {
+  try {
+    if (!tab || typeof tab.id !== 'number') {
+      console.log('No valid tab for unsplitting');
+      return;
+    }
+
+    // Request the current URLs from the split page
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      action: 'get-current-urls',
+    });
+
+    const urls = (
+      response && Array.isArray(response.urls) ? response.urls : []
+    ).filter((url) => typeof url === 'string' && url.length > 0);
+
+    if (urls.length === 0) {
+      console.log('No URLs received from split page, closing split tab');
+      await chrome.tabs.remove(tab.id);
+      return;
+    }
+
+    // Create new tabs for each URL
+    const newTabs = await Promise.all(
+      urls.map((url) =>
+        chrome.tabs.create({
+          url: url,
+          windowId: tab.windowId,
+        }),
+      ),
+    );
+
+    // Close the split page tab
+    await chrome.tabs.remove(tab.id);
+  } catch (error) {
+    console.error('Failed to unsplit tabs:', error);
+  }
+}
+
+/**
+ * Update context menu visibility based on current tab
+ * @param {chrome.tabs.Tab} tab - The current tab
+ * @returns {Promise<void>}
+ */
+async function updateContextMenuVisibility(tab) {
+  if (!chrome.contextMenus) return;
+
+  const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+  const isSplitPage = tab && tab.url && tab.url.startsWith(splitBaseUrl);
+
+  try {
+    await chrome.contextMenus.update(CONTEXT_MENU_SPLIT_TABS_ID, {
+      visible: Boolean(!isSplitPage),
+    });
+    await chrome.contextMenus.update(CONTEXT_MENU_UNSPLIT_TABS_ID, {
+      visible: Boolean(isSplitPage),
+    });
+  } catch (error) {
+    console.warn('Failed to update context menu visibility:', error);
+  }
+}
+
+/**
  * Ensure extension context menu entries exist.
  * @returns {void}
  */
@@ -528,13 +1037,7 @@ function setupContextMenus() {
       {
         id: CONTEXT_MENU_SAVE_PAGE_ID,
         title: 'Save to Raindrop Unsorted',
-        contexts: [
-          'page',
-          'frame',
-          'selection',
-          'editable',
-          'image',
-        ],
+        contexts: ['page', 'frame', 'selection', 'editable', 'image'],
       },
       () => {
         const createError = chrome.runtime.lastError;
@@ -558,6 +1061,41 @@ function setupContextMenus() {
         if (createError) {
           console.warn(
             '[contextMenu] Failed to register link item:',
+            createError.message,
+          );
+        }
+      },
+    );
+
+    chrome.contextMenus.create(
+      {
+        id: CONTEXT_MENU_SPLIT_TABS_ID,
+        title: 'Split tabs',
+        contexts: ['page'],
+      },
+      () => {
+        const createError = chrome.runtime.lastError;
+        if (createError) {
+          console.warn(
+            '[contextMenu] Failed to register split tabs item:',
+            createError.message,
+          );
+        }
+      },
+    );
+
+    chrome.contextMenus.create(
+      {
+        id: CONTEXT_MENU_UNSPLIT_TABS_ID,
+        title: 'Unsplit tabs',
+        contexts: ['page'],
+        visible: false, // Initially hidden, will be shown on split pages
+      },
+      () => {
+        const createError = chrome.runtime.lastError;
+        if (createError) {
+          console.warn(
+            '[contextMenu] Failed to register unsplit tabs item:',
             createError.message,
           );
         }
@@ -592,6 +1130,20 @@ if (chrome.contextMenus) {
       void saveUrlsToUnsorted([{ url, title }]).catch((error) => {
         console.error('[contextMenu] Failed to save link:', error);
       });
+      return;
+    }
+
+    if (info.menuItemId === CONTEXT_MENU_SPLIT_TABS_ID) {
+      if (tab) {
+        void handleSplitTabsContextMenu(tab);
+      }
+      return;
+    }
+
+    if (info.menuItemId === CONTEXT_MENU_UNSPLIT_TABS_ID) {
+      if (tab) {
+        void handleUnsplitTabsContextMenu(tab);
+      }
       return;
     }
 

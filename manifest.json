@@ -33,7 +33,9 @@
     "alarms",
     "scripting",
     "activeTab",
-    "clipboardWrite"
+    "clipboardWrite",
+    "declarativeNetRequest",
+    "webNavigation"
   ],
   "externally_connectable": {
     "matches": [
@@ -44,9 +46,23 @@
     "https://api.raindrop.io/*",
     "<all_urls>"
   ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/split.html",
+        "src/split/*",
+        "src/libs/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": [
+        "<all_urls>"
+      ],
       "js": [
         "src/contentScript/custom-title.js",
         "src/contentScript/video-controller.js",
@@ -58,50 +74,67 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["<all_urls>"],
-      "js": ["src/contentScript/bright-mode.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/contentScript/bright-mode.js"
+      ],
       "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/split/iframe-monitor.js"
+      ],
+      "run_at": "document_end",
+      "all_frames": true
     }
   ],
   "commands": {
     "_execute_action": {
       "description": "Open popup"
     },
-    "pull-raindrop": {
-      "description": "Pull from Raindrop now"
+    "bookmarks-pull-raindrop": {
+      "description": "💧 Pull from Raindrop"
     },
-    "save-to-unsorted": {
-      "description": "Save to Unsorted"
+    "bookmarks-save-to-unsorted": {
+      "description": "💧 Save to Unsorted"
     },
-    "save-project": {
-      "description": "Save as project"
+    "bookmarks-save-project": {
+      "description": "💧 Save as project"
     },
-    "rename-tab": {
-      "description": "Rename current tab"
+    "bookmarks-rename-tab": {
+      "description": "💧 Rename current tab"
     },
     "copy-title-url": {
-      "description": "Copy Title\\nURL"
+      "description": "📋 Copy Title\\nURL"
     },
     "copy-title-dash-url": {
-      "description": "Copy Title - URL"
+      "description": "📋 Copy Title - URL"
     },
     "copy-markdown-link": {
-      "description": "Copy [Title](URL)"
+      "description": "📋 Copy [Title](URL)"
     },
     "copy-screenshot": {
-      "description": "Copy Screenshot"
+      "description": "📋 Copy Screenshot"
     },
-    "quit-pip": {
+    "pip-quit": {
       "suggested_key": {
         "default": "Alt+Q"
       },
-      "description": "Quit Picture-in-Picture"
-	  },
-    "activate-left-tab": {
-      "description": "Activate left tab"
+      "description": "🎥 Quit PiP"
     },
-    "activate-right-tab": {
-      "description": "Activate right tab"
+    "tabs-activate-left-tab": {
+      "description": "🗂️ Activate left tab"
+    },
+    "tabs-activate-right-tab": {
+      "description": "🗂️ Activate right tab"
+    },
+    "split-screen-toggle": {
+      "description": "🖥️ Toggle split screen"
     }
   }
 }

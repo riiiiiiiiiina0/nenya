@@ -75,16 +75,32 @@
     try {
       // Re-apply fullscreen styles only if they're actually missing
       video.style.position = 'fixed';
-      video.style.top = '0';
-      video.style.left = '0';
-      video.style.width = '100vw';
-      video.style.height = '100vh';
+
+      if (
+        video.style.top !== '0' &&
+        video.style.top !== '0px' &&
+        video.style.left !== '0%'
+      ) {
+        video.style.top = '0';
+      }
+      if (
+        video.style.left !== '0' &&
+        video.style.left !== '0px' &&
+        video.style.left !== '0%'
+      ) {
+        video.style.left = '0';
+      }
+      if (video.style.width !== '100vw' && video.style.width !== '100%') {
+        video.style.width = '100vw';
+      }
+      if (video.style.height !== '100vh' && video.style.height !== '100%') {
+        video.style.height = '100vh';
+      }
       video.style.zIndex = '2147483647';
       video.style.backgroundColor = 'black';
       video.style.objectFit = 'contain';
       video.style.objectPosition = 'center';
       video.style.isolation = 'isolate';
-      video.style.transform = 'translateZ(0)';
 
       // Ensure video is in document.body
       if (!document.body.contains(video)) {
@@ -331,6 +347,7 @@
       const fullscreenVideo = document.querySelector('.video-fullscreen');
       if (fullscreenVideo && fullscreenVideo instanceof HTMLVideoElement) {
         exitFullscreen(fullscreenVideo);
+        e.stopPropagation();
       }
     }
   });
