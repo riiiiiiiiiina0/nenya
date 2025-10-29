@@ -1,3 +1,16 @@
+.video-controller-wrapper {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  line-height: 0;
+}
+
+.video-controller-wrapper video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .video-controller-container {
   position: absolute;
   top: 10px;
@@ -5,6 +18,7 @@
   z-index: 9999;
   display: flex;
   gap: 5px;
+  pointer-events: auto;
 }
 
 .video-controller-button {
@@ -21,4 +35,59 @@
 
 .video-controller-button:hover {
   background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* Context Menu Styles */
+.video-context-menu {
+  position: absolute;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 2147483647;
+  min-width: 200px;
+  padding: 4px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  user-select: none;
+}
+
+.video-context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #1f2937;
+  transition: background-color 0.1s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-context-menu-item:hover {
+  background-color: #f3f4f6;
+}
+
+.video-context-menu-item:active {
+  background-color: #e5e7eb;
+}
+
+/* Dark mode support for context menu */
+@media (prefers-color-scheme: dark) {
+  .video-context-menu {
+    background-color: #1f2937;
+    border-color: #374151;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+
+  .video-context-menu-item {
+    color: #f9fafb;
+  }
+
+  .video-context-menu-item:hover {
+    background-color: #374151;
+  }
+
+  .video-context-menu-item:active {
+    background-color: #4b5563;
+  }
 }
