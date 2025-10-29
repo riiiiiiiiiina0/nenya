@@ -7,6 +7,7 @@ import './autoReload.js';
 import './brightMode.js';
 import './highlightText.js';
 import './blockElements.js';
+import './debug.js';
 
 /**
  * Navigation functionality for the options page
