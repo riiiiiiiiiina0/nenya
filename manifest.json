@@ -66,21 +66,8 @@
         "<all_urls>"
       ],
       "js": [
-        "src/contentScript/custom-title.js",
-        "src/contentScript/video-controller.js",
-        "src/contentScript/highlight-text.js"
-      ],
-      "css": [
-        "src/contentScript/video-controller.css"
-      ],
-      "run_at": "document_idle"
-    },
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "src/contentScript/bright-mode.js"
+        "src/contentScript/bright-mode.js",
+        "src/contentScript/block-elements.js"
       ],
       "run_at": "document_start"
     },
@@ -93,6 +80,20 @@
       ],
       "run_at": "document_end",
       "all_frames": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/contentScript/custom-title.js",
+        "src/contentScript/video-controller.js",
+        "src/contentScript/highlight-text.js"
+      ],
+      "css": [
+        "src/contentScript/video-controller.css"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "commands": {
@@ -137,6 +138,9 @@
     },
     "split-screen-toggle": {
       "description": "🖥️ Toggle split screen"
+    },
+    "block-element-picker": {
+      "description": "🎯 Element Picker"
     }
   }
 }

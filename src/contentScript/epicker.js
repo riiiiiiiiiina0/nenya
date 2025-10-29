@@ -628,6 +628,21 @@
       case 'confirmSelector':
         // Log the selector and quit
         console.log('[epicker] Final selector:', msg.selector);
+        // Send selector to background script to save
+        if (chrome?.runtime?.sendMessage) {
+          chrome.runtime
+            .sendMessage({
+              type: 'blockElement:addSelector',
+              selector: msg.selector,
+              url: window.location.href,
+            })
+            .catch((error) => {
+              console.warn(
+                '[epicker] Failed to send selector to background:',
+                error,
+              );
+            });
+        }
         quitPicker();
         break;
       default:

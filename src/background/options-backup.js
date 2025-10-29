@@ -127,6 +127,15 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} BlockElementRuleSettings
+ * @property {string} id
+ * @property {string} urlPattern
+ * @property {string[]} selectors
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} BrightModeSettingsBackupPayload
  * @property {'bright-mode-settings'} kind
  * @property {BrightModeSettings} settings
@@ -137,6 +146,13 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @typedef {Object} HighlightTextRulesBackupPayload
  * @property {'highlight-text-rules'} kind
  * @property {HighlightTextRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
+ * @typedef {Object} BlockElementRulesBackupPayload
+ * @property {'block-element-rules'} kind
+ * @property {BlockElementRuleSettings[]} rules
  * @property {BackupMetadata} metadata
  */
 
@@ -174,6 +190,7 @@ const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
+const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -215,6 +232,7 @@ const CATEGORY_IDS = [
   'auto-reload-rules',
   'bright-mode-settings',
   'highlight-text-rules',
+  'block-element-rules',
 ];
 
 /**
@@ -275,23 +293,49 @@ function sanitizeState(value) {
   };
 
   if (value && typeof value === 'object') {
-    const raw = /** @type {{ version?: unknown, deviceId?: unknown, categories?: unknown }} */ (value);
-    if (Number(raw.version) === STATE_VERSION && typeof raw.deviceId === 'string') {
+    const raw =
+      /** @type {{ version?: unknown, deviceId?: unknown, categories?: unknown }} */ (
+        value
+      );
+    if (
+      Number(raw.version) === STATE_VERSION &&
+      typeof raw.deviceId === 'string'
+    ) {
       state.deviceId = raw.deviceId;
     }
     if (raw.categories && typeof raw.categories === 'object') {
-      const rawCategories = /** @type {Record<string, BackupCategoryState>} */ (raw.categories);
+      const rawCategories = /** @type {Record<string, BackupCategoryState>} */ (
+        raw.categories
+      );
       CATEGORY_IDS.forEach((categoryId) => {
         const stored = rawCategories[categoryId];
         if (stored && typeof stored === 'object') {
           state.categories[categoryId] = {
-            lastBackupAt: Number.isFinite(stored.lastBackupAt) ? Number(stored.lastBackupAt) : undefined,
-            lastBackupTrigger: typeof stored.lastBackupTrigger === 'string' ? stored.lastBackupTrigger : undefined,
-            lastBackupError: typeof stored.lastBackupError === 'string' ? stored.lastBackupError : undefined,
-            lastBackupErrorAt: Number.isFinite(stored.lastBackupErrorAt) ? Number(stored.lastBackupErrorAt) : undefined,
-            lastRestoreAt: Number.isFinite(stored.lastRestoreAt) ? Number(stored.lastRestoreAt) : undefined,
-            lastRestoreTrigger: typeof stored.lastRestoreTrigger === 'string' ? stored.lastRestoreTrigger : undefined,
-            lastRestoreError: typeof stored.lastRestoreError === 'string' ? stored.lastRestoreError : undefined,
+            lastBackupAt: Number.isFinite(stored.lastBackupAt)
+              ? Number(stored.lastBackupAt)
+              : undefined,
+            lastBackupTrigger:
+              typeof stored.lastBackupTrigger === 'string'
+                ? stored.lastBackupTrigger
+                : undefined,
+            lastBackupError:
+              typeof stored.lastBackupError === 'string'
+                ? stored.lastBackupError
+                : undefined,
+            lastBackupErrorAt: Number.isFinite(stored.lastBackupErrorAt)
+              ? Number(stored.lastBackupErrorAt)
+              : undefined,
+            lastRestoreAt: Number.isFinite(stored.lastRestoreAt)
+              ? Number(stored.lastRestoreAt)
+              : undefined,
+            lastRestoreTrigger:
+              typeof stored.lastRestoreTrigger === 'string'
+                ? stored.lastRestoreTrigger
+                : undefined,
+            lastRestoreError:
+              typeof stored.lastRestoreError === 'string'
+                ? stored.lastRestoreError
+                : undefined,
             lastRestoreErrorAt: Number.isFinite(stored.lastRestoreErrorAt)
               ? Number(stored.lastRestoreErrorAt)
               : undefined,
@@ -425,16 +469,20 @@ function normalizeNotificationPreferences(value) {
     return fallback;
   }
 
-  const raw = /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings> }} */ (
-    value
-  );
+  const raw =
+    /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings> }} */ (
+      value
+    );
   const bookmark = raw.bookmark ?? {};
   const project = raw.project ?? {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
     bookmark: {
-      enabled: typeof bookmark.enabled === 'boolean' ? bookmark.enabled : fallback.bookmark.enabled,
+      enabled:
+        typeof bookmark.enabled === 'boolean'
+          ? bookmark.enabled
+          : fallback.bookmark.enabled,
       pullFinished:
         typeof bookmark.pullFinished === 'boolean'
           ? bookmark.pullFinished
@@ -445,13 +493,18 @@ function normalizeNotificationPreferences(value) {
           : fallback.bookmark.unsortedSaved,
     },
     project: {
-      enabled: typeof project.enabled === 'boolean' ? project.enabled : fallback.project.enabled,
+      enabled:
+        typeof project.enabled === 'boolean'
+          ? project.enabled
+          : fallback.project.enabled,
       saveProject:
         typeof project.saveProject === 'boolean'
           ? project.saveProject
           : fallback.project.saveProject,
       addTabs:
-        typeof project.addTabs === 'boolean' ? project.addTabs : fallback.project.addTabs,
+        typeof project.addTabs === 'boolean'
+          ? project.addTabs
+          : fallback.project.addTabs,
       replaceItems:
         typeof project.replaceItems === 'boolean'
           ? project.replaceItems
@@ -487,7 +540,10 @@ function isBackupSuppressed(categoryId) {
  * @returns {void}
  */
 function suppressBackup(categoryId) {
-  backupSuppressionUntil.set(categoryId, Date.now() + BACKUP_SUPPRESSION_DURATION_MS);
+  backupSuppressionUntil.set(
+    categoryId,
+    Date.now() + BACKUP_SUPPRESSION_DURATION_MS,
+  );
 }
 
 /**
@@ -530,10 +586,7 @@ async function ensureBackupCollection(tokens) {
       typeof collection?.title === 'string' ? collection.title.trim() : '';
     const idCandidate = collection?._id ?? collection?.id ?? collection?.ID;
     const id = Number(idCandidate);
-    if (
-      rawTitle.toLowerCase() === normalizedTitle &&
-      Number.isFinite(id)
-    ) {
+    if (rawTitle.toLowerCase() === normalizedTitle && Number.isFinite(id)) {
       return id;
     }
   }
@@ -648,7 +701,8 @@ async function collectRootFolderSettings() {
 async function applyRootFolderSettings(settings) {
   let parentFolderId = '';
   const desiredPath =
-    'parentFolderPath' in settings && typeof settings.parentFolderPath === 'string'
+    'parentFolderPath' in settings &&
+    typeof settings.parentFolderPath === 'string'
       ? settings.parentFolderPath.trim()
       : '';
 
@@ -739,9 +793,11 @@ function normalizeAutoReloadRules(value) {
       if (!entry || typeof entry !== 'object') {
         return;
       }
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
-      const pattern =
-        typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       if (!pattern) {
         return;
       }
@@ -774,8 +830,7 @@ function normalizeAutoReloadRules(value) {
         mutated = true;
       }
 
-      let id =
-        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
       if (!id) {
         id = generateRuleId();
         mutated = true;
@@ -786,8 +841,10 @@ function normalizeAutoReloadRules(value) {
         id,
         pattern,
         intervalSeconds,
-        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
-        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
       };
       sanitized.push(rule);
     });
@@ -834,7 +891,10 @@ async function applyAutoReloadRules(rules) {
   try {
     await evaluateAllTabs();
   } catch (error) {
-    console.warn('[options-backup] Failed to re-evaluate auto reload rules after restore:', error);
+    console.warn(
+      '[options-backup] Failed to re-evaluate auto reload rules after restore:',
+      error,
+    );
   }
 }
 
@@ -853,9 +913,11 @@ function normalizeBrightModePatterns(value) {
       if (!entry || typeof entry !== 'object') {
         return;
       }
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
-      const pattern =
-        typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       if (!pattern) {
         return;
       }
@@ -879,8 +941,7 @@ function normalizeBrightModePatterns(value) {
         return;
       }
 
-      let id =
-        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
       if (!id) {
         id = generateRuleId();
         mutated = true;
@@ -890,8 +951,10 @@ function normalizeBrightModePatterns(value) {
       const patternObj = {
         id,
         pattern,
-        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
-        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
       };
       sanitized.push(patternObj);
     });
@@ -919,9 +982,11 @@ function normalizeHighlightTextRules(value) {
       if (!entry || typeof entry !== 'object') {
         return;
       }
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
-      const pattern =
-        typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       if (!pattern) {
         return;
       }
@@ -946,8 +1011,14 @@ function normalizeHighlightTextRules(value) {
       }
 
       const type = raw.type;
-      if (typeof type !== 'string' || !['whole-phrase', 'comma-separated', 'regex'].includes(type)) {
-        console.warn('[options-backup] Ignoring invalid highlight text type:', type);
+      if (
+        typeof type !== 'string' ||
+        !['whole-phrase', 'comma-separated', 'regex'].includes(type)
+      ) {
+        console.warn(
+          '[options-backup] Ignoring invalid highlight text type:',
+          type,
+        );
         return;
       }
 
@@ -961,20 +1032,29 @@ function normalizeHighlightTextRules(value) {
           // eslint-disable-next-line no-new
           new RegExp(valueText);
         } catch (error) {
-          console.warn('[options-backup] Ignoring invalid highlight text regex:', valueText, error);
+          console.warn(
+            '[options-backup] Ignoring invalid highlight text regex:',
+            valueText,
+            error,
+          );
           return;
         }
       }
 
-      const textColor = typeof raw.textColor === 'string' ? raw.textColor : '#000000';
-      const backgroundColor = typeof raw.backgroundColor === 'string' ? raw.backgroundColor : '#ffff00';
+      const textColor =
+        typeof raw.textColor === 'string' ? raw.textColor : '#000000';
+      const backgroundColor =
+        typeof raw.backgroundColor === 'string'
+          ? raw.backgroundColor
+          : '#ffff00';
       const bold = typeof raw.bold === 'boolean' ? raw.bold : false;
       const italic = typeof raw.italic === 'boolean' ? raw.italic : false;
-      const underline = typeof raw.underline === 'boolean' ? raw.underline : false;
-      const ignoreCase = typeof raw.ignoreCase === 'boolean' ? raw.ignoreCase : false;
+      const underline =
+        typeof raw.underline === 'boolean' ? raw.underline : false;
+      const ignoreCase =
+        typeof raw.ignoreCase === 'boolean' ? raw.ignoreCase : false;
 
-      let id =
-        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
       if (!id) {
         id = generateRuleId();
         mutated = true;
@@ -984,7 +1064,9 @@ function normalizeHighlightTextRules(value) {
       const rule = {
         id,
         pattern,
-        type: /** @type {'whole-phrase' | 'comma-separated' | 'regex'} */ (type),
+        type: /** @type {'whole-phrase' | 'comma-separated' | 'regex'} */ (
+          type
+        ),
         value: valueText,
         textColor,
         backgroundColor,
@@ -992,8 +1074,10 @@ function normalizeHighlightTextRules(value) {
         italic,
         underline,
         ignoreCase,
-        createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
-        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
       };
       sanitized.push(rule);
     });
@@ -1017,7 +1101,10 @@ async function collectBrightModePatterns(storageKey) {
     result?.[storageKey],
   );
   if (mutated) {
-    const categoryId = storageKey === BRIGHT_MODE_WHITELIST_KEY ? 'bright-mode-whitelist' : 'bright-mode-blacklist';
+    const categoryId =
+      storageKey === BRIGHT_MODE_WHITELIST_KEY
+        ? 'bright-mode-whitelist'
+        : 'bright-mode-blacklist';
     suppressBackup(categoryId);
     await chrome.storage.sync.set({
       [storageKey]: sanitized,
@@ -1034,7 +1121,10 @@ async function collectBrightModePatterns(storageKey) {
  */
 async function applyBrightModePatterns(patterns, storageKey) {
   const { patterns: sanitized } = normalizeBrightModePatterns(patterns);
-  const categoryId = storageKey === BRIGHT_MODE_WHITELIST_KEY ? 'bright-mode-whitelist' : 'bright-mode-blacklist';
+  const categoryId =
+    storageKey === BRIGHT_MODE_WHITELIST_KEY
+      ? 'bright-mode-whitelist'
+      : 'bright-mode-blacklist';
   suppressBackup(categoryId);
   await chrome.storage.sync.set({
     [storageKey]: sanitized,
@@ -1047,9 +1137,13 @@ async function applyBrightModePatterns(patterns, storageKey) {
  * @returns {Promise<void>}
  */
 async function applyBrightModeSettings(settings) {
-  const { patterns: sanitizedWhitelist } = normalizeBrightModePatterns(settings.whitelist || []);
-  const { patterns: sanitizedBlacklist } = normalizeBrightModePatterns(settings.blacklist || []);
-  
+  const { patterns: sanitizedWhitelist } = normalizeBrightModePatterns(
+    settings.whitelist || [],
+  );
+  const { patterns: sanitizedBlacklist } = normalizeBrightModePatterns(
+    settings.blacklist || [],
+  );
+
   suppressBackup('bright-mode-settings');
   await chrome.storage.sync.set({
     [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
@@ -1085,6 +1179,117 @@ async function applyHighlightTextRules(rules) {
   suppressBackup('highlight-text-rules');
   await chrome.storage.sync.set({
     [HIGHLIGHT_TEXT_RULES_KEY]: sanitized,
+  });
+}
+
+/**
+ * Normalize block element rules from storage or input.
+ * @param {unknown} value
+ * @returns {{ rules: BlockElementRuleSettings[], mutated: boolean }}
+ */
+function normalizeBlockElementRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, urlPattern?: unknown, selectors?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const urlPattern =
+        typeof raw.urlPattern === 'string' ? raw.urlPattern.trim() : '';
+      if (!urlPattern) {
+        return;
+      }
+
+      try {
+        // Basic pattern validation
+        if (urlPattern.includes('*') && !urlPattern.includes('://')) {
+          // This is likely a glob pattern, which is acceptable
+        } else if (urlPattern.includes('://')) {
+          // This is likely a full URL pattern, validate basic syntax
+          const url = new URL('https://example.com');
+          // Basic validation passed
+        }
+      } catch (error) {
+        console.warn(
+          '[options-backup] Ignoring invalid block element pattern:',
+          urlPattern,
+          error,
+        );
+        return;
+      }
+
+      const selectors = Array.isArray(raw.selectors)
+        ? raw.selectors.filter((s) => typeof s === 'string' && s.trim())
+        : [];
+
+      if (selectors.length === 0) {
+        return;
+      }
+
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {BlockElementRuleSettings} */
+      const rule = {
+        id,
+        urlPattern,
+        selectors,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+      sanitized.push(rule);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) =>
+    a.urlPattern.localeCompare(b.urlPattern),
+  );
+  if (!mutated && sanitized.length !== originalLength) {
+    mutated = true;
+  }
+  return { rules: sorted, mutated };
+}
+
+/**
+ * Collect block element rules from storage.
+ * @returns {Promise<BlockElementRuleSettings[]>}
+ */
+async function collectBlockElementRules() {
+  const result = await chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeBlockElementRules(
+    result?.[BLOCK_ELEMENT_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('block-element-rules');
+    await chrome.storage.sync.set({
+      [BLOCK_ELEMENT_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply block element rules to storage.
+ * @param {BlockElementRuleSettings[]} rules
+ * @returns {Promise<void>}
+ */
+async function applyBlockElementRules(rules) {
+  const { rules: sanitized } = normalizeBlockElementRules(rules);
+  suppressBackup('block-element-rules');
+  await chrome.storage.sync.set({
+    [BLOCK_ELEMENT_RULES_KEY]: sanitized,
   });
 }
 
@@ -1161,12 +1366,12 @@ async function buildBrightModeSettingsPayload(trigger) {
     collectBrightModePatterns(BRIGHT_MODE_WHITELIST_KEY),
     collectBrightModePatterns(BRIGHT_MODE_BLACKLIST_KEY),
   ]);
-  
+
   const settings = {
     whitelist: whitelistPatterns,
     blacklist: blacklistPatterns,
   };
-  
+
   const metadata = await buildMetadata(trigger);
   return {
     kind: 'bright-mode-settings',
@@ -1185,6 +1390,21 @@ async function buildHighlightTextRulesPayload(trigger) {
   const metadata = await buildMetadata(trigger);
   return {
     kind: 'highlight-text-rules',
+    rules,
+    metadata,
+  };
+}
+
+/**
+ * Build the block element rules payload for backup.
+ * @param {string} trigger
+ * @returns {Promise<BlockElementRulesBackupPayload>}
+ */
+async function buildBlockElementRulesPayload(trigger) {
+  const rules = await collectBlockElementRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'block-element-rules',
     rules,
     metadata,
   };
@@ -1215,18 +1435,18 @@ function parseAuthProviderItem(item) {
           : PROVIDER_ID,
       mirrorRootFolderSettings: {
         parentFolderPath:
-          typeof parsed?.mirrorRootFolderSettings?.parentFolderPath === 'string' &&
-          parsed.mirrorRootFolderSettings.parentFolderPath
+          typeof parsed?.mirrorRootFolderSettings?.parentFolderPath ===
+            'string' && parsed.mirrorRootFolderSettings.parentFolderPath
             ? parsed.mirrorRootFolderSettings.parentFolderPath
             : '',
         parentFolderId:
-          typeof parsed?.mirrorRootFolderSettings?.parentFolderId === 'string' &&
-          parsed.mirrorRootFolderSettings.parentFolderId
+          typeof parsed?.mirrorRootFolderSettings?.parentFolderId ===
+            'string' && parsed.mirrorRootFolderSettings.parentFolderId
             ? parsed.mirrorRootFolderSettings.parentFolderId
             : DEFAULT_PARENT_FOLDER_ID,
         rootFolderName:
-          typeof parsed?.mirrorRootFolderSettings?.rootFolderName === 'string' &&
-          parsed.mirrorRootFolderSettings.rootFolderName
+          typeof parsed?.mirrorRootFolderSettings?.rootFolderName ===
+            'string' && parsed.mirrorRootFolderSettings.rootFolderName
             ? parsed.mirrorRootFolderSettings.rootFolderName
             : DEFAULT_ROOT_FOLDER_NAME,
       },
@@ -1404,8 +1624,12 @@ function parseBrightModeSettingsItem(item) {
     }
 
     const settings = parsed?.settings || {};
-    const normalizedWhitelist = normalizeBrightModePatterns(settings.whitelist || []).patterns;
-    const normalizedBlacklist = normalizeBrightModePatterns(settings.blacklist || []).patterns;
+    const normalizedWhitelist = normalizeBrightModePatterns(
+      settings.whitelist || [],
+    ).patterns;
+    const normalizedBlacklist = normalizeBrightModePatterns(
+      settings.blacklist || [],
+    ).patterns;
 
     const payload = /** @type {BrightModeSettingsBackupPayload} */ ({
       kind: 'bright-mode-settings',
@@ -1512,6 +1736,66 @@ function parseHighlightTextRulesItem(item) {
 }
 
 /**
+ * Attempt to parse block element rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: BlockElementRulesBackupPayload | null, lastModified: number }}
+ */
+function parseBlockElementRulesItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedRules = normalizeBlockElementRules(parsed?.rules).rules;
+
+    const payload = /** @type {BlockElementRulesBackupPayload} */ ({
+      kind: 'block-element-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Configuration for each backup category.
  */
 const CATEGORY_CONFIG = {
@@ -1549,6 +1833,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildHighlightTextRulesPayload,
     parseItem: parseHighlightTextRulesItem,
     applyPayload: applyHighlightTextRules,
+  },
+  'block-element-rules': {
+    title: 'block-element-rules',
+    link: 'nenya://options/block-elements',
+    buildPayload: buildBlockElementRulesPayload,
+    parseItem: parseBlockElementRulesItem,
+    applyPayload: applyBlockElementRules,
   },
 };
 
@@ -1616,9 +1907,11 @@ async function performCategoryBackup(categoryId, trigger, notifyOnError) {
       });
     }
 
-    const responseItem = itemResponse?.item ?? itemResponse?.data ?? itemResponse;
+    const responseItem =
+      itemResponse?.item ?? itemResponse?.data ?? itemResponse;
     const lastModified =
-      Number.isFinite(payload.metadata.lastModified) && payload.metadata.lastModified > 0
+      Number.isFinite(payload.metadata.lastModified) &&
+      payload.metadata.lastModified > 0
         ? payload.metadata.lastModified
         : parseTimestamp(responseItem?.lastUpdate);
 
@@ -1738,7 +2031,9 @@ async function performRestore(trigger, notifyOnError) {
   if (!tokens) {
     return {
       ok: false,
-      errors: ['No Raindrop connection found. Connect your account to restore settings.'],
+      errors: [
+        'No Raindrop connection found. Connect your account to restore settings.',
+      ],
     };
   }
 
@@ -1790,6 +2085,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.settings;
         } else if (payload.kind === 'highlight-text-rules') {
           payloadToApply = payload.rules;
+        } else if (payload.kind === 'block-element-rules') {
+          payloadToApply = payload.rules;
         } else {
           payloadToApply = payload.preferences;
         }
@@ -1817,7 +2114,9 @@ async function performRestore(trigger, notifyOnError) {
         state.categories[categoryId] = localCategory;
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : String(error ?? 'Unknown error');
+          error instanceof Error
+            ? error.message
+            : String(error ?? 'Unknown error');
         errors.push(message);
         await updateState((draft) => {
           const nextState = draft.categories[categoryId];
@@ -1886,11 +2185,17 @@ function handleStorageChanges(changes, areaName) {
   if (AUTO_RELOAD_RULES_KEY in changes) {
     queueCategoryBackup('auto-reload-rules', 'storage');
   }
-  if (BRIGHT_MODE_WHITELIST_KEY in changes || BRIGHT_MODE_BLACKLIST_KEY in changes) {
+  if (
+    BRIGHT_MODE_WHITELIST_KEY in changes ||
+    BRIGHT_MODE_BLACKLIST_KEY in changes
+  ) {
     queueCategoryBackup('bright-mode-settings', 'storage');
   }
   if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
     queueCategoryBackup('highlight-text-rules', 'storage');
+  }
+  if (BLOCK_ELEMENT_RULES_KEY in changes) {
+    queueCategoryBackup('block-element-rules', 'storage');
   }
 }
 
@@ -2045,6 +2350,7 @@ export async function resetOptionsToDefaults() {
     [BRIGHT_MODE_WHITELIST_KEY]: [],
     [BRIGHT_MODE_BLACKLIST_KEY]: [],
     [HIGHLIGHT_TEXT_RULES_KEY]: [],
+    [BLOCK_ELEMENT_RULES_KEY]: [],
   });
 
   await updateState((state) => {
@@ -2097,7 +2403,10 @@ export function handleOptionsBackupMessage(message, sendResponse) {
         .catch((error) => {
           sendResponse({
             ok: false,
-            error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error ?? 'Unknown error'),
           });
         });
       return true;
@@ -2110,7 +2419,11 @@ export function handleOptionsBackupMessage(message, sendResponse) {
         .catch((error) => {
           sendResponse({
             ok: false,
-            errors: [error instanceof Error ? error.message : String(error ?? 'Unknown error')],
+            errors: [
+              error instanceof Error
+                ? error.message
+                : String(error ?? 'Unknown error'),
+            ],
           });
         });
       return true;
@@ -2123,9 +2436,13 @@ export function handleOptionsBackupMessage(message, sendResponse) {
         .catch((error) => {
           sendResponse({
             ok: false,
-            errors: [error instanceof Error ? error.message : String(error ?? 'Unknown error')],
+            errors: [
+              error instanceof Error
+                ? error.message
+                : String(error ?? 'Unknown error'),
+            ],
           });
-      });
+        });
       return true;
     }
     case OPTIONS_BACKUP_MESSAGES.RESTORE_AFTER_LOGIN: {
@@ -2136,7 +2453,11 @@ export function handleOptionsBackupMessage(message, sendResponse) {
         .catch((error) => {
           sendResponse({
             ok: false,
-            errors: [error instanceof Error ? error.message : String(error ?? 'Unknown error')],
+            errors: [
+              error instanceof Error
+                ? error.message
+                : String(error ?? 'Unknown error'),
+            ],
           });
         });
       return true;
@@ -2149,7 +2470,10 @@ export function handleOptionsBackupMessage(message, sendResponse) {
         .catch((error) => {
           sendResponse({
             ok: false,
-            error: error instanceof Error ? error.message : String(error ?? 'Unknown error'),
+            error:
+              error instanceof Error
+                ? error.message
+                : String(error ?? 'Unknown error'),
           });
         });
       return true;

@@ -18,43 +18,56 @@
   <div class="navbar bg-base-100 shadow-sm sticky top-0 z-10">
     <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
   </div>
-  
+
   <!-- Vertical Navigation Sidebar -->
   <nav class="fixed left-0 top-16 w-64 h-[calc(100vh-4rem)] z-20 overflow-y-auto">
     <div class="p-4">
       <ul class="space-y-2">
         <li>
-          <a href="#mirror-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+          <a href="#mirror-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔖</span>
             <span class="text-sm">Cloud Bookmarks</span>
           </a>
         </li>
         <li>
-          <a href="#backup-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+          <a href="#backup-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🗃️</span>
             <span class="text-sm">Options Backup</span>
           </a>
         </li>
         <li>
-          <a href="#auto-reload-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+          <a href="#auto-reload-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔁</span>
             <span class="text-sm">Auto Reload Rules</span>
           </a>
         </li>
         <li>
-          <a href="#bright-mode-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+          <a href="#bright-mode-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">☀️</span>
             <span class="text-sm">Bright Mode</span>
           </a>
         </li>
         <li>
-          <a href="#highlight-text-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+          <a href="#highlight-text-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🎨</span>
             <span class="text-sm">Highlight Text</span>
           </a>
         </li>
         <li>
-          <a href="#notifications-heading" class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+          <a href="#block-elements-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🚫</span>
+            <span class="text-sm">Block Elements</span>
+          </a>
+        </li>
+        <li>
+          <a href="#notifications-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔔</span>
             <span class="text-sm">Notifications</span>
           </a>
@@ -66,7 +79,7 @@
   <!-- sections -->
   <main class="min-h-screen flex flex-col items-center p-6 ml-64">
     <div class="w-full max-w-4xl flex flex-col items-center gap-6">
-      
+
       <!-- Bookmarks section -->
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
         <div class="card-body gap-6">
@@ -189,8 +202,8 @@
                 <span class="label">
                   <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
                 </span>
-                <input id="autoReloadPatternInput" class="input input-bordered w-full font-mono text-sm"
-                  type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                <input id="autoReloadPatternInput" class="input input-bordered w-full font-mono text-sm" type="text"
+                  autocomplete="off" placeholder="https://example.com/*" required>
                 <span class="label-text-alt text-xs text-base-content/60 mt-2">
                   Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
                 </span>
@@ -221,7 +234,8 @@
               <h3 class="text-lg font-semibold">Saved rules</h3>
               <p class="text-sm text-base-content/70">Select a rule to view details or manage it.</p>
             </div>
-            <div id="autoReloadRulesEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+            <div id="autoReloadRulesEmpty"
+              class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
               No auto reload rules yet. Add one above to start.
             </div>
             <div id="autoReloadRulesList" class="space-y-2" role="list"></div>
@@ -256,7 +270,8 @@
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="bright-mode-heading" class="card-title text-3xl">☀️ Bright Mode</h2>
-            <p class="text-base-content/70">Configure URL patterns for bright mode display. Whitelist patterns will always use bright mode, while blacklist patterns will never use bright mode.</p>
+            <p class="text-base-content/70">Configure URL patterns for bright mode display. Whitelist patterns will
+              always use bright mode, while blacklist patterns will never use bright mode.</p>
           </div>
           <div class="space-y-6">
             <!-- Whitelist Section -->
@@ -277,7 +292,8 @@
                       <button id="brightModeWhitelistSaveButton" class="btn btn-square btn-success" type="submit">
                         ➕
                       </button>
-                      <button id="brightModeWhitelistCancelEditButton" class="btn btn-square btn-outline" type="button" hidden>
+                      <button id="brightModeWhitelistCancelEditButton" class="btn btn-square btn-outline" type="button"
+                        hidden>
                         ❌
                       </button>
                     </div>
@@ -293,7 +309,8 @@
                   <h4 class="text-md font-semibold">Whitelist patterns</h4>
                   <p class="text-sm text-base-content/70">Select a pattern to view details or manage it.</p>
                 </div>
-                <div id="brightModeWhitelistEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+                <div id="brightModeWhitelistEmpty"
+                  class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
                   No whitelist patterns yet. Add one above to start.
                 </div>
                 <div id="brightModeWhitelistList" class="space-y-2" role="list"></div>
@@ -318,7 +335,8 @@
                       <button id="brightModeBlacklistSaveButton" class="btn btn-square btn-success" type="submit">
                         ➕
                       </button>
-                      <button id="brightModeBlacklistCancelEditButton" class="btn btn-square btn-outline" type="button" hidden>
+                      <button id="brightModeBlacklistCancelEditButton" class="btn btn-square btn-outline" type="button"
+                        hidden>
                         ❌
                       </button>
                     </div>
@@ -334,7 +352,8 @@
                   <h4 class="text-md font-semibold">Blacklist patterns</h4>
                   <p class="text-sm text-base-content/70">Select a pattern to view details or manage it.</p>
                 </div>
-                <div id="brightModeBlacklistEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+                <div id="brightModeBlacklistEmpty"
+                  class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
                   No blacklist patterns yet. Add one above to start.
                 </div>
                 <div id="brightModeBlacklistList" class="space-y-2" role="list"></div>
@@ -349,7 +368,8 @@
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="highlight-text-heading" class="card-title text-3xl">🎨 Highlight Text</h2>
-            <p class="text-base-content/70">Create rules to highlight specific text on web pages based on URL patterns.</p>
+            <p class="text-base-content/70">Create rules to highlight specific text on web pages based on URL patterns.
+            </p>
           </div>
           <form id="highlightTextRuleForm" class="space-y-4" novalidate>
             <div class="grid gap-4 sm:grid-cols-2">
@@ -357,8 +377,8 @@
                 <span class="label">
                   <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
                 </span>
-                <input id="highlightTextPatternInput" class="input input-bordered w-full font-mono text-sm"
-                  type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                <input id="highlightTextPatternInput" class="input input-bordered w-full font-mono text-sm" type="text"
+                  autocomplete="off" placeholder="https://example.com/*" required>
                 <span class="label-text-alt text-xs text-base-content/60 mt-2">
                   Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
                 </span>
@@ -381,7 +401,8 @@
               <textarea id="highlightTextValueInput" class="textarea textarea-bordered w-full font-mono text-sm"
                 placeholder="Enter text to highlight or regex pattern" rows="3" required></textarea>
               <span class="label-text-alt text-xs text-base-content/60 mt-2">
-                For comma-separated words, enter words separated by commas. For regex, use valid JavaScript regex syntax.
+                For comma-separated words, enter words separated by commas. For regex, use valid JavaScript regex
+                syntax.
               </span>
             </label>
             <label class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2">
@@ -396,10 +417,13 @@
                     <span class="label-text text-xs text-base-content/60">Text color</span>
                   </span>
                   <div class="flex items-center gap-3">
-                    <input id="highlightTextColorInput" class="input input-bordered h-10 w-16" type="color" value="#000000">
+                    <input id="highlightTextColorInput" class="input input-bordered h-10 w-16" type="color"
+                      value="#000000">
                     <div class="flex items-center gap-2 flex-1">
-                      <input id="highlightTextColorAlphaInput" class="range range-sm flex-1" type="range" min="0" max="100" value="100">
-                      <span id="highlightTextColorAlphaLabel" class="text-xs text-base-content/60 w-10 text-right">100%</span>
+                      <input id="highlightTextColorAlphaInput" class="range range-sm flex-1" type="range" min="0"
+                        max="100" value="100">
+                      <span id="highlightTextColorAlphaLabel"
+                        class="text-xs text-base-content/60 w-10 text-right">100%</span>
                     </div>
                   </div>
                 </label>
@@ -408,10 +432,13 @@
                     <span class="label-text text-xs text-base-content/60">Background color</span>
                   </span>
                   <div class="flex items-center gap-3">
-                    <input id="highlightTextBackgroundInput" class="input input-bordered h-10 w-16" type="color" value="#ffff00">
+                    <input id="highlightTextBackgroundInput" class="input input-bordered h-10 w-16" type="color"
+                      value="#ffff00">
                     <div class="flex items-center gap-2 flex-1">
-                      <input id="highlightTextBackgroundAlphaInput" class="range range-sm flex-1" type="range" min="0" max="100" value="100">
-                      <span id="highlightTextBackgroundAlphaLabel" class="text-xs text-base-content/60 w-10 text-right">100%</span>
+                      <input id="highlightTextBackgroundAlphaInput" class="range range-sm flex-1" type="range" min="0"
+                        max="100" value="100">
+                      <span id="highlightTextBackgroundAlphaLabel"
+                        class="text-xs text-base-content/60 w-10 text-right">100%</span>
                     </div>
                   </div>
                 </label>
@@ -451,7 +478,8 @@
               <h3 class="text-lg font-semibold">Saved rules</h3>
               <p class="text-sm text-base-content/70">Select a rule to view details or manage it.</p>
             </div>
-            <div id="highlightTextRulesEmpty" class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+            <div id="highlightTextRulesEmpty"
+              class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
               No highlight text rules yet. Add one above to start.
             </div>
             <div id="highlightTextRulesList" class="space-y-2" role="list"></div>
@@ -499,7 +527,70 @@
           </div>
         </div>
       </section>
-      
+
+      <!-- Block elements section -->
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="block-elements-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="block-elements-heading" class="card-title text-3xl">🚫 Block Elements</h2>
+            <p class="text-base-content/70">Manage CSS selectors to block specific elements on web pages. Use the
+              element picker from the popup to add new blocking rules.</p>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <h3 class="text-lg font-semibold">Saved blocking rules</h3>
+              <p class="text-sm text-base-content/70">Each rule contains a URL pattern and one or more CSS selectors to
+                block on matching pages.</p>
+            </div>
+            <div id="blockElementsRulesEmpty"
+              class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+              No blocking rules yet. Use the element picker (🎯 button in popup) to create rules.
+            </div>
+            <div id="blockElementsRulesList" class="space-y-2" role="list"></div>
+          </div>
+          <div id="blockElementsRuleDetails" class="rounded-lg border border-base-300 p-4 space-y-3" hidden>
+            <div class="flex items-center justify-between gap-3">
+              <h3 class="text-lg font-semibold">Rule details</h3>
+              <span id="blockElementsRuleSelectorCount" class="badge badge-outline text-sm"></span>
+            </div>
+            <dl class="space-y-2 text-sm">
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">URL Pattern</dt>
+                <dd class="flex items-center gap-2">
+                  <input id="blockElementsRulePatternInput"
+                    class="input input-sm input-bordered w-full font-mono text-xs" type="text" autocomplete="off" />
+                  <button id="blockElementsRulePatternSaveButton" class="btn btn-sm btn-primary" type="button" hidden>
+                    Save
+                  </button>
+                  <button id="blockElementsRulePatternCancelButton" class="btn btn-sm btn-outline" type="button" hidden>
+                    Cancel
+                  </button>
+                </dd>
+              </div>
+              <div class="flex flex-col gap-2">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">CSS Selectors</dt>
+                <dd id="blockElementsRuleSelectorsList" class="space-y-2"></dd>
+              </div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Created</dt>
+                  <dd id="blockElementsRuleCreatedDetail" class="text-base-content"></dd>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Last updated</dt>
+                  <dd id="blockElementsRuleUpdatedDetail" class="text-base-content"></dd>
+                </div>
+              </div>
+            </dl>
+            <div class="flex justify-end">
+              <button id="blockElementsRuleDeleteButton" class="btn btn-error btn-outline" type="button">
+                Delete rule
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Notifications section -->
       <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="notifications-heading">
         <div class="card-body gap-6">
@@ -508,19 +599,23 @@
             <p class="text-base-content/70">Decide which alerts the extension should show.</p>
           </div>
           <div class="space-y-4">
-            <section class="rounded-lg border border-base-300 p-4 space-y-4" aria-labelledby="notifications-global-heading">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4"
+              aria-labelledby="notifications-global-heading">
               <h3 id="notifications-global-heading" class="text-lg font-semibold">Global</h3>
-              <label class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+              <label
+                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                 <span class="text-base-content font-medium">Enable all notifications</span>
                 <input id="notificationGlobalToggle" class="toggle toggle-primary ml-auto" type="checkbox">
               </label>
             </section>
-            <section class="rounded-lg border border-base-300 p-4 space-y-4" aria-labelledby="notifications-bookmark-heading">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4"
+              aria-labelledby="notifications-bookmark-heading">
               <div class="space-y-1">
                 <h3 id="notifications-bookmark-heading" class="text-lg font-semibold">Bookmark management</h3>
                 <p class="text-sm text-base-content/70">Control sync and save notifications.</p>
               </div>
-              <label class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+              <label
+                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                 <span class="text-base-content font-medium">Enable bookmark notifications</span>
                 <input id="notificationBookmarkToggle" class="toggle toggle-primary ml-auto" type="checkbox">
               </label>
@@ -533,16 +628,19 @@
                 <label
                   class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                   <span class="text-base-content">Saved to Unsorted</span>
-                  <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-secondary ml-auto" type="checkbox">
+                  <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-secondary ml-auto"
+                    type="checkbox">
                 </label>
               </div>
             </section>
-            <section class="rounded-lg border border-base-300 p-4 space-y-4" aria-labelledby="notifications-project-heading">
+            <section class="rounded-lg border border-base-300 p-4 space-y-4"
+              aria-labelledby="notifications-project-heading">
               <div class="space-y-1">
                 <h3 id="notifications-project-heading" class="text-lg font-semibold">Project management</h3>
                 <p class="text-sm text-base-content/70">Control project save, update, and delete notifications.</p>
               </div>
-              <label class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+              <label
+                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
                 <span class="text-base-content font-medium">Enable project notifications</span>
                 <input id="notificationProjectToggle" class="toggle toggle-primary ml-auto" type="checkbox">
               </label>
@@ -572,7 +670,7 @@
           </div>
         </div>
       </section>
-      
+
     </div>
   </main>
   <script src="./options.js" type="module"></script>

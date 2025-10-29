@@ -195,11 +195,15 @@
       updateMatchCount(selector);
       updateCandidatesList();
 
-      // Update preview if active
+      // Disable preview if active when selector changes
       if (previewActive && pickerContentPort) {
+        previewActive = false;
+        if (previewButton) {
+          previewButton.classList.remove('active');
+        }
         pickerContentPort.postMessage({
-          what: 'updatePreview',
-          selector,
+          what: 'togglePreview',
+          state: false,
         });
       }
 
