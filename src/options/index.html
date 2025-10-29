@@ -611,6 +611,10 @@
           <div class="space-y-1">
             <h2 id="custom-code-heading" class="card-title text-3xl">💻 Custom JS CSS</h2>
             <p class="text-base-content/70">Inject custom CSS and JavaScript code into pages matching URL patterns.</p>
+            <div class="alert alert-info text-sm mt-2">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span>Custom code rules are stored locally on this device. They're included in Raindrop backups and exports for syncing across devices.</span>
+            </div>
           </div>
           <form id="customCodeRuleForm" class="space-y-4" novalidate>
             <label class="form-control w-full">
@@ -630,7 +634,7 @@
               <textarea id="customCodeCSSInput" class="textarea textarea-bordered w-full font-mono text-sm"
                 placeholder="body { background-color: red; }" rows="6"></textarea>
               <span class="label-text-alt text-xs text-base-content/60 mt-2">
-                Enter CSS rules to apply to matching pages.
+                CSS is injected at the end of the page head for high priority. Use <code>!important</code> if needed to override existing styles.
               </span>
             </label>
             <label class="form-control w-full">

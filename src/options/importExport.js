@@ -696,7 +696,7 @@ async function readCurrentOptions() {
     getBlacklistPatterns(),
     loadHighlightTextRules(),
     chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
-    chrome.storage.sync.get(CUSTOM_CODE_RULES_KEY),
+    chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -928,17 +928,21 @@ async function applyImportedOptions(
   const map = /** @type {*} */ (existing?.[ROOT_FOLDER_SETTINGS_KEY]) || {};
   map[PROVIDER_ID] = sanitizedRoot;
 
-  // Persist all keys
-  await chrome.storage.sync.set({
-    [ROOT_FOLDER_SETTINGS_KEY]: map,
-    [NOTIFICATION_PREFERENCES_KEY]: sanitizedNotifications,
-    [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
-    [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
-    [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
-    [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
-    [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
-    [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
-  });
+  // Persist all keys (custom code rules go to local storage due to size)
+  await Promise.all([
+    chrome.storage.sync.set({
+      [ROOT_FOLDER_SETTINGS_KEY]: map,
+      [NOTIFICATION_PREFERENCES_KEY]: sanitizedNotifications,
+      [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
+      [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
+      [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
+      [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
+      [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
+    }),
+    chrome.storage.local.set({
+      [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
+    }),
+  ]);
 }
 
 /**

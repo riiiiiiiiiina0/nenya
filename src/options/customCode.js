@@ -155,21 +155,23 @@ function normalizeRules(value) {
 }
 
 /**
- * Persist the provided rules in chrome.storage.sync.
+ * Persist the provided rules in chrome.storage.local.
+ * Note: Using local storage instead of sync due to quota limits for code content.
  * @param {CustomCodeRule[]} nextRules
  * @returns {Promise<void>}
  */
 async function saveRules(nextRules) {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
   syncing = true;
   try {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [STORAGE_KEY]: nextRules,
     });
   } catch (error) {
     console.warn('[options:customCode] Failed to save rules:', error);
+    throw error;
   } finally {
     syncing = false;
   }
@@ -180,13 +182,13 @@ async function saveRules(nextRules) {
  * @returns {Promise<void>}
  */
 async function loadRules() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     rules = [];
     return;
   }
 
   try {
-    const stored = await chrome.storage.sync.get(STORAGE_KEY);
+    const stored = await chrome.storage.local.get(STORAGE_KEY);
     const { rules: sanitized, mutated } = normalizeRules(stored?.[STORAGE_KEY]);
     rules = sanitized;
     if (mutated) {
@@ -518,7 +520,7 @@ function init() {
 
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) {

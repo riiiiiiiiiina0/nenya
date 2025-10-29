@@ -1,6 +1,8 @@
 (function () {
   'use strict';
 
+  /* global URLPattern */
+
   /**
    * @typedef {Object} CustomCodeRule
    * @property {string} id
@@ -52,13 +54,13 @@
      * Load rules from storage
      */
     async loadRules() {
-      if (!chrome?.storage?.sync) {
+      if (!chrome?.storage?.local) {
         console.warn('[CustomCode] Chrome storage not available');
         return;
       }
 
       try {
-        const result = await chrome.storage.sync.get(STORAGE_KEY);
+        const result = await chrome.storage.local.get(STORAGE_KEY);
         this.rules = result[STORAGE_KEY] || [];
         
         console.log('[CustomCode] Loaded rules:', this.rules.length);
@@ -75,6 +77,7 @@
      */
     matchesPattern(pattern, url) {
       try {
+        // @ts-ignore - URLPattern is a browser API not yet in TypeScript types
         const urlPattern = new URLPattern(pattern);
         return urlPattern.test(url);
       } catch (error) {
@@ -106,12 +109,18 @@
       styleElement.id = styleId;
       styleElement.textContent = css;
       
-      // Insert at the end of head or beginning of body
+      // Add data attribute for identification and priority
+      styleElement.setAttribute('data-nenya-custom', 'true');
+      
+      // Inject at the END of head to ensure highest priority in cascade
+      // This way it loads after other stylesheets
       if (document.head) {
         document.head.appendChild(styleElement);
       } else if (document.body) {
-        document.body.insertBefore(styleElement, document.body.firstChild);
+        // If head doesn't exist yet, append to body end
+        document.body.appendChild(styleElement);
       } else {
+        // Fallback: append to documentElement
         document.documentElement.appendChild(styleElement);
       }
 
@@ -232,7 +241,7 @@
       }
 
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area !== 'sync') {
+        if (area !== 'local') {
           return;
         }
 
