@@ -2,7 +2,7 @@
   'use strict';
 
   const MIN_VIDEO_WIDTH = 640;
-  const MIN_VIDEO_HEIGHT = 180;
+  const MIN_VIDEO_HEIGHT = 360;
 
   // Store original video data for restoration
   const originalVideoData = new WeakMap();
