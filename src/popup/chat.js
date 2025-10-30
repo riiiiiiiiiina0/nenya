@@ -12,6 +12,9 @@ const backButton = /** @type {HTMLButtonElement | null} */ (
 const sendButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('sendButton')
 );
+const downloadButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('downloadButton')
+);
 const promptsDropdown = /** @type {HTMLDivElement | null} */ (
   document.getElementById('promptsDropdown')
 );
@@ -20,6 +23,9 @@ const providersDropdown = /** @type {HTMLDivElement | null} */ (
 );
 const selectedProvidersDiv = /** @type {HTMLDivElement | null} */ (
   document.getElementById('selectedProviders')
+);
+const selectProvidersButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('selectProvidersButton')
 );
 const tabsInfoDiv = /** @type {HTMLDivElement | null} */ (
   document.getElementById('tabsInfo')
@@ -89,6 +95,9 @@ let currentPromptRequiresSearch = false;
 
 let activeDropdownIndex = -1;
 
+/** @type {boolean} */
+let providerDropdownTriggeredByButton = false;
+
 /**
  * Load saved selected providers from storage.
  * @returns {Promise<void>}
@@ -126,17 +135,22 @@ async function saveSelectedProviders() {
  * @returns {void}
  */
 function updateSelectedProvidersDisplay() {
-  if (!selectedProvidersDiv) return;
+  if (!selectedProvidersDiv || !selectProvidersButton) return;
 
-  selectedProvidersDiv.innerHTML = '';
+  // Clear only the badges, not the button
+  const existingBadges = selectedProvidersDiv.querySelectorAll(
+    '.llm-provider-badge',
+  );
+  existingBadges.forEach((badge) => badge.remove());
 
   if (selectedProviders.size === 0) {
-    const placeholder = document.createElement('span');
-    placeholder.className = 'text-sm text-base-content/60';
-    placeholder.textContent = 'No LLM providers selected (type @ to select)';
-    selectedProvidersDiv.appendChild(placeholder);
+    // Show the button when no providers are selected
+    selectProvidersButton.style.display = 'inline-flex';
     return;
   }
+
+  // Hide the button when providers are selected
+  selectProvidersButton.style.display = 'none';
 
   selectedProviders.forEach((providerId) => {
     const provider = LLM_PROVIDERS.find((p) => p.id === providerId);
@@ -297,10 +311,14 @@ async function showPromptsDropdown() {
 
 /**
  * Show the LLM providers dropdown.
+ * @param {HTMLElement} [referenceElement] - Optional element to position dropdown near
  * @returns {void}
  */
-function showProvidersDropdown() {
+function showProvidersDropdown(referenceElement) {
   if (!providersDropdown || !promptTextarea) return;
+
+  // Track if opened via button or '@' trigger
+  providerDropdownTriggeredByButton = !!referenceElement;
 
   providersDropdown.innerHTML = '';
 
@@ -330,26 +348,45 @@ function showProvidersDropdown() {
     }
 
     item.addEventListener('click', () => {
-      toggleProvider(provider.id);
+      // Use appropriate toggle function based on how dropdown was opened
+      if (providerDropdownTriggeredByButton) {
+        toggleProviderFromButton(provider.id);
+      } else {
+        toggleProvider(provider.id);
+      }
     });
 
     providersDropdown.appendChild(item);
   });
 
   // Position the dropdown
-  const rect = promptTextarea.getBoundingClientRect();
-  const cursorPosition = getCursorCoordinates(promptTextarea);
+  if (referenceElement) {
+    // Position above the button that triggered it
+    const rect = referenceElement.getBoundingClientRect();
+    const dropdownWidth = 400;
+    const maxLeft = Math.min(rect.left, window.innerWidth - dropdownWidth - 20);
 
-  // Ensure dropdown stays within page boundaries
-  const dropdownWidth = 400; // match the CSS width
-  const maxLeft = Math.min(
-    cursorPosition.left,
-    window.innerWidth - dropdownWidth - 20,
-  );
+    providersDropdown.style.left = `${Math.max(20, maxLeft)}px`;
+    // Position above the button - we'll adjust after showing to get accurate height
+    providersDropdown.style.top = '0px';
+    providersDropdown.classList.add('show');
 
-  providersDropdown.style.left = `${Math.max(20, maxLeft)}px`;
-  providersDropdown.style.top = `${cursorPosition.top + 20}px`;
-  providersDropdown.classList.add('show');
+    // Now get the actual dropdown height and position it above the button
+    const dropdownHeight = providersDropdown.offsetHeight;
+    providersDropdown.style.top = `${rect.top - dropdownHeight - 5}px`;
+  } else {
+    // Position near the textarea cursor (original behavior)
+    const cursorPosition = getCursorCoordinates(promptTextarea);
+    const dropdownWidth = 400;
+    const maxLeft = Math.min(
+      cursorPosition.left,
+      window.innerWidth - dropdownWidth - 20,
+    );
+
+    providersDropdown.style.left = `${Math.max(20, maxLeft)}px`;
+    providersDropdown.style.top = `${cursorPosition.top + 20}px`;
+    providersDropdown.classList.add('show');
+  }
 
   activeDropdownIndex = -1;
   updateActiveDropdownItem(providersDropdown);
@@ -367,6 +404,7 @@ function hideAllDropdowns() {
     providersDropdown.classList.remove('show');
   }
   activeDropdownIndex = -1;
+  providerDropdownTriggeredByButton = false;
 }
 
 /**
@@ -443,6 +481,30 @@ function toggleProvider(providerId) {
 
   hideAllDropdowns();
   promptTextarea.focus();
+}
+
+/**
+ * Toggle a provider selection from the button (doesn't remove '@' character).
+ * @param {string} providerId
+ * @returns {void}
+ */
+function toggleProviderFromButton(providerId) {
+  // Don't allow ChatGPT if prompt requires search
+  if (currentPromptRequiresSearch && providerId === 'chatgpt') {
+    return;
+  }
+
+  if (selectedProviders.has(providerId)) {
+    selectedProviders.delete(providerId);
+  } else {
+    selectedProviders.add(providerId);
+  }
+
+  updateSelectedProvidersDisplay();
+  void saveSelectedProviders();
+
+  // Close dropdown after selection
+  hideAllDropdowns();
 }
 
 /**
@@ -540,6 +602,47 @@ async function handleSend() {
   }
 
   try {
+    // Send message to background script to collect content and inject into LLM pages
+    const response = await chrome.runtime.sendMessage({
+      type: 'collect-and-send-to-llm',
+      tabIds: targetTabs
+        .map((t) => t.id)
+        .filter((id) => typeof id === 'number'),
+      llmProviders: Array.from(selectedProviders),
+      promptContent: promptText,
+    });
+
+    if (!response?.success) {
+      alert(`Failed to send to LLM: ${response?.error || 'Unknown error'}`);
+      return;
+    }
+
+    // Close the popup - the LLM tabs have been opened/reused with content injected
+    window.close();
+  } catch (error) {
+    console.error('[chat] Failed to send:', error);
+    alert('Failed to send prompt. Please try again.');
+  }
+}
+
+/**
+ * Handle downloading page content as markdown file.
+ * @returns {Promise<void>}
+ */
+async function handleDownload() {
+  if (!promptTextarea) return;
+
+  const promptText = promptTextarea.value.trim();
+
+  // Check if we have any valid tabs to collect content from
+  if (targetTabs.length === 0) {
+    alert(
+      'No valid tabs available. Please open an http:// or https:// page first.',
+    );
+    return;
+  }
+
+  try {
     // Collect page content from target tabs
     const response = await chrome.runtime.sendMessage({
       type: 'collect-page-content-as-markdown',
@@ -555,40 +658,48 @@ async function handleSend() {
 
     const contents = response.contents || [];
 
-    // Build the full prompt with page content
-    let fullPrompt = '';
+    // Build the markdown content
+    let markdownContent = '';
+
+    // Add prompt if provided
     if (promptText) {
-      fullPrompt = promptText + '\n\n---\n\n';
+      markdownContent = `# Prompt\n\n${promptText}\n\n---\n\n`;
     }
+
+    // Add page contents
     contents.forEach((content, index) => {
-      fullPrompt += `## Page ${index + 1}: ${content.title}\n`;
-      fullPrompt += `URL: ${content.url}\n\n`;
-      fullPrompt += content.content;
-      fullPrompt += '\n\n---\n\n';
+      markdownContent += `## Page ${index + 1}: ${content.title}\n\n`;
+      markdownContent += `**URL:** ${content.url}\n\n`;
+      markdownContent += content.content;
+      markdownContent += '\n\n---\n\n';
     });
 
-    // Open LLM provider tabs with the prompt
-    for (const providerId of selectedProviders) {
-      const provider = LLM_PROVIDERS.find((p) => p.id === providerId);
-      if (!provider) continue;
+    // Create a blob and download it
+    const blob = new Blob([markdownContent], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
 
-      // Copy prompt to clipboard
-      await navigator.clipboard.writeText(fullPrompt);
+    // Create a temporary link and trigger download
+    const a = document.createElement('a');
+    a.href = url;
 
-      // Open the provider URL in a new tab
-      await chrome.tabs.create({ url: provider.url });
-    }
+    // Generate filename with timestamp
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `page-content-${timestamp}.md`;
+
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+
+    // Clean up
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
     // Show success message
-    alert(
-      `Opened ${selectedProviders.size} LLM provider tab(s). The prompt with page content has been copied to your clipboard.`,
-    );
-
-    // Navigate back to the main popup page
-    window.location.href = 'index.html';
+    alert(`Page content downloaded as ${filename}`);
   } catch (error) {
-    console.error('[chat] Failed to send:', error);
-    alert('Failed to send prompt. Please try again.');
+    console.error('[chat] Failed to download:', error);
+    alert('Failed to download page content. Please try again.');
   }
 }
 
@@ -606,6 +717,19 @@ if (backButton) {
 if (sendButton) {
   sendButton.addEventListener('click', () => {
     void handleSend();
+  });
+}
+
+if (downloadButton) {
+  downloadButton.addEventListener('click', () => {
+    void handleDownload();
+  });
+}
+
+if (selectProvidersButton) {
+  selectProvidersButton.addEventListener('click', (event) => {
+    event.stopPropagation(); // Prevent click from bubbling to document listener
+    showProvidersDropdown(selectProvidersButton);
   });
 }
 
@@ -677,18 +801,17 @@ document.addEventListener('click', (event) => {
   const target = /** @type {HTMLElement | null} */ (event.target);
   if (!target) return;
 
-  if (
-    promptsDropdown &&
-    !promptsDropdown.contains(target) &&
-    target !== promptTextarea
-  ) {
+  // Close prompts dropdown if clicking anywhere except the dropdown itself
+  if (promptsDropdown && !promptsDropdown.contains(target)) {
     promptsDropdown.classList.remove('show');
   }
 
+  // Close providers dropdown if clicking anywhere except the dropdown or the button
   if (
     providersDropdown &&
     !providersDropdown.contains(target) &&
-    target !== promptTextarea
+    target !== selectProvidersButton &&
+    !(selectProvidersButton && selectProvidersButton.contains(target))
   ) {
     providersDropdown.classList.remove('show');
   }

@@ -152,7 +152,9 @@
       <div class="flex items-center gap-3">
         <!-- Selected LLM providers -->
         <div id="selectedProviders" class="flex gap-2 flex-wrap flex-1">
-          <span class="text-sm text-base-content/60">No LLM providers selected (type @ to select)</span>
+          <button id="selectProvidersButton" class="btn btn-sm btn-ghost text-sm text-base-content/60" type="button">
+            Select LLM providers...
+          </button>
         </div>
 
         <!-- Tabs info -->
@@ -161,7 +163,10 @@
           <span id="tabCount" class="text-sm text-base-content/70"></span>
         </div>
 
-        <!-- Send button -->
+        <!-- Download and Send buttons -->
+        <button id="downloadButton" class="btn btn-outline btn-sm" type="button" title="Download page content as markdown">
+          Download
+        </button>
         <button id="sendButton" class="btn btn-primary btn-sm" type="button">
           Send
         </button>

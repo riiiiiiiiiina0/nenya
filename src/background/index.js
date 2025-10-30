@@ -41,6 +41,11 @@ import {
   handleClipboardCommand,
 } from './clipboard.js';
 import { initializeTabSnapshots } from './tab-snapshots.js';
+import {
+  LLM_PROVIDER_META,
+  isLLMPage,
+  getLLMProviderFromURL,
+} from '../shared/llmProviders.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -53,6 +58,7 @@ const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 const COLLECT_PAGE_CONTENT_MESSAGE = 'collect-page-content-as-markdown';
+const COLLECT_AND_SEND_TO_LLM_MESSAGE = 'collect-and-send-to-llm';
 
 // ============================================================================
 // KEYBOARD SHORTCUTS (COMMANDS)
@@ -670,6 +676,15 @@ function isYouTubeVideoPage(url) {
 }
 
 /**
+ * Check if URL is a Notion page.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isNotionPage(url) {
+  return /^https?:\/\/(?:www\.)?notion\.so\//.test(url);
+}
+
+/**
  * Inject content scripts to extract page content as markdown.
  * @param {number} tabId
  * @returns {Promise<boolean>}
@@ -688,11 +703,14 @@ async function injectContentScripts(tabId) {
         '[background] Detected YouTube video page, using YouTube extractor',
       );
       contentScriptFile = 'src/contentScript/getContent-youtube.js';
+    } else if (isNotionPage(tabUrl)) {
+      console.log('[background] Detected Notion page, using Notion extractor');
+      contentScriptFile = 'src/contentScript/getContent-notion.js';
     }
 
-    // For YouTube, we don't need Readability and Turndown
-    if (isYouTubeVideoPage(tabUrl)) {
-      // Just inject the YouTube content script
+    // For YouTube and Notion, we don't need Readability and Turndown
+    if (isYouTubeVideoPage(tabUrl) || isNotionPage(tabUrl)) {
+      // Just inject the specific content script
       await chrome.scripting.executeScript({
         target: { tabId },
         files: [contentScriptFile],
@@ -809,6 +827,181 @@ async function collectPageContentFromTabs(tabIds) {
   }
 
   return results;
+}
+
+// ============================================================================
+// LLM TAB MANAGEMENT
+// ============================================================================
+
+/** @type {number[]} */
+let llmTabIds = [];
+
+/** @type {Array<{tabId: number, title: string, url: string, content: string}>} */
+let collectedContents = [];
+
+/** @type {string | null} */
+let selectedPromptContent = null;
+
+/** @type {Array<{name: string, type: string, dataUrl: string}>} */
+let selectedLocalFiles = [];
+
+/**
+ * Inject the LLM page injector content script
+ * @param {number} tabId
+ * @returns {Promise<boolean>}
+ */
+async function injectLLMPageInjector(tabId) {
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['src/contentScript/llmPageInjector.js'],
+    });
+    return true;
+  } catch (error) {
+    console.error('[background] Failed to inject LLM page injector:', error);
+    return false;
+  }
+}
+
+/**
+ * Wait for a tab to be ready (complete loading)
+ * @param {number} tabId
+ * @param {number} timeout
+ * @returns {Promise<boolean>}
+ */
+async function waitForTabReady(tabId, timeout = 30000) {
+  return new Promise((resolve) => {
+    const checkTab = async () => {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (tab.status === 'complete') {
+          resolve(true);
+          return;
+        }
+      } catch (error) {
+        resolve(false);
+        return;
+      }
+    };
+
+    // Check immediately
+    void checkTab();
+
+    // Listen for tab updates
+    const listener = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') {
+        chrome.tabs.onUpdated.removeListener(listener);
+        clearTimeout(timeoutId);
+        resolve(true);
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(listener);
+
+    // Timeout
+    const timeoutId = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve(false);
+    }, timeout);
+  });
+}
+
+/**
+ * Open or reuse LLM tabs and inject content
+ * @param {chrome.tabs.Tab} currentTab
+ * @param {string[]} selectedLLMProviders
+ * @param {Array<{tabId: number, title: string, url: string, content: string}>} contents
+ * @returns {Promise<void>}
+ */
+async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
+  llmTabIds = [];
+  const providersToOpen = [...selectedLLMProviders];
+  let firstTabToActivateId = null;
+
+  // Check if current tab can be reused
+  if (currentTab && currentTab.url && isLLMPage(currentTab.url)) {
+    for (const providerId of selectedLLMProviders) {
+      const meta = LLM_PROVIDER_META[providerId];
+      if (meta && currentTab.url.startsWith(meta.url)) {
+        console.log('[background] Reusing current tab for', providerId);
+
+        // Found a match, reuse this tab
+        const index = providersToOpen.indexOf(providerId);
+        if (index > -1) {
+          providersToOpen.splice(index, 1);
+        }
+
+        // Inject into current tab
+        if (currentTab.id) {
+          const ok = await injectLLMPageInjector(currentTab.id);
+          if (ok) {
+            llmTabIds.push(currentTab.id);
+            firstTabToActivateId = currentTab.id;
+
+            await waitForTabReady(currentTab.id);
+            await chrome.tabs.sendMessage(currentTab.id, {
+              type: 'inject-llm-data',
+              tabs: contents,
+              promptContent: selectedPromptContent,
+              files: selectedLocalFiles,
+              sendButtonSelector: meta.sendButtonSelector || null,
+            });
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  // Create new tabs for remaining providers
+  const tabCreationPromises = providersToOpen.map((providerId) => {
+    const meta = LLM_PROVIDER_META[providerId];
+    if (!meta) return Promise.resolve(null);
+
+    console.log('[background] Creating new tab for', providerId);
+
+    return chrome.tabs.create({
+      url: meta.url,
+      active: false,
+    });
+  });
+
+  const createdTabs = await Promise.all(tabCreationPromises);
+
+  // Inject into new tabs
+  for (let i = 0; i < createdTabs.length; i++) {
+    const newTab = createdTabs[i];
+    const providerId = providersToOpen[i];
+
+    if (newTab && newTab.id) {
+      const meta = LLM_PROVIDER_META[providerId];
+      if (!meta) continue;
+
+      const ok = await injectLLMPageInjector(newTab.id);
+      if (ok) {
+        llmTabIds.push(newTab.id);
+        if (!firstTabToActivateId) {
+          firstTabToActivateId = newTab.id;
+        }
+
+        await waitForTabReady(newTab.id);
+
+        console.log('[background] Sending data to new tab', newTab.id);
+        await chrome.tabs.sendMessage(newTab.id, {
+          type: 'inject-llm-data',
+          tabs: contents,
+          promptContent: selectedPromptContent,
+          files: selectedLocalFiles,
+          sendButtonSelector: meta.sendButtonSelector || null,
+        });
+      }
+    }
+  }
+
+  // Activate first tab
+  if (firstTabToActivateId) {
+    await chrome.tabs.update(firstTabToActivateId, { active: true });
+  }
 }
 
 // ============================================================================
@@ -1056,6 +1249,115 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: true, contents });
       } catch (error) {
         console.error('[background] Error collecting page content:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === COLLECT_AND_SEND_TO_LLM_MESSAGE) {
+    void (async () => {
+      try {
+        // Get tabs to collect content from
+        let tabIds = Array.isArray(message.tabIds) ? message.tabIds : [];
+        const llmProviders = Array.isArray(message.llmProviders)
+          ? message.llmProviders
+          : [];
+        const promptContent =
+          typeof message.promptContent === 'string'
+            ? message.promptContent
+            : '';
+
+        if (tabIds.length === 0) {
+          // Get highlighted tabs or active tab
+          const highlightedTabs = await chrome.tabs.query({
+            currentWindow: true,
+            highlighted: true,
+          });
+
+          // Filter out LLM pages from highlighted tabs
+          const filteredHighlighted = highlightedTabs.filter(
+            (tab) => !isLLMPage(tab.url || ''),
+          );
+
+          if (filteredHighlighted.length > 0) {
+            tabIds = filteredHighlighted
+              .map((t) => t.id)
+              .filter((id) => typeof id === 'number');
+          } else {
+            const activeTabs = await chrome.tabs.query({
+              currentWindow: true,
+              active: true,
+            });
+            const activeTab = activeTabs && activeTabs[0];
+            if (
+              activeTab &&
+              typeof activeTab.id === 'number' &&
+              !isLLMPage(activeTab.url || '')
+            ) {
+              tabIds = [activeTab.id];
+            }
+          }
+        }
+
+        if (tabIds.length === 0) {
+          sendResponse({
+            success: false,
+            error: 'No valid tabs to collect content from',
+          });
+          return;
+        }
+
+        if (llmProviders.length === 0) {
+          sendResponse({
+            success: false,
+            error: 'No LLM providers selected',
+          });
+          return;
+        }
+
+        // Collect content from each tab
+        collectedContents = await collectPageContentFromTabs(tabIds);
+        selectedPromptContent = promptContent;
+        selectedLocalFiles = [];
+
+        // Get current tab to check if it's an LLM page
+        const currentTabs = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        const currentTab = currentTabs[0];
+
+        // Capture screenshot if only current tab is selected and it's not an LLM page
+        if (
+          tabIds.length === 1 &&
+          currentTab &&
+          tabIds[0] === currentTab.id &&
+          !isLLMPage(currentTab.url || '')
+        ) {
+          try {
+            const dataUrl = await chrome.tabs.captureVisibleTab(
+              currentTab.windowId,
+              { format: 'jpeg', quality: 80 },
+            );
+            if (dataUrl) {
+              selectedLocalFiles.unshift({
+                name: 'screenshot.jpg',
+                type: 'image/jpeg',
+                dataUrl,
+              });
+            }
+          } catch (error) {
+            console.warn('[background] Failed to capture screenshot:', error);
+          }
+        }
+
+        // Open/reuse LLM tabs and inject content
+        await openOrReuseLLMTabs(currentTab, llmProviders, collectedContents);
+
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[background] Error in collect-and-send-to-llm:', error);
         sendResponse({ success: false, error: error.message });
       }
     })();
