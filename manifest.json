@@ -150,6 +150,9 @@
         "default": "Alt+Shift+Tab"
       },
       "description": "🔄 Tab Switcher"
+    },
+    "llm-chat-with-llm": {
+      "description": "🤖 Chat with LLM"
     }
   }
 }

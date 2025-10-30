@@ -535,8 +535,24 @@ async function initializePopup() {
   }
 }
 
-// Initialize the popup when the script loads
-void initializePopup();
+// Check if we should navigate to chat page (triggered by keyboard shortcut)
+void (async () => {
+  try {
+    const result = await chrome.storage.local.get('openChatPage');
+    if (result.openChatPage) {
+      // Clear the flag
+      await chrome.storage.local.remove('openChatPage');
+      // Navigate to chat page
+      window.location.href = 'chat.html';
+      return;
+    }
+  } catch (error) {
+    console.error('[popup] Failed to check chat page flag:', error);
+  }
+
+  // Initialize the popup normally
+  void initializePopup();
+})();
 
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_STATUS_REFRESH_INTERVAL = 1000;
@@ -621,52 +637,12 @@ window.addEventListener('unload', () => {
 
 /**
  * Handle getting page content as markdown.
- * @returns {Promise<void>}
+ * Opens the chat with LLM page within the same popup.
+ * @returns {void}
  */
-async function handleGetMarkdown() {
-  try {
-    if (statusMessage) {
-      concludeStatus('Collecting page content...', 'info', 2000, statusMessage);
-    }
-
-    // Send message to background to collect page content
-    const response = await chrome.runtime.sendMessage({
-      type: 'collect-page-content-as-markdown',
-      tabIds: [], // Empty array means get highlighted or active tab
-    });
-
-    if (response?.success) {
-      if (statusMessage) {
-        concludeStatus(
-          `Successfully collected content from ${response.contents?.length || 0} page(s). Check console for details.`,
-          'success',
-          3000,
-          statusMessage,
-        );
-      }
-      console.log('[popup] Content collection response:', response);
-    } else {
-      if (statusMessage) {
-        concludeStatus(
-          'Failed to collect page content.',
-          'error',
-          3000,
-          statusMessage,
-        );
-      }
-      console.error('[popup] Content collection failed:', response?.error);
-    }
-  } catch (error) {
-    console.error('[popup] Error in handleGetMarkdown:', error);
-    if (statusMessage) {
-      concludeStatus(
-        'Unable to collect page content.',
-        'error',
-        3000,
-        statusMessage,
-      );
-    }
-  }
+function handleGetMarkdown() {
+  // Navigate to the chat page within the same popup window
+  window.location.href = 'chat.html';
 }
 
 // Listen for storage changes to update popup when user logs in/out

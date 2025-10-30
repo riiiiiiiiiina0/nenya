@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+
+<head>
+  <meta charset="utf-8">
+  <title>Chat with LLM - Nenya</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <link rel="stylesheet" href="../libs/daisyui@5.css">
+  <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
+  <script src="../libs/tailwindcss@4.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 600px;
+      width: 480px;
+      max-width: 480px;
+    }
+
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      height: 100%;
+    }
+
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 400px;
+    }
+
+    #promptTextarea {
+      flex: 1;
+      resize: none;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .dropdown-menu {
+      position: absolute;
+      z-index: 1000;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      max-height: 300px;
+      max-width: calc(480px - 2rem);
+      width: 400px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: none;
+    }
+
+    .dropdown-menu.show {
+      display: block;
+    }
+
+    .dropdown-item {
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: background-color 0.15s;
+      overflow: hidden;
+      word-wrap: break-word;
+    }
+
+    .dropdown-item:hover,
+    .dropdown-item.selected {
+      background-color: #f3f4f6;
+    }
+
+    .dropdown-item.active {
+      background-color: #dbeafe;
+    }
+
+    .dropdown-item .truncate {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .llm-provider-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      font-size: 0.875rem;
+      background-color: #e0e7ff;
+      color: #3730a3;
+    }
+
+    .tab-favicon {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .dropdown-menu {
+        background: #1f2937;
+        border-color: #374151;
+      }
+
+      .dropdown-item:hover,
+      .dropdown-item.selected {
+        background-color: #374151;
+      }
+
+      .dropdown-item.active {
+        background-color: #1e40af;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-base-200">
+  <div class="chat-container">
+    <!-- Header -->
+    <div class="navbar bg-base-100 shadow-sm flex-none">
+      <div class="flex-1">
+        <button id="backButton" class="btn btn-ghost btn-sm" type="button">
+          ← Back
+        </button>
+        <span class="ml-2 text-lg font-semibold">Chat with LLM</span>
+      </div>
+    </div>
+
+    <!-- Main content area -->
+    <div class="content-area p-4">
+      <textarea
+        id="promptTextarea"
+        class="textarea textarea-bordered w-full"
+        placeholder="Type your prompt here...&#10;&#10;Type '/' to select a saved prompt&#10;Type '@' to select LLM providers"
+      ></textarea>
+      
+      <!-- Dropdown menus -->
+      <div id="promptsDropdown" class="dropdown-menu"></div>
+      <div id="providersDropdown" class="dropdown-menu"></div>
+    </div>
+
+    <!-- Bottom toolbar -->
+    <div class="bg-base-100 border-t border-base-300 p-3 flex-none">
+      <div class="flex items-center gap-3">
+        <!-- Selected LLM providers -->
+        <div id="selectedProviders" class="flex gap-2 flex-wrap flex-1">
+          <span class="text-sm text-base-content/60">No LLM providers selected (type @ to select)</span>
+        </div>
+
+        <!-- Tabs info -->
+        <div id="tabsInfo" class="flex items-center gap-2">
+          <div id="tabFavicons" class="flex gap-1"></div>
+          <span id="tabCount" class="text-sm text-base-content/70"></span>
+        </div>
+
+        <!-- Send button -->
+        <button id="sendButton" class="btn btn-primary btn-sm" type="button">
+          Send
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./chat.js" type="module"></script>
+</body>
+
+</html>
+

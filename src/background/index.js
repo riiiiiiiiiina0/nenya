@@ -477,6 +477,22 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
+
+  if (command === 'llm-chat-with-llm') {
+    void (async () => {
+      try {
+        // Set a flag in storage to indicate we should navigate to chat page
+        await chrome.storage.local.set({ openChatPage: true });
+
+        // Open the extension popup (this will trigger the popup to open)
+        // The popup will check the flag and navigate to chat.html
+        await chrome.action.openPopup();
+      } catch (error) {
+        console.warn('[commands] Chat with LLM failed:', error);
+      }
+    })();
+    return;
+  }
 });
 
 // ============================================================================
@@ -668,7 +684,9 @@ async function injectContentScripts(tabId) {
 
     // Determine which content extraction script to use
     if (isYouTubeVideoPage(tabUrl)) {
-      console.log('[background] Detected YouTube video page, using YouTube extractor');
+      console.log(
+        '[background] Detected YouTube video page, using YouTube extractor',
+      );
       contentScriptFile = 'src/contentScript/getContent-youtube.js';
     }
 
@@ -777,7 +795,10 @@ async function collectPageContentFromTabs(tabIds) {
         });
       }
     } catch (error) {
-      console.error(`[background] Error collecting content from tab ${tabId}:`, error);
+      console.error(
+        `[background] Error collecting content from tab ${tabId}:`,
+        error,
+      );
       results.push({
         tabId,
         title: '',
@@ -891,7 +912,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blockElement:addSelector') {
-    console.log('[background] Received blockElement:addSelector message:', message);
+    console.log(
+      '[background] Received blockElement:addSelector message:',
+      message,
+    );
     const selector =
       typeof message.selector === 'string' ? message.selector : '';
     const url = typeof message.url === 'string' ? message.url : '';
@@ -994,13 +1018,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             highlighted: true,
           });
           if (highlightedTabs && highlightedTabs.length > 0) {
-            tabIds = highlightedTabs.map((t) => t.id).filter((id) => typeof id === 'number');
+            tabIds = highlightedTabs
+              .map((t) => t.id)
+              .filter((id) => typeof id === 'number');
           } else {
             const activeTabs = await chrome.tabs.query({
               currentWindow: true,
               active: true,
             });
-            if (activeTabs && activeTabs[0] && typeof activeTabs[0].id === 'number') {
+            if (
+              activeTabs &&
+              activeTabs[0] &&
+              typeof activeTabs[0].id === 'number'
+            ) {
               tabIds = [activeTabs[0].id];
             }
           }
