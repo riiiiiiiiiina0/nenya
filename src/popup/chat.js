@@ -335,15 +335,15 @@ function showProvidersDropdown(referenceElement) {
 
     if (selectedProviders.has(provider.id)) {
       item.classList.add('selected');
-      item.innerHTML = `<span>✓ ${provider.name}</span>`;
+      item.innerHTML = `<span>● ${provider.name}</span>`;
     } else {
-      item.innerHTML = `<span>${provider.name}</span>`;
+      item.innerHTML = `<span>○ ${provider.name}</span>`;
     }
 
     // Disable ChatGPT if prompt requires search
     if (currentPromptRequiresSearch && provider.id === 'chatgpt') {
       item.classList.add('opacity-50', 'cursor-not-allowed');
-      item.innerHTML = `<span>${provider.name} (disabled - prompt requires search)</span>`;
+      item.innerHTML = `<span>○ ${provider.name} (disabled - prompt requires search)</span>`;
       return;
     }
 
@@ -446,7 +446,7 @@ function selectPrompt(prompt) {
 }
 
 /**
- * Toggle a provider selection.
+ * Toggle a provider selection (single selection only).
  * @param {string} providerId
  * @returns {void}
  */
@@ -458,11 +458,9 @@ function toggleProvider(providerId) {
     return;
   }
 
-  if (selectedProviders.has(providerId)) {
-    selectedProviders.delete(providerId);
-  } else {
-    selectedProviders.add(providerId);
-  }
+  // Single selection: clear previous selection and set new one
+  selectedProviders.clear();
+  selectedProviders.add(providerId);
 
   updateSelectedProvidersDisplay();
   void saveSelectedProviders();
@@ -485,6 +483,7 @@ function toggleProvider(providerId) {
 
 /**
  * Toggle a provider selection from the button (doesn't remove '@' character).
+ * Single selection only.
  * @param {string} providerId
  * @returns {void}
  */
@@ -494,11 +493,9 @@ function toggleProviderFromButton(providerId) {
     return;
   }
 
-  if (selectedProviders.has(providerId)) {
-    selectedProviders.delete(providerId);
-  } else {
-    selectedProviders.add(providerId);
-  }
+  // Single selection: clear previous selection and set new one
+  selectedProviders.clear();
+  selectedProviders.add(providerId);
 
   updateSelectedProvidersDisplay();
   void saveSelectedProviders();
@@ -584,12 +581,12 @@ function handleDropdownKeyboard(event, dropdown) {
  * @returns {Promise<void>}
  */
 async function handleSend() {
-  if (!promptTextarea) return;
+  if (!promptTextarea || !sendButton) return;
 
   const promptText = promptTextarea.value.trim();
 
   if (selectedProviders.size === 0) {
-    alert('Please select at least one LLM provider (type @ to select).');
+    alert('Please select an LLM provider (type @ to select).');
     return;
   }
 
@@ -600,6 +597,11 @@ async function handleSend() {
     );
     return;
   }
+
+  // Show loading state and disable button
+  const originalButtonText = sendButton.textContent;
+  sendButton.disabled = true;
+  sendButton.classList.add('loading');
 
   try {
     // Send message to background script to collect content and inject into LLM pages
@@ -614,6 +616,9 @@ async function handleSend() {
 
     if (!response?.success) {
       alert(`Failed to send to LLM: ${response?.error || 'Unknown error'}`);
+      // Re-enable button on error
+      sendButton.disabled = false;
+      sendButton.classList.remove('loading');
       return;
     }
 
@@ -622,6 +627,9 @@ async function handleSend() {
   } catch (error) {
     console.error('[chat] Failed to send:', error);
     alert('Failed to send prompt. Please try again.');
+    // Re-enable button on error
+    sendButton.disabled = false;
+    sendButton.classList.remove('loading');
   }
 }
 

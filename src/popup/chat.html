@@ -10,7 +10,8 @@
   <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
   <script src="../libs/tailwindcss@4.js"></script>
   <style>
-    html, body {
+    html,
+    body {
       height: 100%;
       margin: 0;
       padding: 0;
@@ -133,13 +134,8 @@
         <span class="ml-2 text-lg font-semibold">Chat with LLM</span>
       </div>
       <div class="flex-none">
-        <a
-          id="editPromptsButton"
-          class="btn btn-ghost btn-sm"
-          href="../options/index.html#llm-prompts-heading"
-          target="_blank"
-          title="Edit saved prompts"
-        >
+        <a id="editPromptsButton" class="btn btn-ghost btn-sm" href="../options/index.html#llm-prompts-heading"
+          target="_blank" title="Edit saved prompts">
           ✏️
         </a>
       </div>
@@ -147,12 +143,9 @@
 
     <!-- Main content area -->
     <div class="content-area p-4">
-      <textarea
-        id="promptTextarea"
-        class="textarea textarea-bordered w-full"
-        placeholder="Type your prompt here...&#10;&#10;Type '/' to select a saved prompt&#10;Type '@' to select LLM providers"
-      ></textarea>
-      
+      <textarea id="promptTextarea" class="textarea textarea-bordered w-full"
+        placeholder="Type your prompt here...&#10;&#10;Type '/' to select a saved prompt&#10;Type '@' to select an LLM provider"></textarea>
+
       <!-- Dropdown menus -->
       <div id="promptsDropdown" class="dropdown-menu"></div>
       <div id="providersDropdown" class="dropdown-menu"></div>
@@ -161,10 +154,10 @@
     <!-- Bottom toolbar -->
     <div class="bg-base-100 border-t border-base-300 p-3 flex-none">
       <div class="flex items-center gap-3">
-        <!-- Selected LLM providers -->
+        <!-- Selected LLM provider -->
         <div id="selectedProviders" class="flex gap-2 flex-wrap flex-1">
           <button id="selectProvidersButton" class="btn btn-sm btn-ghost text-sm text-base-content/60" type="button">
-            Select LLM providers...
+            Select LLM provider...
           </button>
         </div>
 
@@ -175,12 +168,16 @@
         </div>
 
         <!-- Download and Send buttons -->
-        <button id="downloadButton" class="btn btn-outline btn-sm" type="button" title="Download page content as markdown">
-          Download
-        </button>
-        <button id="sendButton" class="btn btn-primary btn-sm" type="button">
-          Send
-        </button>
+        <div class="tooltip tooltip-left" data-tip="Download page content as markdown">
+          <button id="downloadButton" class="btn btn-square btn-sm" type="button">
+            📥
+          </button>
+        </div>
+        <div class="tooltip tooltip-left" data-tip="Send prompt to LLM">
+          <button id="sendButton" class="btn btn-primary btn-square btn-sm" type="button">
+            ↘️
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -189,4 +186,3 @@
 </body>
 
 </html>
-
