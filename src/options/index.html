@@ -73,6 +73,13 @@
           </a>
         </li>
         <li>
+          <a href="#llm-prompts-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🤖</span>
+            <span class="text-sm">LLM Saved Prompts</span>
+          </a>
+        </li>
+        <li>
           <a href="#notifications-heading"
             class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔔</span>
@@ -694,6 +701,94 @@
                 </div>
               </div>
             </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- LLM Saved Prompts section -->
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="llm-prompts-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="llm-prompts-heading" class="card-title text-3xl">🤖 LLM Saved Prompts</h2>
+            <p class="text-base-content/70">Create and manage saved prompts for Large Language Models. Each prompt can be associated with one or more LLM providers.</p>
+          </div>
+          <form id="llmPromptForm" class="space-y-4" novalidate>
+            <label class="form-control w-full">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Prompt name</span>
+              </span>
+              <input id="llmPromptNameInput" class="input input-bordered w-full" type="text"
+                autocomplete="off" placeholder="E.g., Code Review Assistant" required>
+            </label>
+            <label class="form-control w-full">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Prompt text</span>
+              </span>
+              <textarea id="llmPromptTextInput" class="textarea textarea-bordered w-full" 
+                placeholder="Enter your prompt text here..." rows="6" required></textarea>
+              <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                Enter the prompt text that will be used with the LLM.
+              </span>
+            </label>
+            <label class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2">
+              <input id="llmPromptRequireSearchInput" class="checkbox checkbox-sm" type="checkbox">
+              <span class="text-sm text-base-content">Require search (use for prompts that need web search)</span>
+            </label>
+            <p id="llmPromptFormError" class="text-sm text-error" hidden></p>
+            <div class="flex flex-wrap gap-3">
+              <button id="llmPromptSaveButton" class="btn btn-primary" type="submit">
+                Add prompt
+              </button>
+              <button id="llmPromptCancelEditButton" class="btn btn-outline" type="button" hidden>
+                Cancel edit
+              </button>
+            </div>
+          </form>
+          <div class="space-y-3">
+            <div>
+              <h3 class="text-lg font-semibold">Saved prompts</h3>
+              <p class="text-sm text-base-content/70">Select a prompt to view details or manage it.</p>
+            </div>
+            <div id="llmPromptsEmpty"
+              class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+              No saved prompts yet. Add one above to start.
+            </div>
+            <div id="llmPromptsList" class="space-y-2" role="list"></div>
+          </div>
+          <div id="llmPromptDetails" class="rounded-lg border border-base-300 p-4 space-y-3" hidden>
+            <h3 class="text-lg font-semibold">Prompt details</h3>
+            <dl class="space-y-2 text-sm">
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Name</dt>
+                <dd id="llmPromptDetailName" class="text-base-content font-medium"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Prompt</dt>
+                <dd id="llmPromptDetailText" class="text-base-content whitespace-pre-wrap"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Require search</dt>
+                <dd id="llmPromptDetailRequireSearch" class="text-base-content"></dd>
+              </div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Created</dt>
+                  <dd id="llmPromptDetailCreated" class="text-base-content"></dd>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Last updated</dt>
+                  <dd id="llmPromptDetailUpdated" class="text-base-content"></dd>
+                </div>
+              </div>
+            </dl>
+            <div class="flex justify-between gap-3 pt-2">
+              <button id="llmPromptEditButton" class="btn btn-primary btn-sm" type="button">
+                Edit
+              </button>
+              <button id="llmPromptDeleteButton" class="btn btn-error btn-outline btn-sm" type="button">
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       </section>

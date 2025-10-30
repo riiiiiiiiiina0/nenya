@@ -167,9 +167,26 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} LLMPromptSettings
+ * @property {string} id
+ * @property {string} name
+ * @property {string} prompt
+ * @property {boolean} requireSearch
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} CustomCodeRulesBackupPayload
  * @property {'custom-code-rules'} kind
  * @property {CustomCodeRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
+ * @typedef {Object} LLMPromptsBackupPayload
+ * @property {'llm-prompts'} kind
+ * @property {LLMPromptSettings[]} prompts
  * @property {BackupMetadata} metadata
  */
 
@@ -209,6 +226,7 @@ const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
+const LLM_PROMPTS_KEY = 'llmPrompts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -252,6 +270,7 @@ const CATEGORY_IDS = [
   'highlight-text-rules',
   'block-element-rules',
   'custom-code-rules',
+  'llm-prompts',
 ];
 
 /**
@@ -1342,9 +1361,7 @@ function normalizeCustomCodeRules(value) {
     });
   }
 
-  const sorted = sanitized.sort((a, b) =>
-    a.pattern.localeCompare(b.pattern),
-  );
+  const sorted = sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
   if (!mutated && sanitized.length !== originalLength) {
     mutated = true;
   }
@@ -1549,13 +1566,130 @@ async function buildCustomCodeRulesPayload(trigger) {
 }
 
 /**
+ * Normalize LLM prompts.
+ * @param {unknown} value
+ * @returns {{ prompts: LLMPromptSettings[], mutated: boolean }}
+ */
+function normalizeLLMPrompts(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, requireSearch?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+
+      const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+      if (!name) {
+        return;
+      }
+
+      const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
+      if (!prompt) {
+        return;
+      }
+
+      const requireSearch =
+        typeof raw.requireSearch === 'boolean' ? raw.requireSearch : false;
+
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {LLMPromptSettings} */
+      const promptSettings = {
+        id,
+        name,
+        prompt,
+        requireSearch,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+
+      sanitized.push(promptSettings);
+    });
+  }
+
+  if (sanitized.length !== originalLength) {
+    mutated = true;
+  }
+
+  sanitized.sort((a, b) => a.name.localeCompare(b.name));
+
+  return { prompts: sanitized, mutated };
+}
+
+/**
+ * Collect LLM prompts from storage.
+ * @returns {Promise<LLMPromptSettings[]>}
+ */
+async function collectLLMPrompts() {
+  const result = await chrome.storage.sync.get(LLM_PROMPTS_KEY);
+  const { prompts: sanitized, mutated } = normalizeLLMPrompts(
+    result?.[LLM_PROMPTS_KEY],
+  );
+  if (mutated) {
+    suppressBackup('llm-prompts');
+    await chrome.storage.sync.set({
+      [LLM_PROMPTS_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply LLM prompts to storage.
+ * @param {LLMPromptSettings[]} prompts
+ * @returns {Promise<void>}
+ */
+async function applyLLMPrompts(prompts) {
+  if (!Array.isArray(prompts)) {
+    return;
+  }
+  const { prompts: sanitized } = normalizeLLMPrompts(prompts);
+  suppressBackup('llm-prompts');
+  await chrome.storage.sync.set({
+    [LLM_PROMPTS_KEY]: sanitized,
+  });
+}
+
+/**
+ * Build LLM prompts payload.
+ * @param {string} trigger
+ * @returns {Promise<LLMPromptsBackupPayload>}
+ */
+async function buildLLMPromptsPayload(trigger) {
+  const prompts = await collectLLMPrompts();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'llm-prompts',
+    prompts,
+    metadata,
+  };
+}
+
+/**
  * Generic backup function with chunking support for all categories.
  * @param {string} categoryId
  * @param {string} trigger
  * @param {boolean} notifyOnError
  * @returns {Promise<boolean>}
  */
-async function performCategoryBackupWithChunking(categoryId, trigger, notifyOnError) {
+async function performCategoryBackupWithChunking(
+  categoryId,
+  trigger,
+  notifyOnError,
+) {
   const config = CATEGORY_CONFIG[categoryId];
   if (!config) {
     return false;
@@ -1580,7 +1714,7 @@ async function performCategoryBackupWithChunking(categoryId, trigger, notifyOnEr
 
     const MAX_CHUNK_SIZE = 10000;
     const chunks = [];
-    
+
     // Split into chunks if needed
     if (serialized.length <= MAX_CHUNK_SIZE) {
       chunks.push(serialized);
@@ -1593,7 +1727,10 @@ async function performCategoryBackupWithChunking(categoryId, trigger, notifyOnEr
     // Delete old non-indexed item for backward compatibility migration
     const oldNonIndexedTitle = config.title.trim().toLowerCase();
     const oldNonIndexedItem = existingItems.get(oldNonIndexedTitle);
-    if (oldNonIndexedItem && Number.isFinite(Number(oldNonIndexedItem?._id ?? oldNonIndexedItem?.id))) {
+    if (
+      oldNonIndexedItem &&
+      Number.isFinite(Number(oldNonIndexedItem?._id ?? oldNonIndexedItem?.id))
+    ) {
       const oldItemId = Number(oldNonIndexedItem?._id ?? oldNonIndexedItem?.id);
       try {
         await raindropRequest('/raindrop/' + oldItemId, tokens, {
@@ -1642,7 +1779,10 @@ async function performCategoryBackupWithChunking(categoryId, trigger, notifyOnEr
             title,
             link,
             note: chunks[i],
-            excerpt: chunks.length === 1 ? '' : 'Chunk ' + chunkNum + ' of ' + chunks.length,
+            excerpt:
+              chunks.length === 1
+                ? ''
+                : 'Chunk ' + chunkNum + ' of ' + chunks.length,
             pleaseParse: {},
             collectionId,
           }),
@@ -1657,7 +1797,10 @@ async function performCategoryBackupWithChunking(categoryId, trigger, notifyOnEr
             title,
             link,
             note: chunks[i],
-            excerpt: chunks.length === 1 ? '' : 'Chunk ' + chunkNum + ' of ' + chunks.length,
+            excerpt:
+              chunks.length === 1
+                ? ''
+                : 'Chunk ' + chunkNum + ' of ' + chunks.length,
             collectionId,
             pleaseParse: {},
           }),
@@ -1712,7 +1855,12 @@ async function performCategoryBackupWithChunking(categoryId, trigger, notifyOnEr
  * @param {Map<string, any>} existingItems
  * @returns {Promise<{ payload: any | null, lastModified: number }>}
  */
-async function restoreCategoryFromChunks(categoryId, tokens, collectionId, existingItems) {
+async function restoreCategoryFromChunks(
+  categoryId,
+  tokens,
+  collectionId,
+  existingItems,
+) {
   const config = CATEGORY_CONFIG[categoryId];
   if (!config) {
     return { payload: null, lastModified: 0 };
@@ -1722,12 +1870,12 @@ async function restoreCategoryFromChunks(categoryId, tokens, collectionId, exist
     // Collect all indexed chunks (always use indexed format: category-1, category-2, etc.)
     const chunks = [];
     let maxLastModified = 0;
-    
+
     for (let i = 1; i <= 100; i++) {
       const title = config.title + '-' + i;
       const normalizedTitle = title.trim().toLowerCase();
       const item = existingItems.get(normalizedTitle);
-      
+
       if (!item) {
         // No more chunks
         break;
@@ -1756,19 +1904,23 @@ async function restoreCategoryFromChunks(categoryId, tokens, collectionId, exist
 
     // Combine chunks and parse
     const combined = chunks.join('');
-    
+
     // Create a temporary item object with the combined note
     const combinedItem = {
       note: combined,
-      lastUpdate: maxLastModified > 0 
-        ? new Date(maxLastModified).toISOString() 
-        : new Date().toISOString(),
+      lastUpdate:
+        maxLastModified > 0
+          ? new Date(maxLastModified).toISOString()
+          : new Date().toISOString(),
     };
 
     // Use the category's parseItem function to parse the combined data
     return config.parseItem(combinedItem);
   } catch (error) {
-    console.error('[options-backup] Failed to restore ' + categoryId + ' chunks:', error);
+    console.error(
+      '[options-backup] Failed to restore ' + categoryId + ' chunks:',
+      error,
+    );
     return { payload: null, lastModified: 0 };
   }
 }
@@ -2219,6 +2371,66 @@ function parseCustomCodeRulesItem(item) {
 }
 
 /**
+ * Attempt to parse LLM prompts payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: LLMPromptsBackupPayload | null, lastModified: number }}
+ */
+function parseLLMPromptsItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedPrompts = normalizeLLMPrompts(parsed?.prompts).prompts;
+
+    const payload = /** @type {LLMPromptsBackupPayload} */ ({
+      kind: 'llm-prompts',
+      prompts: normalizedPrompts,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Configuration for each backup category.
  */
 const CATEGORY_CONFIG = {
@@ -2271,6 +2483,13 @@ const CATEGORY_CONFIG = {
     parseItem: parseCustomCodeRulesItem,
     applyPayload: applyCustomCodeRules,
   },
+  'llm-prompts': {
+    title: 'llm-prompts',
+    link: 'https://nenya.local/options/llm-prompts',
+    buildPayload: buildLLMPromptsPayload,
+    parseItem: parseLLMPromptsItem,
+    applyPayload: applyLLMPrompts,
+  },
 };
 
 /**
@@ -2292,8 +2511,10 @@ async function performCategoryBackup(categoryId, trigger, notifyOnError) {
  * @returns {void}
  */
 function queueCategoryBackup(categoryId, trigger) {
-  console.log(`[options-backup] Queueing backup for ${categoryId} with trigger: ${trigger}`);
-  
+  console.log(
+    `[options-backup] Queueing backup for ${categoryId} with trigger: ${trigger}`,
+  );
+
   if (isBackupSuppressed(categoryId)) {
     console.log(`[options-backup] Backup suppressed for ${categoryId}`);
     return;
@@ -2312,7 +2533,9 @@ function queueCategoryBackup(categoryId, trigger) {
     while (queuedBackupReasons.has(categoryId)) {
       const currentTrigger = queuedBackupReasons.get(categoryId) ?? trigger;
       queuedBackupReasons.delete(categoryId);
-      console.log(`[options-backup] Executing backup for ${categoryId} with trigger: ${currentTrigger}`);
+      console.log(
+        `[options-backup] Executing backup for ${categoryId} with trigger: ${currentTrigger}`,
+      );
       await performCategoryBackup(categoryId, currentTrigger, notifyOnError);
     }
     runningBackups.delete(categoryId);
@@ -2333,7 +2556,9 @@ async function performFullBackup(trigger) {
   if (!tokens) {
     return {
       ok: false,
-      errors: ['No Raindrop connection found. Connect your account to sync backups.'],
+      errors: [
+        'No Raindrop connection found. Connect your account to sync backups.',
+      ],
     };
   }
 
@@ -2349,7 +2574,7 @@ async function performFullBackup(trigger) {
     // Step 3: Prepare all category backup data
     /** @type {Array<{title: string, link: string, note: string, excerpt: string, collectionId: number, categoryId: string}>} */
     const allItemsToCreate = [];
-    
+
     for (const categoryId of CATEGORY_IDS) {
       const config = CATEGORY_CONFIG[categoryId];
       if (!config) {
@@ -2362,7 +2587,7 @@ async function performFullBackup(trigger) {
 
         const MAX_CHUNK_SIZE = 10000;
         const chunks = [];
-        
+
         // Split into chunks if needed
         if (serialized.length <= MAX_CHUNK_SIZE) {
           chunks.push(serialized);
@@ -2382,13 +2607,19 @@ async function performFullBackup(trigger) {
             title,
             link,
             note: chunks[i],
-            excerpt: chunks.length === 1 ? '' : 'Chunk ' + chunkNum + ' of ' + chunks.length,
+            excerpt:
+              chunks.length === 1
+                ? ''
+                : 'Chunk ' + chunkNum + ' of ' + chunks.length,
             collectionId,
             categoryId,
           });
         }
       } catch (error) {
-        console.error('[options-backup] Failed to prepare backup for ' + categoryId + ':', error);
+        console.error(
+          '[options-backup] Failed to prepare backup for ' + categoryId + ':',
+          error,
+        );
         errors.push('Failed to prepare backup for ' + categoryId);
       }
     }
@@ -2414,7 +2645,10 @@ async function performFullBackup(trigger) {
           }),
         });
       } catch (error) {
-        console.warn('[options-backup] Failed to delete existing items:', error);
+        console.warn(
+          '[options-backup] Failed to delete existing items:',
+          error,
+        );
         errors.push('Failed to delete existing backup items');
       }
     }
@@ -2422,7 +2656,7 @@ async function performFullBackup(trigger) {
     // Step 5: Create ALL new items in batches of 100 (Raindrop limit)
     const batchSize = 100;
     const createdItemsByCategory = new Map();
-    
+
     for (let i = 0; i < allItemsToCreate.length; i += batchSize) {
       const batch = allItemsToCreate.slice(i, i + batchSize);
       try {
@@ -2432,7 +2666,7 @@ async function performFullBackup(trigger) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            items: batch.map(item => ({
+            items: batch.map((item) => ({
               title: item.title,
               link: item.link,
               note: item.note,
@@ -2446,23 +2680,31 @@ async function performFullBackup(trigger) {
         // Track created items by category
         const createdItems = response?.items || [];
         if (createdItems.length === 0) {
-          console.error('[options-backup] Bulk create returned no items. Response:', response);
+          console.error(
+            '[options-backup] Bulk create returned no items. Response:',
+            response,
+          );
           throw new Error('Bulk create failed - no items returned');
         }
-        
+
         for (let j = 0; j < batch.length && j < createdItems.length; j++) {
           const item = batch[j];
           const createdItem = createdItems[j];
-          
+
           if (!createdItemsByCategory.has(item.categoryId)) {
             createdItemsByCategory.set(item.categoryId, []);
           }
           createdItemsByCategory.get(item.categoryId).push(createdItem);
         }
       } catch (error) {
-        console.error('[options-backup] Failed to create batch of items:', error);
-        errors.push('Failed to create backup items: ' + String(error?.message || error));
-        
+        console.error(
+          '[options-backup] Failed to create batch of items:',
+          error,
+        );
+        errors.push(
+          'Failed to create backup items: ' + String(error?.message || error),
+        );
+
         // Mark affected categories as failed
         for (const item of batch) {
           await updateState((state) => {
@@ -2470,7 +2712,8 @@ async function performFullBackup(trigger) {
             if (!categoryState) {
               return;
             }
-            categoryState.lastBackupError = 'Failed to save backup: ' + String(error?.message || error);
+            categoryState.lastBackupError =
+              'Failed to save backup: ' + String(error?.message || error);
             categoryState.lastBackupErrorAt = Date.now();
           });
         }
@@ -2480,7 +2723,7 @@ async function performFullBackup(trigger) {
     // Step 6: Update all category states with success
     for (const categoryId of CATEGORY_IDS) {
       const createdItems = createdItemsByCategory.get(categoryId) || [];
-      
+
       if (createdItems.length > 0) {
         // Find the latest lastUpdate timestamp from created items
         let maxLastModified = 0;
@@ -2575,7 +2818,7 @@ async function performRestore(trigger, notifyOnError) {
 
     for (const categoryId of CATEGORY_IDS) {
       const config = CATEGORY_CONFIG[categoryId];
-      
+
       // Use generic chunked restore for all categories
       const { payload, lastModified } = await restoreCategoryFromChunks(
         categoryId,
@@ -2583,11 +2826,12 @@ async function performRestore(trigger, notifyOnError) {
         collectionId,
         itemsMap,
       );
-      
+
       if (!payload) {
         // Only add error if the category exists but data is invalid
         const titleKey = config.title.trim().toLowerCase();
-        const hasAnyData = itemsMap.get(titleKey) || itemsMap.get(titleKey + '-1');
+        const hasAnyData =
+          itemsMap.get(titleKey) || itemsMap.get(titleKey + '-1');
         if (hasAnyData) {
           errors.push('Invalid backup data for ' + categoryId + '.');
         }
@@ -2625,6 +2869,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.rules;
         } else if (payload.kind === 'custom-code-rules') {
           payloadToApply = payload;
+        } else if (payload.kind === 'llm-prompts') {
+          payloadToApply = payload.prompts;
         } else {
           payloadToApply = payload.preferences;
         }
@@ -2710,36 +2956,55 @@ async function performRestore(trigger, notifyOnError) {
  * @returns {void}
  */
 function handleStorageChanges(changes, areaName) {
-  console.log('[options-backup] Storage change detected:', { changes, areaName });
-  
+  console.log('[options-backup] Storage change detected:', {
+    changes,
+    areaName,
+  });
+
   // Handle sync storage changes
   if (areaName === 'sync') {
     if (ROOT_FOLDER_SETTINGS_KEY in changes) {
-      console.log('[options-backup] Storage change detected for auth-provider-settings');
+      console.log(
+        '[options-backup] Storage change detected for auth-provider-settings',
+      );
       queueCategoryBackup('auth-provider-settings', 'storage');
     }
     if (NOTIFICATION_PREFERENCES_KEY in changes) {
-      console.log('[options-backup] Storage change detected for notification-preferences');
+      console.log(
+        '[options-backup] Storage change detected for notification-preferences',
+      );
       queueCategoryBackup('notification-preferences', 'storage');
     }
     if (AUTO_RELOAD_RULES_KEY in changes) {
-      console.log('[options-backup] Storage change detected for auto-reload-rules');
+      console.log(
+        '[options-backup] Storage change detected for auto-reload-rules',
+      );
       queueCategoryBackup('auto-reload-rules', 'storage');
     }
     if (
       BRIGHT_MODE_WHITELIST_KEY in changes ||
       BRIGHT_MODE_BLACKLIST_KEY in changes
     ) {
-      console.log('[options-backup] Storage change detected for bright-mode-settings');
+      console.log(
+        '[options-backup] Storage change detected for bright-mode-settings',
+      );
       queueCategoryBackup('bright-mode-settings', 'storage');
     }
     if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
-      console.log('[options-backup] Storage change detected for highlight-text-rules');
+      console.log(
+        '[options-backup] Storage change detected for highlight-text-rules',
+      );
       queueCategoryBackup('highlight-text-rules', 'storage');
     }
     if (BLOCK_ELEMENT_RULES_KEY in changes) {
-      console.log('[options-backup] Storage change detected for block-element-rules');
+      console.log(
+        '[options-backup] Storage change detected for block-element-rules',
+      );
       queueCategoryBackup('block-element-rules', 'storage');
+    }
+    if (LLM_PROMPTS_KEY in changes) {
+      console.log('[options-backup] Storage change detected for llm-prompts');
+      queueCategoryBackup('llm-prompts', 'storage');
     }
   }
 
@@ -2892,6 +3157,7 @@ export async function resetOptionsToDefaults() {
   suppressBackup('highlight-text-rules');
   suppressBackup('block-element-rules');
   suppressBackup('custom-code-rules');
+  suppressBackup('llm-prompts');
 
   const defaultPreferences = JSON.parse(
     JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES),
@@ -2911,6 +3177,7 @@ export async function resetOptionsToDefaults() {
       [BRIGHT_MODE_BLACKLIST_KEY]: [],
       [HIGHLIGHT_TEXT_RULES_KEY]: [],
       [BLOCK_ELEMENT_RULES_KEY]: [],
+      [LLM_PROMPTS_KEY]: [],
     }),
     chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: [],
