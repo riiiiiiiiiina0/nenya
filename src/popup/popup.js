@@ -10,6 +10,9 @@ import {
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
 
+const getMarkdownButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('getMarkdownButton')
+);
 const pullButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('pullButton')
 );
@@ -59,6 +62,14 @@ if (saveProjectButton && projectsContainer && statusMessage) {
 
 if (!statusMessage) {
   console.error('[popup] Status element not found.');
+}
+
+if (getMarkdownButton) {
+  getMarkdownButton.addEventListener('click', () => {
+    void handleGetMarkdown();
+  });
+} else {
+  console.error('[popup] Get markdown button not found.');
 }
 
 if (openOptionsButton) {
@@ -524,8 +535,24 @@ async function initializePopup() {
   }
 }
 
-// Initialize the popup when the script loads
-void initializePopup();
+// Check if we should navigate to chat page (triggered by keyboard shortcut)
+void (async () => {
+  try {
+    const result = await chrome.storage.local.get('openChatPage');
+    if (result.openChatPage) {
+      // Clear the flag
+      await chrome.storage.local.remove('openChatPage');
+      // Navigate to chat page
+      window.location.href = 'chat.html';
+      return;
+    }
+  } catch (error) {
+    console.error('[popup] Failed to check chat page flag:', error);
+  }
+
+  // Initialize the popup normally
+  void initializePopup();
+})();
 
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_STATUS_REFRESH_INTERVAL = 1000;
@@ -607,6 +634,16 @@ window.addEventListener('unload', () => {
     autoReloadStatusTimer = null;
   }
 });
+
+/**
+ * Handle getting page content as markdown.
+ * Opens the chat with LLM page within the same popup.
+ * @returns {void}
+ */
+function handleGetMarkdown() {
+  // Navigate to the chat page within the same popup window
+  window.location.href = 'chat.html';
+}
 
 // Listen for storage changes to update popup when user logs in/out
 chrome.storage.onChanged.addListener((changes, namespace) => {

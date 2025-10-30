@@ -8,6 +8,7 @@ import './brightMode.js';
 import './highlightText.js';
 import './blockElements.js';
 import './customCode.js';
+import './llmPrompts.js';
 import './debug.js';
 
 /**

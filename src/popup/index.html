@@ -9,6 +9,13 @@
   <link rel="stylesheet" href="../libs/daisyui@5.css">
   <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
   <script src="../libs/tailwindcss@4.js"></script>
+  <style>
+    body {
+      min-height: 600px;
+      width: 480px;
+      max-width: 480px;
+    }
+  </style>
 </head>
 
 <body class="bg-base-200">
@@ -18,6 +25,11 @@
       <span id="autoReloadStatus" class="text-sm text-base-content/70" hidden></span>
     </div>
     <div class="flex-none gap-2">
+      <div class="tooltip tooltip-left" data-tip="Chat with llm">
+        <button id="getMarkdownButton" class="btn btn-square btn-sm btn-ghost" type="button">
+          📝
+        </button>
+      </div>
       <div class="tooltip tooltip-left" data-tip="Pull from raindrop">
         <button id="pullButton" class="btn btn-square btn-sm btn-ghost" type="button">
           📥
@@ -43,7 +55,7 @@
       </button>
     </div>
   </div>
-  <main class="min-w-[480px] p-5 space-y-4">
+  <main class="p-5 space-y-4">
 
     <!-- saved projects -->
     <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">

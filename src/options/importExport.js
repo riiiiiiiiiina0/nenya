@@ -11,6 +11,7 @@ import {
   isValidUrlPattern,
 } from './brightMode.js';
 import { loadRules as loadHighlightTextRules } from './highlightText.js';
+import { loadLLMPrompts } from './llmPrompts.js';
 
 /**
  * @typedef {Object} RootFolderSettings
@@ -111,6 +112,16 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  */
 
 /**
+ * @typedef {Object} LLMPromptSettings
+ * @property {string} id
+ * @property {string} name
+ * @property {string} prompt
+ * @property {boolean} requireSearch
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
@@ -120,6 +131,7 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  * @property {HighlightTextRuleSettings[]} highlightTextRules
  * @property {BlockElementRuleSettings[]} blockElementRules
  * @property {CustomCodeRuleSettings[]} customCodeRules
+ * @property {LLMPromptSettings[]} llmPrompts
  */
 
 /**
@@ -129,7 +141,7 @@ import { loadRules as loadHighlightTextRules } from './highlightText.js';
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 7;
+const EXPORT_VERSION = 8;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
@@ -138,6 +150,7 @@ const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
+const LLM_PROMPTS_KEY = 'llmPrompts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
@@ -608,6 +621,66 @@ function normalizeCustomCodeRules(value) {
 }
 
 /**
+ * Normalize LLM prompts from storage or input.
+ * @param {unknown} value
+ * @returns {LLMPromptSettings[]}
+ */
+function normalizeLLMPrompts(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {LLMPromptSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw =
+      /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, requireSearch?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        entry
+      );
+    
+    const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+    if (!name) {
+      return;
+    }
+    
+    const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
+    if (!prompt) {
+      return;
+    }
+    
+    const requireSearch = typeof raw.requireSearch === 'boolean' ? raw.requireSearch : false;
+    
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {LLMPromptSettings} */
+    const normalized = {
+      id,
+      name,
+      prompt,
+      requireSearch,
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -676,7 +749,7 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[] }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[] }>}
  */
 async function readCurrentOptions() {
   const [
@@ -688,6 +761,7 @@ async function readCurrentOptions() {
     highlightTextRules,
     blockElementResp,
     customCodeResp,
+    llmPromptsResp,
   ] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
@@ -697,6 +771,7 @@ async function readCurrentOptions() {
     loadHighlightTextRules(),
     chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
+    loadLLMPrompts(),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -752,6 +827,8 @@ async function readCurrentOptions() {
   const customCodeRules = normalizeCustomCodeRules(
     customCodeResp?.[CUSTOM_CODE_RULES_KEY],
   );
+  
+  const llmPrompts = normalizeLLMPrompts(llmPromptsResp);
 
   return {
     rootFolder,
@@ -761,6 +838,7 @@ async function readCurrentOptions() {
     highlightTextRules,
     blockElementRules,
     customCodeRules,
+    llmPrompts,
   };
 }
 
@@ -799,6 +877,7 @@ async function handleExportClick() {
       highlightTextRules,
       blockElementRules,
       customCodeRules,
+      llmPrompts,
     } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
@@ -812,6 +891,7 @@ async function handleExportClick() {
         highlightTextRules,
         blockElementRules,
         customCodeRules,
+        llmPrompts,
       },
     };
     const now = new Date();
@@ -839,6 +919,7 @@ async function handleExportClick() {
  * @param {HighlightTextRuleSettings[]} highlightTextRules
  * @param {BlockElementRuleSettings[]} blockElementRules
  * @param {CustomCodeRuleSettings[]} customCodeRules
+ * @param {LLMPromptSettings[]} llmPrompts
  * @returns {Promise<void>}
  */
 async function applyImportedOptions(
@@ -849,6 +930,7 @@ async function applyImportedOptions(
   highlightTextRules,
   blockElementRules,
   customCodeRules,
+  llmPrompts,
 ) {
   let parentFolderId = '';
   const desiredPath =
@@ -903,6 +985,8 @@ async function applyImportedOptions(
   const sanitizedCustomCodeRules = normalizeCustomCodeRules(
     customCodeRules || [],
   );
+  
+  const sanitizedLLMPrompts = normalizeLLMPrompts(llmPrompts || []);
 
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
@@ -938,6 +1022,7 @@ async function applyImportedOptions(
       [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
       [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
       [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
+      [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
     }),
     chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
@@ -987,6 +1072,9 @@ async function handleFileChosen() {
     const customCodeRules = /** @type {CustomCodeRuleSettings[]} */ (
       data.customCodeRules || []
     );
+    const llmPrompts = /** @type {LLMPromptSettings[]} */ (
+      data.llmPrompts || []
+    );
 
     // Handle bright mode settings - support both old and new format
     let brightModeSettings = data.brightModeSettings;
@@ -1010,6 +1098,7 @@ async function handleFileChosen() {
       highlightTextRules,
       blockElementRules,
       customCodeRules,
+      llmPrompts,
     );
     showToast('Options imported successfully.', 'success');
   } catch (error) {
