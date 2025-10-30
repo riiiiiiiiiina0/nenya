@@ -518,6 +518,9 @@
       marker.style.backgroundColor =
         window.getComputedStyle(element).backgroundColor;
 
+      // Store a reference to the highlighted element for click handling
+      marker._highlightElement = element;
+
       fragment.appendChild(marker);
     }
 
@@ -554,6 +557,39 @@
   let minimapViewport;
   /** @type {HTMLElement} */
   let minimapHighlights;
+
+  /**
+   * Handles click events on the minimap.
+   * @param {MouseEvent} event
+   */
+  function handleMinimapClick(event) {
+    const target = /** @type {HTMLElement} */ (event.target);
+
+    if (target.classList.contains('nenya-minimap-marker')) {
+      // It's a marker, scroll to the corresponding highlight
+      if (target._highlightElement) {
+        target._highlightElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    } else if (event.currentTarget === minimapContainer) {
+      // It's the minimap container itself, scroll proportionally
+      const documentHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+      );
+      const clickY = event.clientY;
+      const containerHeight = minimapContainer.clientHeight;
+      const proportionalY = clickY / containerHeight;
+      const scrollToY = proportionalY * documentHeight;
+
+      window.scrollTo({
+        top: scrollToY - window.innerHeight / 2, // Center the view
+        behavior: 'smooth',
+      });
+    }
+  }
 
   /**
    * Injects the CSS styles for the minimap into the document head.
@@ -702,6 +738,11 @@
       debouncedApplyHighlighting();
       updateMinimapViewport();
     });
+
+    // Handle clicks on the minimap
+    if (minimapContainer) {
+      minimapContainer.addEventListener('click', handleMinimapClick);
+    }
   }
 
   // Initialize when DOM is ready
