@@ -420,6 +420,9 @@
         }
       }
     }
+
+    // After applying highlights, update the minimap
+    updateMinimap();
   }
 
   /**
@@ -467,12 +470,211 @@
   }
 
   /**
+   * Update the minimap with highlight markers.
+   * @returns {void}
+   */
+  function updateMinimap() {
+    if (!minimapContainer || !minimapHighlights) {
+      return;
+    }
+
+    // Clear existing markers
+    minimapHighlights.innerHTML = '';
+
+    const highlightedElements = document.querySelectorAll(
+      '[class^="' + HIGHLIGHT_CLASS_PREFIX + '"]',
+    );
+    const documentHeight = Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.offsetHeight,
+      document.body.clientHeight,
+      document.documentElement.clientHeight,
+    );
+
+    if (highlightedElements.length === 0) {
+      minimapContainer.style.opacity = '0';
+      return;
+    }
+
+    minimapContainer.style.opacity = '1';
+
+    // Create a fragment to reduce reflows
+    const fragment = document.createDocumentFragment();
+
+    for (const element of highlightedElements) {
+      const rect = element.getBoundingClientRect();
+      const elementTop = rect.top + window.scrollY;
+      const proportionalTop = (elementTop / documentHeight) * 100;
+
+      if (proportionalTop < 0 || proportionalTop > 100) {
+        continue;
+      }
+
+      const marker = document.createElement('div');
+      marker.className = 'nenya-minimap-marker';
+      marker.style.top = proportionalTop + '%';
+      marker.style.backgroundColor =
+        window.getComputedStyle(element).backgroundColor;
+
+      // Store a reference to the highlighted element for click handling
+      marker._highlightElement = element;
+
+      fragment.appendChild(marker);
+    }
+
+    minimapHighlights.appendChild(fragment);
+  }
+
+  /**
+   * Update the minimap viewport indicator.
+   * @returns {void}
+   */
+  function updateMinimapViewport() {
+    if (!minimapViewport) {
+      return;
+    }
+
+    const documentHeight = Math.max(
+      document.body.scrollHeight,
+      document.documentElement.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.offsetHeight,
+      document.body.clientHeight,
+      document.documentElement.clientHeight,
+    );
+    const viewportHeight = (window.innerHeight / documentHeight) * 100;
+    const viewportTop = (window.scrollY / documentHeight) * 100;
+
+    minimapViewport.style.height = viewportHeight + '%';
+    minimapViewport.style.top = viewportTop + '%';
+  }
+
+  /** @type {HTMLElement} */
+  let minimapContainer;
+  /** @type {HTMLElement} */
+  let minimapViewport;
+  /** @type {HTMLElement} */
+  let minimapHighlights;
+
+  /**
+   * Handles click events on the minimap.
+   * @param {MouseEvent} event
+   */
+  function handleMinimapClick(event) {
+    const target = /** @type {HTMLElement} */ (event.target);
+
+    if (target.classList.contains('nenya-minimap-marker')) {
+      // It's a marker, scroll to the corresponding highlight
+      if (target._highlightElement) {
+        target._highlightElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    } else if (event.currentTarget === minimapContainer) {
+      // It's the minimap container itself, scroll proportionally
+      const documentHeight = Math.max(
+        document.body.scrollHeight,
+        document.documentElement.scrollHeight,
+      );
+      const clickY = event.clientY;
+      const containerHeight = minimapContainer.clientHeight;
+      const proportionalY = clickY / containerHeight;
+      const scrollToY = proportionalY * documentHeight;
+
+      window.scrollTo({
+        top: scrollToY - window.innerHeight / 2, // Center the view
+        behavior: 'smooth',
+      });
+    }
+  }
+
+  /**
+   * Injects the CSS styles for the minimap into the document head.
+   * @returns {void}
+   */
+  function injectMinimapStyles() {
+    const styleId = 'nenya-minimap-styles';
+    if (document.getElementById(styleId)) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      #nenya-minimap-container {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 14px;
+        height: 100%;
+        background-color: rgba(200, 200, 200, 0.3);
+        z-index: 999998;
+        border-left: 1px solid #ccc;
+        box-sizing: border-box;
+        transition: opacity 0.2s;
+        opacity: 0;
+      }
+      #nenya-minimap-viewport {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        background-color: rgba(0, 0, 0, 0.2);
+        z-index: 999999;
+      }
+      #nenya-minimap-highlights {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+      #nenya-minimap-highlights .nenya-minimap-marker {
+        position: absolute;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        z-index: 999998;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  /**
+   * Create and inject the minimap UI into the page.
+   * @returns {void}
+   */
+  function createMinimap() {
+    if (document.getElementById('nenya-minimap-container')) {
+      return;
+    }
+
+    minimapContainer = document.createElement('div');
+    minimapContainer.id = 'nenya-minimap-container';
+
+    minimapViewport = document.createElement('div');
+    minimapViewport.id = 'nenya-minimap-viewport';
+
+    minimapHighlights = document.createElement('div');
+    minimapHighlights.id = 'nenya-minimap-highlights';
+
+    minimapContainer.appendChild(minimapViewport);
+    minimapContainer.appendChild(minimapHighlights);
+    document.body.appendChild(minimapContainer);
+  }
+
+  /**
    * Initialize the highlight text functionality.
    * @returns {Promise<void>}
    */
   async function initHighlightText() {
     await loadRules();
+    injectMinimapStyles();
+    createMinimap();
     applyHighlighting();
+    updateMinimapViewport();
 
     // Listen for storage changes
     chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -528,6 +730,19 @@
     window.addEventListener('popstate', () => {
       debouncedApplyHighlighting();
     });
+
+    // Update minimap on scroll and resize
+    const debouncedUpdateMinimapViewport = debounce(updateMinimapViewport, 50);
+    window.addEventListener('scroll', debouncedUpdateMinimapViewport);
+    window.addEventListener('resize', () => {
+      debouncedApplyHighlighting();
+      updateMinimapViewport();
+    });
+
+    // Handle clicks on the minimap
+    if (minimapContainer) {
+      minimapContainer.addEventListener('click', handleMinimapClick);
+    }
   }
 
   // Initialize when DOM is ready
