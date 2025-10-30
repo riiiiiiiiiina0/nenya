@@ -11,7 +11,7 @@
   <script src="../libs/tailwindcss@4.js"></script>
   <style>
     body {
-      min-height: 600px;
+      min-height: 200px;
       width: 480px;
       max-width: 480px;
     }
@@ -55,21 +55,21 @@
       </button>
     </div>
   </div>
-  <main class="p-5 space-y-4">
+  <main class="space-y-4">
 
     <!-- saved projects -->
-    <article class="card w-full bg-base-100 shadow-xl" aria-labelledby="saved-projects-heading">
-      <div class="card-body gap-2">
+    <article class="w-full p-4 bg-base-100" aria-labelledby="saved-projects-heading">
+      <div class="gap-2">
         <header class="space-y-1">
           <div class="flex flex-row items-center gap-2">
             <h1 class="text-xl font-semibold text-base-content">📚 Projects</h1>
             <div class="flex-1"></div>
-            <div class="tooltip tooltip-bottom" data-tip="Save tabs as project">
+            <div class="tooltip tooltip-left" data-tip="Save tabs as project">
               <button id="saveProjectButton" class="btn btn-sm btn-square btn-ghost" type="button">
                 💾
               </button>
             </div>
-            <div class="tooltip tooltip-bottom" data-tip="Rename tab">
+            <div class="tooltip tooltip-left" data-tip="Rename tab">
               <button id="renameTabButton" class="btn btn-sm btn-square btn-ghost" type="button">
                 ✏️
               </button>
