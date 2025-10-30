@@ -10,6 +10,9 @@ import {
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
 
+const getMarkdownButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('getMarkdownButton')
+);
 const pullButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('pullButton')
 );
@@ -59,6 +62,14 @@ if (saveProjectButton && projectsContainer && statusMessage) {
 
 if (!statusMessage) {
   console.error('[popup] Status element not found.');
+}
+
+if (getMarkdownButton) {
+  getMarkdownButton.addEventListener('click', () => {
+    void handleGetMarkdown();
+  });
+} else {
+  console.error('[popup] Get markdown button not found.');
 }
 
 if (openOptionsButton) {
@@ -607,6 +618,56 @@ window.addEventListener('unload', () => {
     autoReloadStatusTimer = null;
   }
 });
+
+/**
+ * Handle getting page content as markdown.
+ * @returns {Promise<void>}
+ */
+async function handleGetMarkdown() {
+  try {
+    if (statusMessage) {
+      concludeStatus('Collecting page content...', 'info', 2000, statusMessage);
+    }
+
+    // Send message to background to collect page content
+    const response = await chrome.runtime.sendMessage({
+      type: 'collect-page-content-as-markdown',
+      tabIds: [], // Empty array means get highlighted or active tab
+    });
+
+    if (response?.success) {
+      if (statusMessage) {
+        concludeStatus(
+          `Successfully collected content from ${response.contents?.length || 0} page(s). Check console for details.`,
+          'success',
+          3000,
+          statusMessage,
+        );
+      }
+      console.log('[popup] Content collection response:', response);
+    } else {
+      if (statusMessage) {
+        concludeStatus(
+          'Failed to collect page content.',
+          'error',
+          3000,
+          statusMessage,
+        );
+      }
+      console.error('[popup] Content collection failed:', response?.error);
+    }
+  } catch (error) {
+    console.error('[popup] Error in handleGetMarkdown:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to collect page content.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
 
 // Listen for storage changes to update popup when user logs in/out
 chrome.storage.onChanged.addListener((changes, namespace) => {

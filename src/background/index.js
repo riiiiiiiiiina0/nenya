@@ -52,6 +52,7 @@ const CONTEXT_MENU_UNSPLIT_TABS_ID = 'nenya-unsplit-tabs';
 const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
 const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
+const COLLECT_PAGE_CONTENT_MESSAGE = 'collect-page-content-as-markdown';
 
 // ============================================================================
 // KEYBOARD SHORTCUTS (COMMANDS)
@@ -639,6 +640,160 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   })();
 });
 
+// ============================================================================
+// PAGE CONTENT COLLECTION
+// ============================================================================
+
+/**
+ * Check if URL is a YouTube video page.
+ * @param {string} url
+ * @returns {boolean}
+ */
+function isYouTubeVideoPage(url) {
+  return /^https?:\/\/(?:www\.)?youtube\.com\/watch/.test(url);
+}
+
+/**
+ * Inject content scripts to extract page content as markdown.
+ * @param {number} tabId
+ * @returns {Promise<boolean>}
+ */
+async function injectContentScripts(tabId) {
+  try {
+    // Get the tab to check its URL
+    const tab = await chrome.tabs.get(tabId);
+    const tabUrl = tab.url || '';
+
+    let contentScriptFile = 'src/contentScript/getContent-general.js';
+
+    // Determine which content extraction script to use
+    if (isYouTubeVideoPage(tabUrl)) {
+      console.log('[background] Detected YouTube video page, using YouTube extractor');
+      contentScriptFile = 'src/contentScript/getContent-youtube.js';
+    }
+
+    // For YouTube, we don't need Readability and Turndown
+    if (isYouTubeVideoPage(tabUrl)) {
+      // Just inject the YouTube content script
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: [contentScriptFile],
+      });
+    } else {
+      // For general pages, inject libraries first
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: [
+          'src/libs/readability.min.js',
+          'src/libs/turndown.7.2.0.js',
+          'src/libs/turndown-plugin-gfm.1.0.2.js',
+        ],
+      });
+
+      // Then inject content extraction script
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: [contentScriptFile],
+      });
+    }
+
+    // Finally inject collector script (for all page types)
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: ['src/contentScript/pageContentCollector.js'],
+    });
+
+    return true;
+  } catch (error) {
+    console.error('[background] Failed to inject content scripts:', error);
+    return false;
+  }
+}
+
+/**
+ * Collect page content from a single tab.
+ * @param {number} tabId
+ * @param {number} timeout
+ * @returns {Promise<{tabId: number, title: string, url: string, content: string} | null>}
+ */
+async function collectPageContent(tabId, timeout = 10000) {
+  return new Promise((resolve) => {
+    if (typeof tabId !== 'number') {
+      resolve(null);
+      return;
+    }
+
+    // Set up message listener for content
+    const onMessage = (message, sender) => {
+      if (sender?.tab?.id !== tabId) return;
+      if (!message || message.type !== 'page-content-collected') return;
+
+      clearTimeout(timeoutId);
+      chrome.runtime.onMessage.removeListener(onMessage);
+
+      resolve({
+        tabId,
+        title: message.title || '',
+        url: message.url || '',
+        content: message.content || '',
+      });
+    };
+
+    chrome.runtime.onMessage.addListener(onMessage);
+
+    // Fallback timeout
+    const timeoutId = setTimeout(() => {
+      chrome.runtime.onMessage.removeListener(onMessage);
+      resolve(null);
+    }, timeout);
+
+    // Start extraction chain
+    void injectContentScripts(tabId);
+  });
+}
+
+/**
+ * Collect page content from multiple tabs sequentially.
+ * @param {number[]} tabIds
+ * @returns {Promise<Array<{tabId: number, title: string, url: string, content: string}>>}
+ */
+async function collectPageContentFromTabs(tabIds) {
+  const results = [];
+
+  for (const tabId of tabIds) {
+    if (typeof tabId !== 'number') continue;
+
+    try {
+      const content = await collectPageContent(tabId);
+      if (content) {
+        results.push(content);
+      } else {
+        // Add empty result if collection failed
+        results.push({
+          tabId,
+          title: '',
+          url: '',
+          content: '(failed to collect content)',
+        });
+      }
+    } catch (error) {
+      console.error(`[background] Error collecting content from tab ${tabId}:`, error);
+      results.push({
+        tabId,
+        title: '',
+        url: '',
+        content: `(error: ${error.message})`,
+      });
+    }
+  }
+
+  return results;
+}
+
+// ============================================================================
+// MESSAGE LISTENER
+// ============================================================================
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message.type !== 'string') {
     return false;
@@ -824,6 +979,56 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         void handleUnsplitTabsContextMenu(tabs[0]);
       }
     });
+    return true;
+  }
+
+  if (message.type === COLLECT_PAGE_CONTENT_MESSAGE) {
+    void (async () => {
+      try {
+        // Get tabs to collect content from
+        let tabIds = Array.isArray(message.tabIds) ? message.tabIds : [];
+        if (tabIds.length === 0) {
+          // Get highlighted tabs or active tab
+          const highlightedTabs = await chrome.tabs.query({
+            currentWindow: true,
+            highlighted: true,
+          });
+          if (highlightedTabs && highlightedTabs.length > 0) {
+            tabIds = highlightedTabs.map((t) => t.id).filter((id) => typeof id === 'number');
+          } else {
+            const activeTabs = await chrome.tabs.query({
+              currentWindow: true,
+              active: true,
+            });
+            if (activeTabs && activeTabs[0] && typeof activeTabs[0].id === 'number') {
+              tabIds = [activeTabs[0].id];
+            }
+          }
+        }
+
+        // Collect content from each tab
+        const contents = await collectPageContentFromTabs(tabIds);
+
+        // Log the results
+        console.log('========================================');
+        console.log('📝 Page Content Collection Results');
+        console.log('========================================');
+        contents.forEach((content, index) => {
+          console.log(`\n--- Page ${index + 1} of ${contents.length} ---`);
+          console.log('Title:', content.title || '(no title)');
+          console.log('URL:', content.url || '(no url)');
+          console.log('\nMarkdown Content:');
+          console.log(content.content || '(no content)');
+          console.log('---\n');
+        });
+        console.log('========================================');
+
+        sendResponse({ success: true, contents });
+      } catch (error) {
+        console.error('[background] Error collecting page content:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
     return true;
   }
 
