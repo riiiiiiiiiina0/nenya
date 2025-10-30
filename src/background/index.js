@@ -846,16 +846,22 @@ let selectedPromptContent = null;
 let selectedLocalFiles = [];
 
 /**
- * Inject the LLM page injector content script
+ * Inject the LLM page injector content script and wait for tab to be ready
  * @param {number} tabId
  * @returns {Promise<boolean>}
  */
 async function injectLLMPageInjector(tabId) {
   try {
+    // Wait for tab to be ready first
+    await waitForTabReady(tabId);
+    
+    // Inject the script
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['src/contentScript/llmPageInjector.js'],
     });
+    
+    console.log('[background] LLM page injector injected successfully for tab', tabId);
     return true;
   } catch (error) {
     console.error('[background] Failed to inject LLM page injector:', error);
@@ -938,7 +944,10 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
             llmTabIds.push(currentTab.id);
             firstTabToActivateId = currentTab.id;
 
-            await waitForTabReady(currentTab.id);
+            // Small delay to ensure script is settled
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            console.log('[background] Sending data to current tab', currentTab.id);
             await chrome.tabs.sendMessage(currentTab.id, {
               type: 'inject-llm-data',
               tabs: contents,
@@ -984,7 +993,8 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
           firstTabToActivateId = newTab.id;
         }
 
-        await waitForTabReady(newTab.id);
+        // Small delay to ensure script is settled
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
         console.log('[background] Sending data to new tab', newTab.id);
         await chrome.tabs.sendMessage(newTab.id, {

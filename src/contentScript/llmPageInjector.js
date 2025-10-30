@@ -5,41 +5,34 @@
  * Injects markdown files and prompts into LLM provider pages
  */
 
-(function () {
+(async () => {
   'use strict';
 
   /**
    * Wait for an element to appear in the DOM
    * @param {string} selector
    * @param {number} timeout
-   * @returns {Promise<Element | null>}
+   * @returns {Promise<HTMLElement | null>}
    */
   function waitForElement(selector, timeout = 10000) {
     return new Promise((resolve) => {
-      const element = document.querySelector(selector);
-      if (element) {
-        resolve(element);
-        return;
+      const start = Date.now();
+
+      function tryFind() {
+        const el = /** @type {HTMLElement | null} */ (
+          document.querySelector(selector)
+        );
+        if (el) {
+          resolve(el);
+        } else if (Date.now() - start >= timeout) {
+          resolve(null);
+        } else {
+          setTimeout(tryFind, 1000);
+        }
       }
 
-      const observer = new MutationObserver(() => {
-        const element = document.querySelector(selector);
-        if (element) {
-          observer.disconnect();
-          clearTimeout(timeoutId);
-          resolve(element);
-        }
-      });
-
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-
-      const timeoutId = setTimeout(() => {
-        observer.disconnect();
-        resolve(null);
-      }, timeout);
+      // Start checking after 1 second delay
+      setTimeout(tryFind, 1000);
     });
   }
 
@@ -346,5 +339,5 @@ ${content || '<no content>'}`;
     console.log('[llmPageInjector] Injection complete');
   });
 
-  console.log('[llmPageInjector] Content script loaded');
+  console.log('[llmPageInjector] Content script loaded and ready');
 })();
