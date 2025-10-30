@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const MIN_VIDEO_WIDTH = 320;
+  const MIN_VIDEO_WIDTH = 640;
   const MIN_VIDEO_HEIGHT = 180;
 
   // Store original video data for restoration
