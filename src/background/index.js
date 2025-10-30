@@ -574,6 +574,9 @@ chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
 });
 
+// Ensure backup service is initialized immediately when service worker starts
+initializeOptionsBackupService();
+
 void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
 });
@@ -733,11 +736,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blockElement:addSelector') {
+    console.log('[background] Received blockElement:addSelector message:', message);
     const selector =
       typeof message.selector === 'string' ? message.selector : '';
     const url = typeof message.url === 'string' ? message.url : '';
 
     if (!selector || !url) {
+      console.log('[background] Invalid selector or URL:', { selector, url });
       sendResponse({ success: false, error: 'Invalid selector or URL' });
       return false;
     }
@@ -747,6 +752,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Extract URL pattern from the URL
         const urlObj = new URL(url);
         const urlPattern = `${urlObj.protocol}//${urlObj.hostname}/*`;
+        console.log('[background] Generated URL pattern:', urlPattern);
 
         // Load existing rules
         const STORAGE_KEY = 'blockElementRules';
@@ -754,6 +760,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const rules = Array.isArray(stored?.[STORAGE_KEY])
           ? stored[STORAGE_KEY]
           : [];
+        console.log('[background] Loaded existing rules:', rules.length);
 
         // Find existing rule for this URL pattern or create new one
         let rule = rules.find((r) => r.urlPattern === urlPattern);
@@ -764,6 +771,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!rule.selectors.includes(selector)) {
             rule.selectors.push(selector);
             rule.updatedAt = now;
+            console.log('[background] Added selector to existing rule:', rule);
+          } else {
+            console.log('[background] Selector already exists in rule');
           }
         } else {
           // Create new rule
@@ -783,12 +793,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             updatedAt: now,
           };
           rules.push(rule);
+          console.log('[background] Created new rule:', rule);
         }
 
         // Save rules
+        console.log('[background] Saving rules to storage:', rules);
         await chrome.storage.sync.set({
           [STORAGE_KEY]: rules,
         });
+        console.log('[background] Successfully saved rules to storage');
 
         sendResponse({ success: true, rule });
       } catch (error) {

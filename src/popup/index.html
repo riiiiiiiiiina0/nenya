@@ -28,7 +28,12 @@
           💾
         </button>
       </div>
-      <div class="tooltip tooltip-left" data-tip="Create custom filter">
+      <div class="tooltip tooltip-left" data-tip="Import custom JS/CSS rule">
+        <button id="importCustomCodeButton" class="btn btn-square btn-sm btn-ghost" type="button">
+          📁
+        </button>
+      </div>
+      <div class="tooltip tooltip-left" data-tip="Hide elements in page">
         <button id="customFilterButton" class="btn btn-square btn-sm btn-ghost" type="button">
           🎯
         </button>
@@ -71,6 +76,9 @@
     class="fixed bottom-0 left-0 right-0 z-30 text-center p-2 text-sm text-base-content/80 bg-base-100/80 min-h-5 opacity-0 transition-opacity duration-300"
     role="status" aria-live="polite">
   </div>
+
+  <!-- hidden file input for custom code import -->
+  <input id="importCustomCodeFileInput" type="file" accept="application/json" class="hidden" />
 
   <script src="./popup.js" type="module"></script>
 </body>

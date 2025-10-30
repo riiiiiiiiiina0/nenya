@@ -28,6 +28,12 @@ const openOptionsButton = /** @type {HTMLButtonElement | null} */ (
 const customFilterButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('customFilterButton')
 );
+const importCustomCodeButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('importCustomCodeButton')
+);
+const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('importCustomCodeFileInput')
+);
 const statusMessage = /** @type {HTMLDivElement | null} */ (
   document.getElementById('statusMessage')
 );
@@ -90,6 +96,27 @@ if (customFilterButton) {
   });
 } else {
   console.error('[popup] Custom filter button not found.');
+}
+
+if (importCustomCodeButton && importCustomCodeFileInput) {
+  importCustomCodeButton.addEventListener('click', () => {
+    importCustomCodeFileInput.click();
+  });
+
+  importCustomCodeFileInput.addEventListener('change', (event) => {
+    const target = /** @type {HTMLInputElement | null} */ (event.target);
+    if (!target) {
+      return;
+    }
+    const file = target.files?.[0];
+    if (file) {
+      void handleImportCustomCode(file);
+    }
+    // Reset the input so the same file can be selected again
+    target.value = '';
+  });
+} else {
+  console.error('[popup] Import custom code elements not found.');
 }
 
 /**
@@ -257,6 +284,214 @@ async function handleCustomFilter() {
     if (statusMessage) {
       concludeStatus(
         'Unable to launch element picker.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * @typedef {Object} CustomCodeRule
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string} css
+ * @property {string} js
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+const CUSTOM_CODE_STORAGE_KEY = 'customCodeRules';
+
+/**
+ * Generate a unique identifier for new rules.
+ * @returns {string}
+ */
+function generateRuleId() {
+  if (typeof crypto?.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const random = Math.random().toString(36).slice(2);
+  return 'rule-' + Date.now().toString(36) + '-' + random;
+}
+
+/**
+ * Validate imported custom code rule data.
+ * @param {unknown} data - The parsed JSON data
+ * @returns {{ isValid: boolean, rule?: CustomCodeRule, error?: string }}
+ */
+function validateImportedRule(data) {
+  if (!data || typeof data !== 'object') {
+    return { isValid: false, error: 'Invalid JSON structure' };
+  }
+
+  const raw = /** @type {Record<string, unknown>} */ (data);
+
+  // Check required fields
+  if (typeof raw.pattern !== 'string' || !raw.pattern.trim()) {
+    return { isValid: false, error: 'Missing or invalid pattern field' };
+  }
+
+  if (typeof raw.css !== 'string' && typeof raw.js !== 'string') {
+    return {
+      isValid: false,
+      error: 'At least one of CSS or JS code must be provided',
+    };
+  }
+
+  // Validate URL pattern
+  try {
+    // eslint-disable-next-line no-new
+    new URLPattern(raw.pattern);
+  } catch (error) {
+    return { isValid: false, error: 'Invalid URL pattern format' };
+  }
+
+  // Create validated rule
+  const rule = {
+    id: generateRuleId(), // Generate new ID to avoid conflicts
+    pattern: raw.pattern.trim(),
+    css: typeof raw.css === 'string' ? raw.css : '',
+    js: typeof raw.js === 'string' ? raw.js : '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  return { isValid: true, rule };
+}
+
+/**
+ * Load existing custom code rules from storage.
+ * @returns {Promise<CustomCodeRule[]>}
+ */
+async function loadCustomCodeRules() {
+  try {
+    const stored = await chrome.storage.local.get(CUSTOM_CODE_STORAGE_KEY);
+    const rules = stored?.[CUSTOM_CODE_STORAGE_KEY] || [];
+    return Array.isArray(rules) ? rules : [];
+  } catch (error) {
+    console.error('[popup] Failed to load custom code rules:', error);
+    return [];
+  }
+}
+
+/**
+ * Save custom code rules to storage.
+ * @param {CustomCodeRule[]} rules - The rules to save
+ * @returns {Promise<void>}
+ */
+async function saveCustomCodeRules(rules) {
+  try {
+    await chrome.storage.local.set({
+      [CUSTOM_CODE_STORAGE_KEY]: rules,
+    });
+  } catch (error) {
+    console.error('[popup] Failed to save custom code rules:', error);
+    throw error;
+  }
+}
+
+/**
+ * Handle importing a custom code rule from JSON file.
+ * @param {File} file - The JSON file to import
+ * @returns {Promise<void>}
+ */
+async function handleImportCustomCode(file) {
+  try {
+    // Validate file type
+    if (file.type !== 'application/json' && !file.name.endsWith('.json')) {
+      if (statusMessage) {
+        concludeStatus(
+          'Please select a valid JSON file.',
+          'error',
+          3000,
+          statusMessage,
+        );
+      }
+      return;
+    }
+
+    // Read file content
+    const text = await file.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (error) {
+      if (statusMessage) {
+        concludeStatus(
+          'Invalid JSON file format.',
+          'error',
+          3000,
+          statusMessage,
+        );
+      }
+      return;
+    }
+
+    // Validate rule data
+    const validation = validateImportedRule(data);
+    if (!validation.isValid) {
+      if (statusMessage) {
+        concludeStatus(
+          `Import failed: ${validation.error}`,
+          'error',
+          4000,
+          statusMessage,
+        );
+      }
+      return;
+    }
+
+    const newRule = validation.rule;
+    if (!newRule) {
+      if (statusMessage) {
+        concludeStatus(
+          'Failed to create rule from import.',
+          'error',
+          3000,
+          statusMessage,
+        );
+      }
+      return;
+    }
+
+    // Load existing rules
+    const existingRules = await loadCustomCodeRules();
+
+    // Check for duplicate pattern
+    const duplicatePattern = existingRules.find(
+      (rule) => rule.pattern === newRule.pattern,
+    );
+    if (duplicatePattern) {
+      if (statusMessage) {
+        concludeStatus(
+          'A rule with this pattern already exists.',
+          'error',
+          4000,
+          statusMessage,
+        );
+      }
+      return;
+    }
+
+    // Add new rule
+    const updatedRules = [...existingRules, newRule];
+    await saveCustomCodeRules(updatedRules);
+
+    if (statusMessage) {
+      concludeStatus(
+        `Custom code rule imported successfully for "${newRule.pattern}"`,
+        'success',
+        4000,
+        statusMessage,
+      );
+    }
+  } catch (error) {
+    console.error('[popup] Error importing custom code rule:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Failed to import custom code rule.',
         'error',
         3000,
         statusMessage,

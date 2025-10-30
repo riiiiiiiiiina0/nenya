@@ -1,6 +1,32 @@
 /* global chrome */
 
 /**
+ * @typedef {Object} ToastifyOptions
+ * @property {string} text
+ * @property {number} duration
+ * @property {string} gravity
+ * @property {string} position
+ * @property {string} backgroundColor
+ */
+
+/**
+ * @typedef {Object} ToastifyInstance
+ * @property {function(): void} showToast
+ */
+
+/**
+ * @typedef {function(ToastifyOptions): ToastifyInstance} ToastifyFunction
+ */
+
+/**
+ * @type {ToastifyFunction | undefined}
+ */
+const Toastify =
+  typeof window !== 'undefined' && /** @type {any} */ (window).Toastify
+    ? /** @type {any} */ (window).Toastify
+    : undefined;
+
+/**
  * @typedef {Object} CustomCodeRule
  * @property {string} id
  * @property {string} pattern
@@ -106,7 +132,10 @@ function normalizeRules(value) {
       if (!entry || typeof entry !== 'object') {
         return;
       }
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       if (!pattern) {
         return;
@@ -119,7 +148,11 @@ function normalizeRules(value) {
         new URLPattern(pattern);
         isValidPattern = true;
       } catch (error) {
-        console.warn('[options:customCode] Invalid pattern ignored in storage:', pattern, error);
+        console.warn(
+          '[options:customCode] Invalid pattern ignored in storage:',
+          pattern,
+          error,
+        );
       }
       if (!isValidPattern) {
         return;
@@ -140,6 +173,8 @@ function normalizeRules(value) {
         pattern,
         css,
         js,
+        createdAt: undefined,
+        updatedAt: undefined,
       };
       if (typeof raw.createdAt === 'string') {
         rule.createdAt = raw.createdAt;
@@ -284,7 +319,14 @@ function formatCode(code, maxLength = 200) {
  * @returns {void}
  */
 function renderDetails() {
-  if (!detailsPanel || !detailPattern || !detailCSS || !detailJS || !detailCreated || !detailUpdated) {
+  if (
+    !detailsPanel ||
+    !detailPattern ||
+    !detailCSS ||
+    !detailJS ||
+    !detailCreated ||
+    !detailUpdated
+  ) {
     return;
   }
   const rule = findRule(selectedRuleId);
@@ -389,6 +431,15 @@ function renderList() {
       }
     });
     actions.appendChild(editButton);
+
+    const exportButton = document.createElement('button');
+    exportButton.type = 'button';
+    exportButton.className = 'btn btn-sm btn-outline';
+    exportButton.textContent = 'Export';
+    exportButton.addEventListener('click', () => {
+      exportRule(rule);
+    });
+    actions.appendChild(exportButton);
 
     const deleteButton = document.createElement('button');
     deleteButton.type = 'button';
@@ -507,6 +558,91 @@ function handleCancelEdit() {
 }
 
 /**
+ * Extract domain from URL pattern for filename generation.
+ * @param {string} pattern - URL pattern
+ * @returns {string} - Domain name or fallback
+ */
+function extractDomainFromPattern(pattern) {
+  try {
+    // Try to parse as URL first
+    const url = new URL(pattern);
+    return url.hostname;
+  } catch (error) {
+    // If not a valid URL, try to extract domain from pattern
+    // Handle patterns like "*://*.example.com/*" or "https://*.example.com/*"
+    const domainMatch = pattern.match(/(?:https?:\/\/)?(?:\*\.)?([^\/\*]+)/);
+    if (domainMatch && domainMatch[1]) {
+      return domainMatch[1];
+    }
+    // Fallback to sanitized pattern
+    return pattern.replace(/[^a-zA-Z0-9.-]/g, '-').substring(0, 50);
+  }
+}
+
+/**
+ * Export a single custom code rule as JSON file.
+ * @param {CustomCodeRule} rule - The rule to export
+ * @returns {void}
+ */
+function exportRule(rule) {
+  try {
+    const domain = extractDomainFromPattern(rule.pattern);
+    const filename = `nenya-cjc-${domain}.json`;
+
+    // Create export data
+    const exportData = {
+      id: rule.id,
+      pattern: rule.pattern,
+      css: rule.css,
+      js: rule.js,
+      createdAt: rule.createdAt,
+      updatedAt: rule.updatedAt,
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+    };
+
+    // Create and download file
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Clean up
+    URL.revokeObjectURL(url);
+
+    // Show success notification if Toastify is available
+    if (typeof Toastify !== 'undefined') {
+      Toastify({
+        text: `Rule exported as ${filename}`,
+        duration: 3000,
+        gravity: 'top',
+        position: 'right',
+        backgroundColor: '#10b981',
+      }).showToast();
+    }
+  } catch (error) {
+    console.error('[options:customCode] Failed to export rule:', error);
+
+    // Show error notification if Toastify is available
+    if (typeof Toastify !== 'undefined') {
+      Toastify({
+        text: 'Failed to export rule',
+        duration: 3000,
+        gravity: 'top',
+        position: 'right',
+        backgroundColor: '#ef4444',
+      }).showToast();
+    }
+  }
+}
+
+/**
  * Initialize listeners and load existing data.
  * @returns {void}
  */
@@ -547,4 +683,3 @@ function init() {
 }
 
 init();
-

@@ -2292,24 +2292,31 @@ async function performCategoryBackup(categoryId, trigger, notifyOnError) {
  * @returns {void}
  */
 function queueCategoryBackup(categoryId, trigger) {
+  console.log(`[options-backup] Queueing backup for ${categoryId} with trigger: ${trigger}`);
+  
   if (isBackupSuppressed(categoryId)) {
+    console.log(`[options-backup] Backup suppressed for ${categoryId}`);
     return;
   }
 
   queuedBackupReasons.set(categoryId, trigger);
   if (runningBackups.has(categoryId)) {
+    console.log(`[options-backup] Backup already running for ${categoryId}`);
     return;
   }
 
+  console.log(`[options-backup] Starting backup for ${categoryId}`);
   runningBackups.add(categoryId);
   const notifyOnError = trigger !== 'manual';
   const runLoop = async () => {
     while (queuedBackupReasons.has(categoryId)) {
       const currentTrigger = queuedBackupReasons.get(categoryId) ?? trigger;
       queuedBackupReasons.delete(categoryId);
+      console.log(`[options-backup] Executing backup for ${categoryId} with trigger: ${currentTrigger}`);
       await performCategoryBackup(categoryId, currentTrigger, notifyOnError);
     }
     runningBackups.delete(categoryId);
+    console.log(`[options-backup] Completed backup for ${categoryId}`);
   };
 
   void runLoop();
@@ -2703,27 +2710,35 @@ async function performRestore(trigger, notifyOnError) {
  * @returns {void}
  */
 function handleStorageChanges(changes, areaName) {
+  console.log('[options-backup] Storage change detected:', { changes, areaName });
+  
   // Handle sync storage changes
   if (areaName === 'sync') {
     if (ROOT_FOLDER_SETTINGS_KEY in changes) {
+      console.log('[options-backup] Storage change detected for auth-provider-settings');
       queueCategoryBackup('auth-provider-settings', 'storage');
     }
     if (NOTIFICATION_PREFERENCES_KEY in changes) {
+      console.log('[options-backup] Storage change detected for notification-preferences');
       queueCategoryBackup('notification-preferences', 'storage');
     }
     if (AUTO_RELOAD_RULES_KEY in changes) {
+      console.log('[options-backup] Storage change detected for auto-reload-rules');
       queueCategoryBackup('auto-reload-rules', 'storage');
     }
     if (
       BRIGHT_MODE_WHITELIST_KEY in changes ||
       BRIGHT_MODE_BLACKLIST_KEY in changes
     ) {
+      console.log('[options-backup] Storage change detected for bright-mode-settings');
       queueCategoryBackup('bright-mode-settings', 'storage');
     }
     if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
+      console.log('[options-backup] Storage change detected for highlight-text-rules');
       queueCategoryBackup('highlight-text-rules', 'storage');
     }
     if (BLOCK_ELEMENT_RULES_KEY in changes) {
+      console.log('[options-backup] Storage change detected for block-element-rules');
       queueCategoryBackup('block-element-rules', 'storage');
     }
   }
@@ -2786,13 +2801,18 @@ function handleWindowFocus(windowId) {
  * @returns {void}
  */
 export function initializeOptionsBackupService() {
+  console.log('[options-backup] Initializing options backup service...');
   if (initialized) {
+    console.log('[options-backup] Service already initialized');
     return;
   }
   initialized = true;
 
   if (chrome?.storage?.onChanged) {
+    console.log('[options-backup] Registering storage change listener');
     chrome.storage.onChanged.addListener(handleStorageChanges);
+  } else {
+    console.warn('[options-backup] chrome.storage.onChanged not available');
   }
   if (chrome?.alarms) {
     chrome.alarms.onAlarm.addListener(handleAlarm);
