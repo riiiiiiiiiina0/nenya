@@ -1523,6 +1523,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'INJECT_CUSTOM_JS') {
+    const ruleId = message.ruleId;
+    const code = typeof message.code === 'string' ? message.code : '';
+    
+    if (!code || !sender.tab || typeof sender.tab.id !== 'number') {
+      sendResponse({ success: false, error: 'Invalid request' });
+      return false;
+    }
+
+    const tabId = sender.tab.id;
+
+    void (async () => {
+      try {
+        // Inject the custom JavaScript code into the MAIN world
+        // This bypasses the page's CSP restrictions
+        await chrome.scripting.executeScript({
+          target: { tabId: tabId },
+          world: 'MAIN',
+          func: (jsCode) => {
+            // Execute the code in the page context
+            try {
+              // Use indirect eval to execute in global scope
+              (0, eval)(jsCode);
+            } catch (error) {
+              console.error('[Nenya CustomCode] Script execution error:', error);
+            }
+          },
+          args: [code]
+        });
+
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[background] Failed to inject custom JS:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
   return false;
 });
 

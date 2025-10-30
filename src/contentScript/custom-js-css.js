@@ -133,7 +133,7 @@
      * @param {string} ruleId
      * @param {string} js
      */
-    injectJS(ruleId, js) {
+    async injectJS(ruleId, js) {
       if (!js || !js.trim()) {
         return;
       }
@@ -147,22 +147,20 @@
       }
 
       try {
-        // Create and inject script element
-        const scriptElement = document.createElement('script');
-        scriptElement.id = scriptId;
-        scriptElement.textContent = js;
-        
-        // Insert at the end of body or head
-        if (document.body) {
-          document.body.appendChild(scriptElement);
-        } else if (document.head) {
-          document.head.appendChild(scriptElement);
-        } else {
-          document.documentElement.appendChild(scriptElement);
-        }
+        // Request background script to inject code in MAIN world
+        // This bypasses page CSP restrictions
+        const response = await chrome.runtime.sendMessage({
+          type: 'INJECT_CUSTOM_JS',
+          ruleId: ruleId,
+          code: js
+        });
 
-        this.injectedScripts.add(scriptId);
-        console.log('[CustomCode] Injected JS for rule:', ruleId);
+        if (response?.success) {
+          this.injectedScripts.add(scriptId);
+          console.log('[CustomCode] Injected JS for rule:', ruleId);
+        } else {
+          console.error('[CustomCode] Failed to inject JS for rule:', ruleId, response?.error);
+        }
       } catch (error) {
         console.error('[CustomCode] Failed to inject JS for rule:', ruleId, error);
       }
