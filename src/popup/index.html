@@ -15,6 +15,7 @@
       width: 480px;
       max-width: 480px;
     }
+
     /* Icon colors - black by default, white in dark mode */
     #getMarkdownButton,
     #pullButton,
@@ -26,6 +27,7 @@
     #renameTabButton {
       color: #000000;
     }
+
     [data-theme="dark"] #getMarkdownButton,
     [data-theme="dark"] #pullButton,
     [data-theme="dark"] #saveUnsortedButton,
@@ -36,18 +38,22 @@
     [data-theme="dark"] #renameTabButton {
       color: #ffffff;
     }
+
     /* Project list icon buttons */
     .project-icon-button {
       color: #000000;
     }
+
     [data-theme="dark"] .project-icon-button {
       color: #ffffff;
     }
+
     /* Hide project action buttons by default, show on hover */
     .project-action-button {
       opacity: 0;
       transition: opacity 0.2s ease-in-out;
     }
+
     [role="listitem"]:hover .project-action-button,
     [role="listitem"]:focus-within .project-action-button {
       opacity: 1;
@@ -56,9 +62,30 @@
 </head>
 
 <body class="bg-base-200">
+  <script>
+    // Set extension icon URL using chrome.runtime.getURL()
+    (function () {
+      function setIconUrl() {
+        if (chrome?.runtime?.getURL) {
+          const iconImg = document.getElementById('extensionIcon');
+          if (iconImg) {
+            iconImg.src = chrome.runtime.getURL('assets/icons/icon-48x48.png');
+          }
+        }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setIconUrl);
+      } else {
+        setIconUrl();
+      }
+    })();
+  </script>
   <div class="navbar bg-base-100 shadow-sm sticky top-0 z-10">
     <div class="flex-1 flex items-center gap-3">
-      <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
+      <a class="btn btn-ghost text-xl flex items-center gap-2">
+        <img id="extensionIcon" src="../../assets/icons/icon-48x48.png" alt="Nenya" class="w-6 h-6" />
+        Nenya
+      </a>
       <span id="autoReloadStatus" class="text-sm text-base-content/70" hidden></span>
     </div>
     <div class="flex-none gap-2">
