@@ -9,6 +9,7 @@ import './highlightText.js';
 import './blockElements.js';
 import './customCode.js';
 import './llmPrompts.js';
+import './urlProcessRules.js';
 import './debug.js';
 
 /**

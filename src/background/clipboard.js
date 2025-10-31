@@ -2,10 +2,8 @@
  * Clipboard context menu functionality for copying tab data.
  */
 
-import {
-  setActionBadge,
-  animateActionBadge,
-} from './mirror.js';
+import { setActionBadge, animateActionBadge } from './mirror.js';
+import { processUrl } from '../shared/urlProcessor.js';
 
 /**
  * Context menu IDs for clipboard operations.
@@ -44,7 +42,7 @@ async function copyToClipboard(text) {
       });
       return true;
     }
-    
+
     return false;
   } catch (error) {
     console.warn('[clipboard] Failed to copy to clipboard:', error);
@@ -62,7 +60,7 @@ async function captureTabScreenshot(tabId) {
     // Get the window ID for the tab
     const tab = await chrome.tabs.get(tabId);
     const windowId = tab.windowId;
-    
+
     const dataUrl = await chrome.tabs.captureVisibleTab(windowId, {
       format: 'png',
       quality: 100,
@@ -77,15 +75,21 @@ async function captureTabScreenshot(tabId) {
 /**
  * Get tab data for clipboard operations.
  * @param {chrome.tabs.Tab[]} tabs - Array of tabs to process.
- * @returns {Array<{title: string, url: string}>} - Array of tab data.
+ * @returns {Promise<Array<{title: string, url: string}>>} - Array of tab data.
  */
-function getTabData(tabs) {
-  return tabs
-    .filter(tab => tab && typeof tab.url === 'string' && tab.url.startsWith('http'))
-    .map(tab => ({
+async function getTabData(tabs) {
+  const tabData = [];
+  for (const tab of tabs) {
+    if (!tab || typeof tab.url !== 'string' || !tab.url.startsWith('http')) {
+      continue;
+    }
+    const processedUrl = await processUrl(tab.url, 'copy-to-clipboard');
+    tabData.push({
       title: typeof tab.title === 'string' ? tab.title : '',
-      url: tab.url || '',
-    }));
+      url: processedUrl,
+    });
+  }
+  return tabData;
 }
 
 /**
@@ -94,9 +98,7 @@ function getTabData(tabs) {
  * @returns {string} - Formatted text.
  */
 function formatTitleUrl(tabData) {
-  return tabData
-    .map(tab => `${tab.title}\n${tab.url}`)
-    .join('\n\n');
+  return tabData.map((tab) => `${tab.title}\n${tab.url}`).join('\n\n');
 }
 
 /**
@@ -105,9 +107,7 @@ function formatTitleUrl(tabData) {
  * @returns {string} - Formatted text.
  */
 function formatTitleDashUrl(tabData) {
-  return tabData
-    .map(tab => `${tab.title} - ${tab.url}`)
-    .join('\n');
+  return tabData.map((tab) => `${tab.title} - ${tab.url}`).join('\n');
 }
 
 /**
@@ -116,9 +116,7 @@ function formatTitleDashUrl(tabData) {
  * @returns {string} - Formatted text.
  */
 function formatMarkdownLink(tabData) {
-  return tabData
-    .map(tab => `[${tab.title}](${tab.url})`)
-    .join('\n');
+  return tabData.map((tab) => `[${tab.title}](${tab.url})`).join('\n');
 }
 
 /**
@@ -128,14 +126,14 @@ function formatMarkdownLink(tabData) {
  * @returns {Promise<boolean>} - True if successful, false otherwise.
  */
 async function handleMultiTabCopy(formatType, tabs) {
-  const tabData = getTabData(tabs);
-  
+  const tabData = await getTabData(tabs);
+
   if (tabData.length === 0) {
     return false;
   }
 
   let formattedText = '';
-  
+
   switch (formatType) {
     case 'title-url':
       formattedText = formatTitleUrl(tabData);
@@ -160,7 +158,7 @@ async function handleMultiTabCopy(formatType, tabs) {
  */
 async function handleScreenshotCopy(tabId) {
   const dataUrl = await captureTabScreenshot(tabId);
-  
+
   if (!dataUrl) {
     return false;
   }
@@ -171,8 +169,8 @@ async function handleScreenshotCopy(tabId) {
       target: { tabId },
       func: (dataUrl) => {
         fetch(dataUrl)
-          .then(response => response.blob())
-          .then(blob => {
+          .then((response) => response.blob())
+          .then((blob) => {
             navigator.clipboard.write([
               new ClipboardItem({
                 [blob.type]: blob,
@@ -200,48 +198,104 @@ export function setupClipboardContextMenus() {
   }
 
   // Title\nURL format
-  chrome.contextMenus.create({
-    id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_URL,
-    title: 'Copy Title\\nURL',
-    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
-  }, (error) => {
-    if (error) {
-      console.warn('[clipboard] Failed to create Title\\nURL context menu:', error);
-    }
-  });
+  chrome.contextMenus.create(
+    {
+      id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_URL,
+      title: 'Copy Title\\nURL',
+      contexts: [
+        'page',
+        'frame',
+        'selection',
+        'editable',
+        'link',
+        'image',
+        'all',
+      ],
+    },
+    (error) => {
+      if (error) {
+        console.warn(
+          '[clipboard] Failed to create Title\\nURL context menu:',
+          error,
+        );
+      }
+    },
+  );
 
   // Title - URL format
-  chrome.contextMenus.create({
-    id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_DASH_URL,
-    title: 'Copy Title - URL',
-    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
-  }, (error) => {
-    if (error) {
-      console.warn('[clipboard] Failed to create Title - URL context menu:', error);
-    }
-  });
+  chrome.contextMenus.create(
+    {
+      id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_DASH_URL,
+      title: 'Copy Title - URL',
+      contexts: [
+        'page',
+        'frame',
+        'selection',
+        'editable',
+        'link',
+        'image',
+        'all',
+      ],
+    },
+    (error) => {
+      if (error) {
+        console.warn(
+          '[clipboard] Failed to create Title - URL context menu:',
+          error,
+        );
+      }
+    },
+  );
 
   // Markdown link format
-  chrome.contextMenus.create({
-    id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_MARKDOWN_LINK,
-    title: 'Copy [Title](URL)',
-    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
-  }, (error) => {
-    if (error) {
-      console.warn('[clipboard] Failed to create Markdown link context menu:', error);
-    }
-  });
+  chrome.contextMenus.create(
+    {
+      id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_MARKDOWN_LINK,
+      title: 'Copy [Title](URL)',
+      contexts: [
+        'page',
+        'frame',
+        'selection',
+        'editable',
+        'link',
+        'image',
+        'all',
+      ],
+    },
+    (error) => {
+      if (error) {
+        console.warn(
+          '[clipboard] Failed to create Markdown link context menu:',
+          error,
+        );
+      }
+    },
+  );
 
   // Screenshot (only for single tab)
-  chrome.contextMenus.create({
-    id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT,
-    title: 'Copy Screenshot',
-    contexts: ['page', 'frame', 'selection', 'editable', 'link', 'image', 'all'],
-  }, (error) => {
-    if (error) {
-      console.warn('[clipboard] Failed to create Screenshot context menu:', error);
-    }
-  });
+  chrome.contextMenus.create(
+    {
+      id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT,
+      title: 'Copy Screenshot',
+      contexts: [
+        'page',
+        'frame',
+        'selection',
+        'editable',
+        'link',
+        'image',
+        'all',
+      ],
+    },
+    (error) => {
+      if (error) {
+        console.warn(
+          '[clipboard] Failed to create Screenshot context menu:',
+          error,
+        );
+      }
+    },
+  );
 }
 
 /**
@@ -252,14 +306,17 @@ export function setupClipboardContextMenus() {
  */
 export async function handleClipboardContextMenuClick(info, tab) {
   const { menuItemId } = info;
-  
+
   if (!Object.values(CLIPBOARD_CONTEXT_MENU_IDS).includes(String(menuItemId))) {
     return;
   }
 
   try {
     // Get highlighted tabs first, then fall back to active tab
-    let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+    let tabs = await chrome.tabs.query({
+      currentWindow: true,
+      highlighted: true,
+    });
     if (!tabs || tabs.length === 0) {
       tabs = await chrome.tabs.query({ currentWindow: true, active: true });
     }
@@ -290,7 +347,7 @@ export async function handleClipboardContextMenuClick(info, tab) {
           formatType = 'markdown-link';
           break;
       }
-      
+
       if (formatType) {
         success = await handleMultiTabCopy(formatType, tabs);
       }
@@ -305,10 +362,13 @@ export async function handleClipboardContextMenuClick(info, tab) {
 
     // Show notification based on result
     if (success) {
-      const message = menuItemId === CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT 
-        ? 'Screenshot copied to clipboard'
-        : `Copied ${tabs.length} tab${tabs.length > 1 ? 's' : ''} to clipboard`;
-      
+      const message =
+        menuItemId === CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT
+          ? 'Screenshot copied to clipboard'
+          : `Copied ${tabs.length} tab${
+              tabs.length > 1 ? 's' : ''
+            } to clipboard`;
+
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'assets/icons/icon-48x48.png',
@@ -337,7 +397,10 @@ export async function handleClipboardContextMenuClick(info, tab) {
 export async function handleClipboardCommand(command) {
   try {
     // Get highlighted tabs first, then fall back to active tab
-    let tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+    let tabs = await chrome.tabs.query({
+      currentWindow: true,
+      highlighted: true,
+    });
     if (!tabs || tabs.length === 0) {
       tabs = await chrome.tabs.query({ currentWindow: true, active: true });
     }
@@ -378,7 +441,7 @@ export async function handleClipboardCommand(command) {
           formatType = 'markdown-link';
           break;
       }
-      
+
       if (formatType) {
         success = await handleMultiTabCopy(formatType, tabs);
       }
@@ -387,12 +450,15 @@ export async function handleClipboardCommand(command) {
     // Set badge based on result
     if (success) {
       setCopySuccessBadge();
-      
+
       // Show notification
-      const message = command === 'copy-screenshot' 
-        ? 'Screenshot copied to clipboard'
-        : `Copied ${tabs.length} tab${tabs.length > 1 ? 's' : ''} to clipboard`;
-      
+      const message =
+        command === 'copy-screenshot'
+          ? 'Screenshot copied to clipboard'
+          : `Copied ${tabs.length} tab${
+              tabs.length > 1 ? 's' : ''
+            } to clipboard`;
+
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'assets/icons/icon-48x48.png',
@@ -401,7 +467,7 @@ export async function handleClipboardCommand(command) {
       });
     } else {
       setCopyFailureBadge();
-      
+
       chrome.notifications.create({
         type: 'basic',
         iconUrl: 'assets/icons/icon-48x48.png',
@@ -427,7 +493,10 @@ export async function updateClipboardContextMenuVisibility() {
   }
 
   try {
-    const tabs = await chrome.tabs.query({ currentWindow: true, highlighted: true });
+    const tabs = await chrome.tabs.query({
+      currentWindow: true,
+      highlighted: true,
+    });
     const hasMultipleTabs = tabs && tabs.length > 1;
 
     // Update screenshot menu item visibility
@@ -435,6 +504,9 @@ export async function updateClipboardContextMenuVisibility() {
       visible: !hasMultipleTabs,
     });
   } catch (error) {
-    console.warn('[clipboard] Failed to update context menu visibility:', error);
+    console.warn(
+      '[clipboard] Failed to update context menu visibility:',
+      error,
+    );
   }
 }

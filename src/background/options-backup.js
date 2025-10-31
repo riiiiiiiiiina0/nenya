@@ -191,6 +191,13 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} UrlProcessRulesBackupPayload
+ * @property {'url-process-rules'} kind
+ * @property {UrlProcessRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
  * @typedef {Object} BackupCategoryState
  * @property {number | undefined} lastBackupAt
  * @property {string | undefined} lastBackupTrigger
@@ -227,6 +234,7 @@ const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
+const URL_PROCESS_RULES_KEY = 'urlProcessRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -271,6 +279,7 @@ const CATEGORY_IDS = [
   'block-element-rules',
   'custom-code-rules',
   'llm-prompts',
+  'url-process-rules',
 ];
 
 /**
@@ -1630,6 +1639,159 @@ function normalizeLLMPrompts(value) {
 }
 
 /**
+ * Normalize URL process rules.
+ * @param {unknown} value
+ * @returns {{ rules: UrlProcessRuleSettings[], mutated: boolean }}
+ */
+function normalizeUrlProcessRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, name?: unknown, urlPatterns?: unknown, processors?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+
+      const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+      if (!name) {
+        return;
+      }
+
+      const urlPatterns = Array.isArray(raw.urlPatterns)
+        ? raw.urlPatterns
+            .map((p) => (typeof p === 'string' ? p.trim() : ''))
+            .filter((p) => {
+              if (!p) {
+                return false;
+              }
+              try {
+                // Basic pattern validation
+                if (p.includes('*') && !p.includes('://')) {
+                  return true;
+                } else if (p.includes('://')) {
+                  const url = new URL('https://example.com');
+                  return true;
+                }
+                return true;
+              } catch {
+                return false;
+              }
+            })
+        : [];
+      if (urlPatterns.length === 0) {
+        return;
+      }
+
+      const processors = Array.isArray(raw.processors)
+        ? raw.processors
+            .map((p) => {
+              if (!p || typeof p !== 'object') {
+                return null;
+              }
+              const procRaw =
+                /** @type {{ id?: unknown, type?: unknown, name?: unknown, value?: unknown }} */ (
+                  p
+                );
+              const type = procRaw.type;
+              if (
+                typeof type !== 'string' ||
+                !['add', 'replace', 'remove'].includes(type)
+              ) {
+                return null;
+              }
+              const procName =
+                typeof procRaw.name === 'string' ? procRaw.name.trim() : '';
+              if (!procName) {
+                return null;
+              }
+              // For replace and remove, name can be regex
+              if (type === 'replace' || type === 'remove') {
+                if (procName.startsWith('/') && procName.endsWith('/')) {
+                  const regexPattern = procName.slice(1, -1);
+                  try {
+                    new RegExp(regexPattern);
+                  } catch {
+                    return null;
+                  }
+                }
+              }
+              const procId =
+                typeof procRaw.id === 'string' && procRaw.id.trim()
+                  ? procRaw.id.trim()
+                  : generateRuleId();
+              if (!procRaw.id) {
+                mutated = true;
+              }
+
+              /** @type {UrlProcessor} */
+              const processor = {
+                id: procId,
+                type: /** @type {ProcessorType} */ (type),
+                name: procName,
+              };
+
+              if (type === 'add' || type === 'replace') {
+                const procValue =
+                  typeof procRaw.value === 'string' ? procRaw.value : '';
+                processor.value = procValue;
+              }
+
+              return processor;
+            })
+            .filter((p) => p !== null)
+        : [];
+      if (processors.length === 0) {
+        return;
+      }
+
+      const applyWhen = Array.isArray(raw.applyWhen)
+        ? raw.applyWhen.filter((aw) =>
+            ['copy-to-clipboard', 'save-to-raindrop'].includes(aw),
+          )
+        : [];
+      if (applyWhen.length === 0) {
+        return;
+      }
+
+      const id =
+        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        mutated = true;
+      }
+
+      /** @type {UrlProcessRuleSettings} */
+      const rule = {
+        id: id || generateRuleId(),
+        name,
+        urlPatterns,
+        processors,
+        applyWhen: /** @type {ApplyWhenOption[]} */ (applyWhen),
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+
+      sanitized.push(rule);
+    });
+  }
+
+  if (sanitized.length !== originalLength) {
+    mutated = true;
+  }
+
+  sanitized.sort((a, b) => a.name.localeCompare(b.name));
+
+  return { rules: sanitized, mutated };
+}
+
+/**
  * Collect LLM prompts from storage.
  * @returns {Promise<LLMPromptSettings[]>}
  */
@@ -1661,6 +1823,55 @@ async function applyLLMPrompts(prompts) {
   await chrome.storage.sync.set({
     [LLM_PROMPTS_KEY]: sanitized,
   });
+}
+
+/**
+ * Collect URL process rules from storage.
+ * @returns {Promise<UrlProcessRuleSettings[]>}
+ */
+async function collectUrlProcessRules() {
+  const result = await chrome.storage.sync.get(URL_PROCESS_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeUrlProcessRules(
+    result?.[URL_PROCESS_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('url-process-rules');
+    await chrome.storage.sync.set({
+      [URL_PROCESS_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply URL process rules to storage.
+ * @param {UrlProcessRuleSettings[]} rules
+ * @returns {Promise<void>}
+ */
+async function applyUrlProcessRules(rules) {
+  if (!Array.isArray(rules)) {
+    return;
+  }
+  const { rules: sanitized } = normalizeUrlProcessRules(rules);
+  suppressBackup('url-process-rules');
+  await chrome.storage.sync.set({
+    [URL_PROCESS_RULES_KEY]: sanitized,
+  });
+}
+
+/**
+ * Build URL process rules payload.
+ * @param {string} trigger
+ * @returns {Promise<UrlProcessRulesBackupPayload>}
+ */
+async function buildUrlProcessRulesPayload(trigger) {
+  const rules = await collectUrlProcessRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'url-process-rules',
+    rules,
+    metadata,
+  };
 }
 
 /**
@@ -2371,6 +2582,66 @@ function parseCustomCodeRulesItem(item) {
 }
 
 /**
+ * Attempt to parse URL process rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: UrlProcessRulesBackupPayload | null, lastModified: number }}
+ */
+function parseUrlProcessRulesItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedRules = normalizeUrlProcessRules(parsed?.rules).rules;
+
+    const payload = /** @type {UrlProcessRulesBackupPayload} */ ({
+      kind: 'url-process-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Attempt to parse LLM prompts payload from Raindrop.
  * @param {any} item
  * @returns {{ payload: LLMPromptsBackupPayload | null, lastModified: number }}
@@ -2489,6 +2760,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildLLMPromptsPayload,
     parseItem: parseLLMPromptsItem,
     applyPayload: applyLLMPrompts,
+  },
+  'url-process-rules': {
+    title: 'url-process-rules',
+    link: 'https://nenya.local/options/url-process-rules',
+    buildPayload: buildUrlProcessRulesPayload,
+    parseItem: parseUrlProcessRulesItem,
+    applyPayload: applyUrlProcessRules,
   },
 };
 
@@ -2871,6 +3149,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload;
         } else if (payload.kind === 'llm-prompts') {
           payloadToApply = payload.prompts;
+        } else if (payload.kind === 'url-process-rules') {
+          payloadToApply = payload.rules;
         } else {
           payloadToApply = payload.preferences;
         }
@@ -3005,6 +3285,10 @@ function handleStorageChanges(changes, areaName) {
     if (LLM_PROMPTS_KEY in changes) {
       console.log('[options-backup] Storage change detected for llm-prompts');
       queueCategoryBackup('llm-prompts', 'storage');
+    }
+    if (URL_PROCESS_RULES_KEY in changes) {
+      console.log('[options-backup] Storage change detected for url-process-rules');
+      queueCategoryBackup('url-process-rules', 'storage');
     }
   }
 
@@ -3158,6 +3442,7 @@ export async function resetOptionsToDefaults() {
   suppressBackup('block-element-rules');
   suppressBackup('custom-code-rules');
   suppressBackup('llm-prompts');
+  suppressBackup('url-process-rules');
 
   const defaultPreferences = JSON.parse(
     JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES),
@@ -3178,6 +3463,7 @@ export async function resetOptionsToDefaults() {
       [HIGHLIGHT_TEXT_RULES_KEY]: [],
       [BLOCK_ELEMENT_RULES_KEY]: [],
       [LLM_PROMPTS_KEY]: [],
+      [URL_PROCESS_RULES_KEY]: [],
     }),
     chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: [],

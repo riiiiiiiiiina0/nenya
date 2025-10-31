@@ -122,6 +122,8 @@ export {
   isPromiseLike,
 };
 
+import { processUrl } from '../shared/urlProcessor.js';
+
 const PROVIDER_ID = 'raindrop';
 const STORAGE_KEY_TOKENS = 'cloudAuthTokens';
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
@@ -893,7 +895,8 @@ export async function runMirrorPull(trigger) {
   if (!tokens) {
     return {
       ok: false,
-      error: 'No Raindrop connection found. Connect in Options to enable syncing.',
+      error:
+        'No Raindrop connection found. Connect in Options to enable syncing.',
     };
   }
 
@@ -1039,14 +1042,17 @@ export async function saveUrlsToUnsorted(entries) {
         continue;
       }
 
-      if (seenUrls.has(normalizedUrl)) {
+      // Process URL according to URL processing rules
+      const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+
+      if (seenUrls.has(processedUrl)) {
         summary.skipped += 1;
         continue;
       }
 
-      seenUrls.add(normalizedUrl);
+      seenUrls.add(processedUrl);
       sanitized.push({
-        url: normalizedUrl,
+        url: processedUrl,
         title: typeof entry?.title === 'string' ? entry.title.trim() : '',
       });
     }
@@ -2627,7 +2633,10 @@ async function findExistingBookmarkInFolder(url, targetFolderId) {
     const folderChildren = await bookmarksGetChildren(targetFolderId);
     return folderChildren.find((child) => child.url === url) || null;
   } catch (error) {
-    console.warn('[findExistingBookmarkInFolder] Failed to check existing bookmarks:', error);
+    console.warn(
+      '[findExistingBookmarkInFolder] Failed to check existing bookmarks:',
+      error,
+    );
     return null;
   }
 }
@@ -2682,7 +2691,7 @@ async function removeDuplicateTitleBookmarksInFolder(
       // Verify dup URL does not belong to any item in this collection
       if (
         typeof collectionId === 'number' &&
-        await doesRaindropItemExistInCollection(tokens, collectionId, dupUrl)
+        (await doesRaindropItemExistInCollection(tokens, collectionId, dupUrl))
       ) {
         continue;
       }
@@ -2720,22 +2729,26 @@ async function loadItemBookmarkMap() {
     return itemBookmarkMapCache;
   }
   if (!itemBookmarkMapPromise) {
-    itemBookmarkMapPromise = /** @type {Promise<Record<string, string>>} */ ((async () => {
-      try {
-        const result = await chrome.storage.local.get(ITEM_BOOKMARK_MAP_KEY);
-        const raw = result?.[ITEM_BOOKMARK_MAP_KEY];
-        if (raw && typeof raw === 'object') {
-          itemBookmarkMapCache = { ...raw };
-        } else {
+    itemBookmarkMapPromise = /** @type {Promise<Record<string, string>>} */ (
+      (async () => {
+        try {
+          const result = await chrome.storage.local.get(ITEM_BOOKMARK_MAP_KEY);
+          const raw = result?.[ITEM_BOOKMARK_MAP_KEY];
+          if (raw && typeof raw === 'object') {
+            itemBookmarkMapCache = { ...raw };
+          } else {
+            itemBookmarkMapCache = {};
+          }
+        } catch (error) {
           itemBookmarkMapCache = {};
         }
-      } catch (error) {
-        itemBookmarkMapCache = {};
-      }
-      return itemBookmarkMapCache;
-    })());
+        return itemBookmarkMapCache;
+      })()
+    );
   }
-  return /** @type {Promise<Record<string, string>>} */ (itemBookmarkMapPromise);
+  return /** @type {Promise<Record<string, string>>} */ (
+    itemBookmarkMapPromise
+  );
 }
 
 /**
@@ -2855,7 +2868,8 @@ async function upsertBookmark(
       const mappedId = await getMappedBookmarkId(itemId);
       if (mappedId) {
         const nodes = await bookmarksGet(mappedId);
-        const node = Array.isArray(nodes) && nodes.length > 0 ? nodes[0] : undefined;
+        const node =
+          Array.isArray(nodes) && nodes.length > 0 ? nodes[0] : undefined;
         if (node && node.id) {
           const changes = {};
           let didUpdate = false;
@@ -2940,15 +2954,18 @@ async function upsertBookmark(
   // by querying the actual Chrome bookmarks API to prevent duplicates.
   // This addresses the issue where duplicate bookmarks could be created due to
   // race conditions or index synchronization problems.
-  const existingBookmark = await findExistingBookmarkInFolder(url, targetFolderId);
-  
+  const existingBookmark = await findExistingBookmarkInFolder(
+    url,
+    targetFolderId,
+  );
+
   if (existingBookmark) {
     // Bookmark already exists in the target folder, just update title if needed
     if (existingBookmark.title !== title) {
       await bookmarksUpdate(existingBookmark.id, { title });
       stats.bookmarksUpdated += 1;
     }
-    
+
     // Update the context index
     const updatedEntry = {
       id: existingBookmark.id,
@@ -2957,13 +2974,13 @@ async function upsertBookmark(
       url,
       pathSegments: [...folderInfo.pathSegments],
     };
-    
+
     context.index.bookmarks.set(existingBookmark.id, updatedEntry);
     const existingEntries = context.index.bookmarksByUrl.get(url) ?? [];
     const existingIndex = existingEntries.findIndex(
-      (entry) => entry.parentId === targetFolderId
+      (entry) => entry.parentId === targetFolderId,
     );
-    
+
     if (existingIndex >= 0) {
       existingEntries[existingIndex] = updatedEntry;
     } else {
@@ -3216,7 +3233,6 @@ async function ensureUnsortedBookmarkFolder() {
     unsortedId: unsortedFolder.id,
   };
 }
-
 
 /**
  * @typedef {Object} CollectionNode

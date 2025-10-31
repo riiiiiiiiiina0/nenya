@@ -80,6 +80,13 @@
           </a>
         </li>
         <li>
+          <a href="#url-process-rules-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">🔗</span>
+            <span class="text-sm">URL Process Rules</span>
+          </a>
+        </li>
+        <li>
           <a href="#notifications-heading"
             class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔔</span>
@@ -619,8 +626,13 @@
             <h2 id="custom-code-heading" class="card-title text-3xl">💻 Custom JS CSS</h2>
             <p class="text-base-content/70">Inject custom CSS and JavaScript code into pages matching URL patterns.</p>
             <div class="alert alert-info text-sm mt-2">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-              <span>Custom code rules are stored locally on this device. They're included in Raindrop backups and exports for syncing across devices.</span>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                class="stroke-current shrink-0 w-6 h-6">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              <span>Custom code rules are stored locally on this device. They're included in Raindrop backups and
+                exports for syncing across devices.</span>
             </div>
           </div>
           <form id="customCodeRuleForm" class="space-y-4" novalidate>
@@ -641,7 +653,8 @@
               <textarea id="customCodeCSSInput" class="textarea textarea-bordered w-full font-mono text-sm"
                 placeholder="body { background-color: red; }" rows="6"></textarea>
               <span class="label-text-alt text-xs text-base-content/60 mt-2">
-                CSS is injected at the end of the page head for high priority. Use <code>!important</code> if needed to override existing styles.
+                CSS is injected at the end of the page head for high priority. Use <code>!important</code> if needed to
+                override existing styles.
               </span>
             </label>
             <label class="form-control w-full">
@@ -684,11 +697,13 @@
               </div>
               <div class="flex flex-col gap-1">
                 <dt class="text-base-content/70 uppercase tracking-wide text-xs">CSS Code</dt>
-                <dd id="customCodeRuleCSSDetail" class="font-mono text-xs break-words text-base-content whitespace-pre-wrap"></dd>
+                <dd id="customCodeRuleCSSDetail"
+                  class="font-mono text-xs break-words text-base-content whitespace-pre-wrap"></dd>
               </div>
               <div class="flex flex-col gap-1">
                 <dt class="text-base-content/70 uppercase tracking-wide text-xs">JavaScript Code</dt>
-                <dd id="customCodeRuleJSDetail" class="font-mono text-xs break-words text-base-content whitespace-pre-wrap"></dd>
+                <dd id="customCodeRuleJSDetail"
+                  class="font-mono text-xs break-words text-base-content whitespace-pre-wrap"></dd>
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="flex flex-col gap-1">
@@ -710,21 +725,22 @@
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="llm-prompts-heading" class="card-title text-3xl">🤖 LLM Saved Prompts</h2>
-            <p class="text-base-content/70">Create and manage saved prompts for Large Language Models. Each prompt can be associated with one or more LLM providers.</p>
+            <p class="text-base-content/70">Create and manage saved prompts for Large Language Models. Each prompt can
+              be associated with one or more LLM providers.</p>
           </div>
           <form id="llmPromptForm" class="space-y-4" novalidate>
             <label class="form-control w-full">
               <span class="label">
                 <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Prompt name</span>
               </span>
-              <input id="llmPromptNameInput" class="input input-bordered w-full" type="text"
-                autocomplete="off" placeholder="E.g., Code Review Assistant" required>
+              <input id="llmPromptNameInput" class="input input-bordered w-full" type="text" autocomplete="off"
+                placeholder="E.g., Code Review Assistant" required>
             </label>
             <label class="form-control w-full">
               <span class="label">
                 <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Prompt text</span>
               </span>
-              <textarea id="llmPromptTextInput" class="textarea textarea-bordered w-full" 
+              <textarea id="llmPromptTextInput" class="textarea textarea-bordered w-full"
                 placeholder="Enter your prompt text here..." rows="6" required></textarea>
               <span class="label-text-alt text-xs text-base-content/60 mt-2">
                 Enter the prompt text that will be used with the LLM.
@@ -789,6 +805,138 @@
                 Delete
               </button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- URL Process Rules section -->
+      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="url-process-rules-heading">
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="url-process-rules-heading" class="card-title text-3xl">🔗 URL Process Rules</h2>
+            <p class="text-base-content/70">Create rules to process URLs by modifying search parameters based on URL
+              patterns.</p>
+          </div>
+          <form id="urlProcessRuleForm" class="space-y-4" novalidate>
+            <label class="form-control w-full">
+              <span class="label">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Rule name</span>
+              </span>
+              <input id="urlProcessRuleNameInput" class="input input-bordered w-full" type="text" autocomplete="off"
+                placeholder="E.g., Remove tracking parameters" required>
+            </label>
+            <div class="space-y-3">
+              <div class="space-y-2">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL patterns</span>
+                <div class="flex gap-2">
+                  <input id="urlProcessRuleAddPatternInput" class="input input-bordered w-full font-mono text-sm flex-1"
+                    type="text" autocomplete="off" placeholder="https://example.com/*">
+                  <button id="urlProcessRuleAddPatternButton" class="btn btn-square btn-success" type="button">
+                    ➕
+                  </button>
+                </div>
+                <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                  Uses the browser URLPattern syntax (for example <code>*://*.example.com/*</code>).
+                </span>
+                <div id="urlProcessRulePatternsList" class="space-y-2 mt-2"></div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div class="space-y-2">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Processors</span>
+                <div class="flex gap-2">
+                  <select id="urlProcessRuleProcessorTypeSelect" class="select select-bordered w-[250px]">
+                    <option value="add">Add search param</option>
+                    <option value="replace">Replace search param value</option>
+                    <option value="remove">Remove search param</option>
+                  </select>
+                  <input id="urlProcessRuleProcessorNameInput" class="input input-bordered flex-1 font-mono text-sm"
+                    type="text" autocomplete="off" placeholder="Parameter name or regex">
+                  <div class="form-control flex-1">
+                    <input id="urlProcessRuleProcessorValueInput" class="input input-bordered flex-1 font-mono text-sm"
+                      type="text" autocomplete="off" placeholder="Value">
+                  </div>
+                  <button id="urlProcessRuleAddProcessorButton" class="btn btn-square btn-success" type="button">
+                    ➕
+                  </button>
+                </div>
+                <span class="label-text-alt text-xs text-base-content/60 mt-2">
+                  For replace/remove, parameter name can be a regex pattern (e.g., <code>/^utm_/</code>).
+                </span>
+                <div id="urlProcessRuleProcessorsList" class="space-y-2 mt-2"></div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div class="space-y-2">
+                <span class="label-text uppercase tracking-wide text-xs text-base-content/60">When to apply</span>
+                <p class="text-sm text-base-content/70">Select at least one option for when this rule should be applied.
+                </p>
+                <div class="space-y-2">
+                  <label
+                    class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2 cursor-pointer hover:bg-base-300 transition-colors">
+                    <input id="urlProcessRuleApplyWhenCopy" class="checkbox checkbox-sm" type="checkbox">
+                    <span class="text-sm text-base-content">Copy to clipboard</span>
+                  </label>
+                  <label
+                    class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2 cursor-pointer hover:bg-base-300 transition-colors">
+                    <input id="urlProcessRuleApplyWhenRaindrop" class="checkbox checkbox-sm" type="checkbox">
+                    <span class="text-sm text-base-content">Save to Raindrop (to unsorted collection or as
+                      project)</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <p id="urlProcessRuleFormError" class="text-sm text-error" hidden></p>
+            <div class="flex flex-wrap gap-3">
+              <button id="urlProcessRuleSaveButton" class="btn btn-primary" type="submit">
+                Add rule
+              </button>
+              <button id="urlProcessRuleCancelEditButton" class="btn btn-outline" type="button" hidden>
+                Cancel edit
+              </button>
+            </div>
+          </form>
+          <div class="space-y-3">
+            <div>
+              <h3 class="text-lg font-semibold">Saved rules</h3>
+              <p class="text-sm text-base-content/70">Select a rule to view details or manage it.</p>
+            </div>
+            <div id="urlProcessRulesEmpty"
+              class="rounded-lg border border-dashed border-base-300 p-6 text-center text-sm text-base-content/70">
+              No URL process rules yet. Add one above to start.
+            </div>
+            <div id="urlProcessRulesList" class="space-y-2" role="list"></div>
+          </div>
+          <div id="urlProcessRuleDetails" class="rounded-lg border border-base-300 p-4 space-y-3" hidden>
+            <h3 class="text-lg font-semibold">Rule details</h3>
+            <dl class="space-y-2 text-sm">
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Name</dt>
+                <dd id="urlProcessRuleDetailName" class="text-base-content font-medium"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">URL Patterns</dt>
+                <dd id="urlProcessRuleDetailPatterns" class="space-y-1"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Processors</dt>
+                <dd id="urlProcessRuleDetailProcessors" class="space-y-1"></dd>
+              </div>
+              <div class="flex flex-col gap-1">
+                <dt class="text-base-content/70 uppercase tracking-wide text-xs">When to apply</dt>
+                <dd id="urlProcessRuleDetailApplyWhen" class="space-y-1"></dd>
+              </div>
+              <div class="grid gap-2 sm:grid-cols-2">
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Created</dt>
+                  <dd id="urlProcessRuleDetailCreated" class="text-base-content"></dd>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <dt class="text-base-content/70 uppercase tracking-wide text-xs">Last updated</dt>
+                  <dd id="urlProcessRuleDetailUpdated" class="text-base-content"></dd>
+                </div>
+              </div>
+            </dl>
           </div>
         </div>
       </section>
