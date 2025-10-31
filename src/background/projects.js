@@ -12,6 +12,7 @@ import {
   pushNotification,
   getNotificationPreferences,
 } from './mirror.js';
+import { processUrl } from '../shared/urlProcessor.js';
 
 /**
  * @typedef {Object} ProjectTabDescriptor
@@ -105,8 +106,7 @@ export const SAVE_PROJECT_MESSAGE = 'projects:saveProject';
 export const LIST_PROJECTS_MESSAGE = 'projects:listProjects';
 export const GET_CACHED_PROJECTS_MESSAGE = 'projects:getCachedProjects';
 export const ADD_PROJECT_TABS_MESSAGE = 'projects:addTabsToProject';
-export const REPLACE_PROJECT_ITEMS_MESSAGE =
-  'projects:replaceProjectItems';
+export const REPLACE_PROJECT_ITEMS_MESSAGE = 'projects:replaceProjectItems';
 export const DELETE_PROJECT_MESSAGE = 'projects:deleteProject';
 export const RESTORE_PROJECT_TABS_MESSAGE = 'projects:restoreProjectTabs';
 
@@ -125,28 +125,47 @@ const CACHED_PROJECTS_TIMESTAMP_KEY = 'cachedProjectsTimestamp';
  */
 async function showProjectSaveNotification(result) {
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.saveProject) {
+  if (
+    !preferences.enabled ||
+    !preferences.project?.enabled ||
+    !preferences.project?.saveProject
+  ) {
     return;
   }
 
   if (result.ok) {
     const title = `Project "${result.projectName}" Saved`;
-    const message = `Successfully saved ${result.created} tab${result.created !== 1 ? 's' : ''}`;
+    const message = `Successfully saved ${result.created} tab${
+      result.created !== 1 ? 's' : ''
+    }`;
     const contextParts = [];
-    
+
     if (result.skipped > 0) {
       contextParts.push(`${result.skipped} skipped`);
     }
     if (result.failed > 0) {
       contextParts.push(`${result.failed} failed`);
     }
-    
-    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
-    const targetUrl = result.collectionId ? buildRaindropCollectionUrl(result.collectionId) : undefined;
-    await pushNotification('project-save-success', title, message, targetUrl, contextMessage);
+
+    const contextMessage =
+      contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    const targetUrl = result.collectionId
+      ? buildRaindropCollectionUrl(result.collectionId)
+      : undefined;
+    await pushNotification(
+      'project-save-success',
+      title,
+      message,
+      targetUrl,
+      contextMessage,
+    );
   } else {
     const reason = result.error || 'Unknown error';
-    await pushNotification('project-save-failure', 'Failed to Save Project', reason);
+    await pushNotification(
+      'project-save-failure',
+      'Failed to Save Project',
+      reason,
+    );
   }
 }
 
@@ -157,25 +176,40 @@ async function showProjectSaveNotification(result) {
  */
 async function showAddTabsNotification(result) {
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.addTabs) {
+  if (
+    !preferences.enabled ||
+    !preferences.project?.enabled ||
+    !preferences.project?.addTabs
+  ) {
     return;
   }
 
   if (result.ok) {
     const title = `Added to "${result.projectName}"`;
-    const message = `Successfully added ${result.created} tab${result.created !== 1 ? 's' : ''}`;
+    const message = `Successfully added ${result.created} tab${
+      result.created !== 1 ? 's' : ''
+    }`;
     const contextParts = [];
-    
+
     if (result.skipped > 0) {
       contextParts.push(`${result.skipped} skipped`);
     }
     if (result.failed > 0) {
       contextParts.push(`${result.failed} failed`);
     }
-    
-    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
-    const targetUrl = result.collectionId ? buildRaindropCollectionUrl(result.collectionId) : undefined;
-    await pushNotification('project-add-success', title, message, targetUrl, contextMessage);
+
+    const contextMessage =
+      contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    const targetUrl = result.collectionId
+      ? buildRaindropCollectionUrl(result.collectionId)
+      : undefined;
+    await pushNotification(
+      'project-add-success',
+      title,
+      message,
+      targetUrl,
+      contextMessage,
+    );
   } else {
     const reason = result.error || 'Unknown error';
     await pushNotification('project-add-failure', 'Failed to Add Tabs', reason);
@@ -189,28 +223,47 @@ async function showAddTabsNotification(result) {
  */
 async function showReplaceItemsNotification(result) {
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.replaceItems) {
+  if (
+    !preferences.enabled ||
+    !preferences.project?.enabled ||
+    !preferences.project?.replaceItems
+  ) {
     return;
   }
 
   if (result.ok) {
     const title = `Project "${result.projectName}" Updated`;
-    const message = `Successfully replaced with ${result.created} tab${result.created !== 1 ? 's' : ''}`;
+    const message = `Successfully replaced with ${result.created} tab${
+      result.created !== 1 ? 's' : ''
+    }`;
     const contextParts = [];
-    
+
     if (result.skipped > 0) {
       contextParts.push(`${result.skipped} skipped`);
     }
     if (result.failed > 0) {
       contextParts.push(`${result.failed} failed`);
     }
-    
-    const contextMessage = contextParts.length > 0 ? contextParts.join(', ') : undefined;
-    const targetUrl = result.collectionId ? buildRaindropCollectionUrl(result.collectionId) : undefined;
-    await pushNotification('project-replace-success', title, message, targetUrl, contextMessage);
+
+    const contextMessage =
+      contextParts.length > 0 ? contextParts.join(', ') : undefined;
+    const targetUrl = result.collectionId
+      ? buildRaindropCollectionUrl(result.collectionId)
+      : undefined;
+    await pushNotification(
+      'project-replace-success',
+      title,
+      message,
+      targetUrl,
+      contextMessage,
+    );
   } else {
     const reason = result.error || 'Unknown error';
-    await pushNotification('project-replace-failure', 'Failed to Replace Items', reason);
+    await pushNotification(
+      'project-replace-failure',
+      'Failed to Replace Items',
+      reason,
+    );
   }
 }
 
@@ -222,7 +275,11 @@ async function showReplaceItemsNotification(result) {
  */
 async function showDeleteProjectNotification(result, projectName) {
   const preferences = await getNotificationPreferences();
-  if (!preferences.enabled || !preferences.project?.enabled || !preferences.project?.deleteProject) {
+  if (
+    !preferences.enabled ||
+    !preferences.project?.enabled ||
+    !preferences.project?.deleteProject
+  ) {
     return;
   }
 
@@ -232,7 +289,11 @@ async function showDeleteProjectNotification(result, projectName) {
     await pushNotification('project-delete-success', title, message);
   } else {
     const reason = result.error || 'Unknown error';
-    await pushNotification('project-delete-failure', 'Failed to Delete Project', reason);
+    await pushNotification(
+      'project-delete-failure',
+      'Failed to Delete Project',
+      reason,
+    );
   }
 }
 
@@ -909,11 +970,7 @@ export async function replaceProjectItems(projectId, rawTabs) {
     });
 
     for (const tab of resolved.tabs) {
-      const itemPayload = buildProjectItemPayload(
-        tab,
-        context,
-        normalizedId,
-      );
+      const itemPayload = buildProjectItemPayload(tab, context, normalizedId);
       try {
         await raindropRequest('/raindrop', tokens, {
           method: 'POST',
@@ -959,7 +1016,7 @@ export async function replaceProjectItems(projectId, rawTabs) {
  */
 export async function deleteProject(projectId) {
   const badgeAnimation = animateActionBadge(CLOCK_SEQUENCE);
-  
+
   try {
     const normalizedId = Number(projectId);
     if (!Number.isFinite(normalizedId) || normalizedId <= 0) {
@@ -977,14 +1034,18 @@ export async function deleteProject(projectId) {
     if (!tokens) {
       return {
         ok: false,
-        error: 'No Raindrop connection found. Connect in Options to enable deletion.',
+        error:
+          'No Raindrop connection found. Connect in Options to enable deletion.',
       };
     }
 
     // Get project name before deletion for notification
     let projectName = 'Project';
     try {
-      const collectionResponse = await raindropRequest(`/collection/${normalizedId}`, tokens);
+      const collectionResponse = await raindropRequest(
+        `/collection/${normalizedId}`,
+        tokens,
+      );
       if (collectionResponse?.item?.title) {
         projectName = collectionResponse.item.title;
       }
@@ -1010,7 +1071,10 @@ export async function deleteProject(projectId) {
     }
 
     // Clear cached projects since we deleted one
-    await chrome.storage.local.remove([CACHED_PROJECTS_KEY, CACHED_PROJECTS_TIMESTAMP_KEY]);
+    await chrome.storage.local.remove([
+      CACHED_PROJECTS_KEY,
+      CACHED_PROJECTS_TIMESTAMP_KEY,
+    ]);
 
     const result = { ok: true };
     await showDeleteProjectNotification(result, projectName);
@@ -1032,12 +1096,17 @@ export async function deleteProject(projectId) {
 export async function clearAllProjectData() {
   try {
     // Clear project cache
-    await chrome.storage.local.remove([CACHED_PROJECTS_KEY, CACHED_PROJECTS_TIMESTAMP_KEY]);
-    
+    await chrome.storage.local.remove([
+      CACHED_PROJECTS_KEY,
+      CACHED_PROJECTS_TIMESTAMP_KEY,
+    ]);
+
     // Clear all custom title records
     const allStorage = await chrome.storage.local.get(null);
-    const customTitleKeys = Object.keys(allStorage).filter(key => key.startsWith('customTitle_'));
-    
+    const customTitleKeys = Object.keys(allStorage).filter((key) =>
+      key.startsWith('customTitle_'),
+    );
+
     if (customTitleKeys.length > 0) {
       await chrome.storage.local.remove(customTitleKeys);
     }
@@ -1262,11 +1331,13 @@ export async function listSavedProjects() {
       const countValue = Number(collection?.count);
       const itemCount =
         Number.isFinite(countValue) && countValue >= 0 ? countValue : 0;
-      
+
       // Extract cover URL from collection
-      const coverArray = Array.isArray(collection?.cover) ? collection.cover : [];
+      const coverArray = Array.isArray(collection?.cover)
+        ? collection.cover
+        : [];
       const cover = coverArray.length > 0 ? coverArray[0] : undefined;
-      
+
       projects.push({
         id,
         title,
@@ -1336,9 +1407,12 @@ function sanitizeProjectItemsForRestore(items) {
 
     const metadata = parseProjectItemMetadata(item);
     const title = normalizeBookmarkTitle(item?.title, normalizedUrl);
-    const finalTitle = metadata.customTitle && typeof metadata.customTitle === 'string' && metadata.customTitle.trim() !== ''
-      ? metadata.customTitle.trim()
-      : title;
+    const finalTitle =
+      metadata.customTitle &&
+      typeof metadata.customTitle === 'string' &&
+      metadata.customTitle.trim() !== ''
+        ? metadata.customTitle.trim()
+        : title;
 
     entries.push({
       url: normalizedUrl,
@@ -1468,17 +1542,18 @@ async function applyProjectRestore(entries, options) {
   const existingTabCount = existingTabs.length;
 
   // Check if current window has only 1 empty tab (new tab page)
-  const hasOnlyEmptyTab = existingTabCount === 1 && 
-    existingTabs[0] && 
-    existingTabs[0].url && 
-    (existingTabs[0].url === 'chrome://newtab/' || 
-     existingTabs[0].url === 'chrome://new-tab-page/' ||
-     existingTabs[0].url === 'edge://newtab/' ||
-     existingTabs[0].url === 'about:newtab' ||
-     existingTabs[0].url === 'about:blank' ||
-     existingTabs[0].url.startsWith('chrome://newtab/') ||
-     existingTabs[0].url.startsWith('chrome://new-tab-page/') ||
-     existingTabs[0].url.startsWith('edge://newtab/'));
+  const hasOnlyEmptyTab =
+    existingTabCount === 1 &&
+    existingTabs[0] &&
+    existingTabs[0].url &&
+    (existingTabs[0].url === 'chrome://newtab/' ||
+      existingTabs[0].url === 'chrome://new-tab-page/' ||
+      existingTabs[0].url === 'edge://newtab/' ||
+      existingTabs[0].url === 'about:newtab' ||
+      existingTabs[0].url === 'about:blank' ||
+      existingTabs[0].url.startsWith('chrome://newtab/') ||
+      existingTabs[0].url.startsWith('chrome://new-tab-page/') ||
+      existingTabs[0].url.startsWith('edge://newtab/'));
 
   const sortedEntries = sortProjectRestoreEntries(entries);
   /** @type {{ tab: chrome.tabs.Tab, entry: ProjectRestoreEntry }[]} */
@@ -1506,19 +1581,28 @@ async function applyProjectRestore(entries, options) {
           pinnedOffset += 1;
           outcome.pinned += 1;
         }
-        
+
         // Save custom title as object with tab ID, URL, and title to local storage if it exists
-        if (entry.customTitle && typeof entry.customTitle === 'string' && entry.customTitle.trim() !== '') {
+        if (
+          entry.customTitle &&
+          typeof entry.customTitle === 'string' &&
+          entry.customTitle.trim() !== ''
+        ) {
           try {
             await chrome.storage.local.set({
               [`customTitle_${tab.id}`]: {
                 tabId: tab.id,
                 url: entry.url,
-                title: entry.customTitle.trim()
-              }
+                title: entry.customTitle.trim(),
+              },
             });
           } catch (error) {
-            console.log('Could not save custom title for tab', tab.id, ':', error);
+            console.log(
+              'Could not save custom title for tab',
+              tab.id,
+              ':',
+              error,
+            );
           }
         }
       }
@@ -1604,16 +1688,33 @@ async function applyProjectRestore(entries, options) {
     }
     try {
       const groupId = await tabsGroup({
-        tabIds: record.tabIds.length === 1 ? record.tabIds[0] : /** @type {[number, ...number[]]} */ (record.tabIds),
+        tabIds:
+          record.tabIds.length === 1
+            ? record.tabIds[0]
+            : /** @type {[number, ...number[]]} */ (record.tabIds),
         createProperties: { windowId },
       });
       outcome.grouped += 1;
       try {
         await tabGroupsUpdate(groupId, {
           title: record.meta.name || 'Tab group',
-          color: (record.meta.color && ['grey', 'blue', 'cyan', 'green', 'orange', 'pink', 'purple', 'red', 'yellow'].includes(record.meta.color)) 
-            ? /** @type {'grey' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'yellow'} */ (record.meta.color)
-            : 'grey',
+          color:
+            record.meta.color &&
+            [
+              'grey',
+              'blue',
+              'cyan',
+              'green',
+              'orange',
+              'pink',
+              'purple',
+              'red',
+              'yellow',
+            ].includes(record.meta.color)
+              ? /** @type {'grey' | 'blue' | 'cyan' | 'green' | 'orange' | 'pink' | 'purple' | 'red' | 'yellow'} */ (
+                  record.meta.color
+                )
+              : 'grey',
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -1657,7 +1758,8 @@ async function applyProjectRestore(entries, options) {
             title: projectName,
           });
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           outcome.errors.push('Group ' + projectName + ': ' + message);
         }
       } catch (error) {
@@ -1793,6 +1895,9 @@ async function resolveProjectTabs(descriptors) {
         continue;
       }
 
+      // Process URL according to URL processing rules
+      const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+
       const title =
         typeof tab?.title === 'string' ? tab.title : descriptor.title;
       results.push({
@@ -1807,7 +1912,7 @@ async function resolveProjectTabs(descriptors) {
           ? Number(tab.groupId)
           : descriptor.groupId,
         pinned: Boolean(tab?.pinned ?? descriptor.pinned),
-        url: normalizedUrl,
+        url: processedUrl,
         title: typeof title === 'string' ? title : '',
       });
     } catch (error) {
@@ -1838,8 +1943,10 @@ async function buildProjectGroupContext(tabs) {
   }
 
   // Fetch custom titles for all tabs
-  const tabIds = tabs.map(tab => tab.id).filter(id => typeof id === 'number');
-  const customTitleKeys = tabIds.map(id => `customTitle_${id}`);
+  const tabIds = tabs
+    .map((tab) => tab.id)
+    .filter((id) => typeof id === 'number');
+  const customTitleKeys = tabIds.map((id) => `customTitle_${id}`);
   if (customTitleKeys.length > 0) {
     try {
       const customTitles = await chrome.storage.local.get(customTitleKeys);
@@ -1849,7 +1956,10 @@ async function buildProjectGroupContext(tabs) {
           return;
         }
 
-        if (typeof customTitleData === 'string' && customTitleData.trim() !== '') {
+        if (
+          typeof customTitleData === 'string' &&
+          customTitleData.trim() !== ''
+        ) {
           context.customTitles.set(id, customTitleData.trim());
           return;
         }
@@ -2055,7 +2165,10 @@ async function createProjectCollection(tokens, projectName) {
   try {
     coverUrl = await searchForCover(tokens, projectName);
   } catch (error) {
-    console.warn('[projects] Cover search failed, proceeding without cover:', error);
+    console.warn(
+      '[projects] Cover search failed, proceeding without cover:',
+      error,
+    );
   }
 
   const payload = {
@@ -2181,7 +2294,11 @@ function buildProjectItemPayload(tab, context, collectionId) {
 
   // Include custom title in metadata if it exists
   const customTitle = context.customTitles?.get(tab.id);
-  if (customTitle && typeof customTitle === 'string' && customTitle.trim() !== '') {
+  if (
+    customTitle &&
+    typeof customTitle === 'string' &&
+    customTitle.trim() !== ''
+  ) {
     metadata.customTitle = customTitle.trim();
   }
 
@@ -2202,19 +2319,32 @@ function buildProjectItemPayload(tab, context, collectionId) {
 function parseProjectItemMetadata(item) {
   const excerpt = typeof item?.excerpt === 'string' ? item.excerpt : '';
   if (!excerpt) {
-    return { tabIndex: undefined, group: undefined, pinned: false, customTitle: undefined };
+    return {
+      tabIndex: undefined,
+      group: undefined,
+      pinned: false,
+      customTitle: undefined,
+    };
   }
 
   try {
     const parsed = JSON.parse(excerpt);
     if (!parsed || typeof parsed !== 'object') {
-      return { tabIndex: undefined, group: undefined, pinned: false, customTitle: undefined };
+      return {
+        tabIndex: undefined,
+        group: undefined,
+        pinned: false,
+        customTitle: undefined,
+      };
     }
 
     const tabIndexValue = Number(parsed?.tab?.index);
     const tabIndex = Number.isFinite(tabIndexValue) ? tabIndexValue : undefined;
     const pinned = Boolean(parsed?.tab?.pinned);
-    const customTitle = typeof parsed?.customTitle === 'string' ? parsed.customTitle.trim() : undefined;
+    const customTitle =
+      typeof parsed?.customTitle === 'string'
+        ? parsed.customTitle.trim()
+        : undefined;
 
     const groupValue = parsed?.group;
     if (!groupValue || typeof groupValue !== 'object') {
@@ -2239,7 +2369,12 @@ function parseProjectItemMetadata(item) {
       customTitle,
     };
   } catch (error) {
-    return { tabIndex: undefined, group: undefined, pinned: false, customTitle: undefined };
+    return {
+      tabIndex: undefined,
+      group: undefined,
+      pinned: false,
+      customTitle: undefined,
+    };
   }
 }
 

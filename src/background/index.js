@@ -46,6 +46,7 @@ import {
   isLLMPage,
   getLLMProviderFromURL,
 } from '../shared/llmProviders.js';
+import { processUrl } from '../shared/urlProcessor.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -854,14 +855,17 @@ async function injectLLMPageInjector(tabId) {
   try {
     // Wait for tab to be ready first
     await waitForTabReady(tabId);
-    
+
     // Inject the script
     await chrome.scripting.executeScript({
       target: { tabId },
       files: ['src/contentScript/llmPageInjector.js'],
     });
-    
-    console.log('[background] LLM page injector injected successfully for tab', tabId);
+
+    console.log(
+      '[background] LLM page injector injected successfully for tab',
+      tabId,
+    );
     return true;
   } catch (error) {
     console.error('[background] Failed to inject LLM page injector:', error);
@@ -947,7 +951,10 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
             // Small delay to ensure script is settled
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            console.log('[background] Sending data to current tab', currentTab.id);
+            console.log(
+              '[background] Sending data to current tab',
+              currentTab.id,
+            );
             await chrome.tabs.sendMessage(currentTab.id, {
               type: 'inject-llm-data',
               tabs: contents,
@@ -1526,7 +1533,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'INJECT_CUSTOM_JS') {
     const ruleId = message.ruleId;
     const code = typeof message.code === 'string' ? message.code : '';
-    
+
     if (!code || !sender.tab || typeof sender.tab.id !== 'number') {
       sendResponse({ success: false, error: 'Invalid request' });
       return false;
@@ -1547,10 +1554,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               // Use indirect eval to execute in global scope
               (0, eval)(jsCode);
             } catch (error) {
-              console.error('[Nenya CustomCode] Script execution error:', error);
+              console.error(
+                '[Nenya CustomCode] Script execution error:',
+                error,
+              );
             }
           },
-          args: [code]
+          args: [code],
         });
 
         sendResponse({ success: true });
@@ -1961,14 +1971,19 @@ function setupContextMenus() {
 }
 
 if (chrome.contextMenus) {
-  chrome.contextMenus.onClicked.addListener((info, tab) => {
+  chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (info.menuItemId === CONTEXT_MENU_SAVE_PAGE_ID) {
       const url = typeof info.pageUrl === 'string' ? info.pageUrl : '';
       if (!url) {
         return;
       }
+      const normalizedUrl = normalizeHttpUrl(url);
+      if (!normalizedUrl) {
+        return;
+      }
+      const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
       const title = typeof tab?.title === 'string' ? tab.title : '';
-      void saveUrlsToUnsorted([{ url, title }]).catch((error) => {
+      void saveUrlsToUnsorted([{ url: processedUrl, title }]).catch((error) => {
         console.error('[contextMenu] Failed to save page:', error);
       });
       return;
@@ -1979,11 +1994,16 @@ if (chrome.contextMenus) {
       if (!url) {
         return;
       }
+      const normalizedUrl = normalizeHttpUrl(url);
+      if (!normalizedUrl) {
+        return;
+      }
+      const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
       const selection =
         typeof info.selectionText === 'string' ? info.selectionText.trim() : '';
       const title =
         selection || (typeof tab?.title === 'string' ? tab.title : '');
-      void saveUrlsToUnsorted([{ url, title }]).catch((error) => {
+      void saveUrlsToUnsorted([{ url: processedUrl, title }]).catch((error) => {
         console.error('[contextMenu] Failed to save link:', error);
       });
       return;
