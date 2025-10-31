@@ -12,6 +12,7 @@ import {
 } from './brightMode.js';
 import { loadRules as loadHighlightTextRules } from './highlightText.js';
 import { loadLLMPrompts } from './llmPrompts.js';
+import { loadRules as loadUrlProcessRules } from './urlProcessRules.js';
 
 /**
  * @typedef {Object} RootFolderSettings
@@ -122,6 +123,43 @@ import { loadLLMPrompts } from './llmPrompts.js';
  */
 
 /**
+ * @typedef {Object} LLMPromptSettings
+ * @property {string} id
+ * @property {string} name
+ * @property {string} prompt
+ * @property {boolean} requireSearch
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
+ * @typedef {'add' | 'replace' | 'remove'} ProcessorType
+ */
+
+/**
+ * @typedef {'copy-to-clipboard' | 'save-to-raindrop'} ApplyWhenOption
+ */
+
+/**
+ * @typedef {Object} UrlProcessor
+ * @property {string} id
+ * @property {ProcessorType} type
+ * @property {string} name - Parameter name (string or regex pattern)
+ * @property {string} [value] - Value for add/replace processors
+ */
+
+/**
+ * @typedef {Object} UrlProcessRuleSettings
+ * @property {string} id
+ * @property {string} name
+ * @property {string[]} urlPatterns
+ * @property {UrlProcessor[]} processors
+ * @property {ApplyWhenOption[]} applyWhen - When to apply this rule
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
@@ -132,6 +170,7 @@ import { loadLLMPrompts } from './llmPrompts.js';
  * @property {BlockElementRuleSettings[]} blockElementRules
  * @property {CustomCodeRuleSettings[]} customCodeRules
  * @property {LLMPromptSettings[]} llmPrompts
+ * @property {UrlProcessRuleSettings[]} urlProcessRules
  */
 
 /**
@@ -141,7 +180,7 @@ import { loadLLMPrompts } from './llmPrompts.js';
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 8;
+const EXPORT_VERSION = 9;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
@@ -151,6 +190,7 @@ const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
+const URL_PROCESS_RULES_KEY = 'urlProcessRules';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
@@ -681,6 +721,136 @@ function normalizeLLMPrompts(value) {
 }
 
 /**
+ * Normalize URL process rules from storage or input.
+ * @param {unknown} value
+ * @returns {UrlProcessRuleSettings[]}
+ */
+function normalizeUrlProcessRules(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {UrlProcessRuleSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw =
+      /** @type {{ id?: unknown, name?: unknown, urlPatterns?: unknown, processors?: unknown, applyWhen?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        entry
+      );
+    const name = typeof raw.name === 'string' ? raw.name.trim() : '';
+    if (!name) {
+      return;
+    }
+
+    const urlPatterns = Array.isArray(raw.urlPatterns)
+      ? raw.urlPatterns
+          .map((p) => (typeof p === 'string' ? p.trim() : ''))
+          .filter((p) => p && isValidUrlPattern(p))
+      : [];
+    if (urlPatterns.length === 0) {
+      return;
+    }
+
+    const processors = Array.isArray(raw.processors)
+      ? raw.processors
+          .map((p) => {
+            if (!p || typeof p !== 'object') {
+              return null;
+            }
+            const procRaw =
+              /** @type {{ id?: unknown, type?: unknown, name?: unknown, value?: unknown }} */ (
+                p
+              );
+            const type = procRaw.type;
+            if (
+              typeof type !== 'string' ||
+              !['add', 'replace', 'remove'].includes(type)
+            ) {
+              return null;
+            }
+            const procName =
+              typeof procRaw.name === 'string' ? procRaw.name.trim() : '';
+            if (!procName) {
+              return null;
+            }
+            // For replace and remove, name can be regex
+            if (type === 'replace' || type === 'remove') {
+              if (procName.startsWith('/') && procName.endsWith('/')) {
+                const regexPattern = procName.slice(1, -1);
+                try {
+                  new RegExp(regexPattern);
+                } catch {
+                  return null;
+                }
+              }
+            }
+            const procId =
+              typeof procRaw.id === 'string' && procRaw.id.trim()
+                ? procRaw.id.trim()
+                : generateRuleId();
+
+            /** @type {UrlProcessor} */
+            const processor = {
+              id: procId,
+              type: /** @type {'add' | 'replace' | 'remove'} */ (type),
+              name: procName,
+            };
+
+            if (type === 'add' || type === 'replace') {
+              const procValue =
+                typeof procRaw.value === 'string' ? procRaw.value : '';
+              processor.value = procValue;
+            }
+
+            return processor;
+          })
+          .filter((p) => p !== null)
+      : [];
+    if (processors.length === 0) {
+      return;
+    }
+
+    const applyWhen = Array.isArray(raw.applyWhen)
+      ? raw.applyWhen.filter((aw) =>
+          ['copy-to-clipboard', 'save-to-raindrop'].includes(aw),
+        )
+      : [];
+    if (applyWhen.length === 0) {
+      return;
+    }
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {UrlProcessRuleSettings} */
+    const normalized = {
+      id,
+      name,
+      urlPatterns,
+      processors,
+      applyWhen: /** @type {ApplyWhenOption[]} */ (applyWhen),
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -749,7 +919,7 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[] }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[], urlProcessRules: UrlProcessRuleSettings[] }>}
  */
 async function readCurrentOptions() {
   const [
@@ -762,6 +932,7 @@ async function readCurrentOptions() {
     blockElementResp,
     customCodeResp,
     llmPromptsResp,
+    urlProcessRulesResp,
   ] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
@@ -772,6 +943,7 @@ async function readCurrentOptions() {
     chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
     loadLLMPrompts(),
+    loadUrlProcessRules(),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -829,6 +1001,8 @@ async function readCurrentOptions() {
   );
   
   const llmPrompts = normalizeLLMPrompts(llmPromptsResp);
+  
+  const urlProcessRules = normalizeUrlProcessRules(urlProcessRulesResp);
 
   return {
     rootFolder,
@@ -839,6 +1013,7 @@ async function readCurrentOptions() {
     blockElementRules,
     customCodeRules,
     llmPrompts,
+    urlProcessRules,
   };
 }
 
@@ -878,6 +1053,7 @@ async function handleExportClick() {
       blockElementRules,
       customCodeRules,
       llmPrompts,
+      urlProcessRules,
     } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
@@ -892,6 +1068,7 @@ async function handleExportClick() {
         blockElementRules,
         customCodeRules,
         llmPrompts,
+        urlProcessRules,
       },
     };
     const now = new Date();
@@ -920,6 +1097,7 @@ async function handleExportClick() {
  * @param {BlockElementRuleSettings[]} blockElementRules
  * @param {CustomCodeRuleSettings[]} customCodeRules
  * @param {LLMPromptSettings[]} llmPrompts
+ * @param {UrlProcessRuleSettings[]} urlProcessRules
  * @returns {Promise<void>}
  */
 async function applyImportedOptions(
@@ -931,6 +1109,7 @@ async function applyImportedOptions(
   blockElementRules,
   customCodeRules,
   llmPrompts,
+  urlProcessRules,
 ) {
   let parentFolderId = '';
   const desiredPath =
@@ -987,6 +1166,8 @@ async function applyImportedOptions(
   );
   
   const sanitizedLLMPrompts = normalizeLLMPrompts(llmPrompts || []);
+  
+  const sanitizedUrlProcessRules = normalizeUrlProcessRules(urlProcessRules || []);
 
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
@@ -1023,6 +1204,7 @@ async function applyImportedOptions(
       [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
       [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
       [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
+      [URL_PROCESS_RULES_KEY]: sanitizedUrlProcessRules,
     }),
     chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
@@ -1075,6 +1257,9 @@ async function handleFileChosen() {
     const llmPrompts = /** @type {LLMPromptSettings[]} */ (
       data.llmPrompts || []
     );
+    const urlProcessRules = /** @type {UrlProcessRuleSettings[]} */ (
+      data.urlProcessRules || []
+    );
 
     // Handle bright mode settings - support both old and new format
     let brightModeSettings = data.brightModeSettings;
@@ -1099,6 +1284,7 @@ async function handleFileChosen() {
       blockElementRules,
       customCodeRules,
       llmPrompts,
+      urlProcessRules,
     );
     showToast('Options imported successfully.', 'success');
   } catch (error) {
