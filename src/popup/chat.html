@@ -127,23 +127,21 @@
   <div class="chat-container">
     <!-- Header -->
     <div class="navbar bg-base-100 shadow-sm flex-none">
-      <div class="flex-1">
-        <button id="backButton" class="btn btn-ghost btn-sm" type="button">
-          ← Back
-        </button>
-        <span class="ml-2 text-lg font-semibold">Chat with LLM</span>
-      </div>
-      <div class="flex-none">
+      <button id="backButton" class="btn btn-ghost btn-sm" type="button">
+        ← Back
+      </button>
+      <div class="ml-2 mt-1/2 text-lg font-semibold flex-1 truncate">Chat with LLM</div>
+      <div class="tooltip tooltip-left" data-tip="Edit saved prompts">
         <a id="editPromptsButton" class="btn btn-ghost btn-sm" href="../options/index.html#llm-prompts-heading"
-          target="_blank" title="Edit saved prompts">
+          target="_blank">
           ✏️
         </a>
       </div>
     </div>
 
     <!-- Main content area -->
-    <div class="content-area p-4">
-      <textarea id="promptTextarea" class="textarea w-full"
+    <div class="content-area">
+      <textarea id="promptTextarea" class="textarea w-full !rounded-none !border-none !outline-none !shadow-none"
         placeholder="Type your prompt here...&#10;&#10;Type '/' to select a saved prompt&#10;Type '@' to select an LLM provider"></textarea>
 
       <!-- Dropdown menus -->
