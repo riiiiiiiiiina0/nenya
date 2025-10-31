@@ -2144,3 +2144,41 @@ if (chrome.contextMenus) {
     }
   });
 }
+
+// ============================================================================
+// URL PROCESSING ON TAB OPEN
+// ============================================================================
+
+/**
+ * Process URLs when tabs are opened or navigated to
+ */
+if (chrome.webNavigation) {
+  chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+    // Only process top-level navigation (not iframes)
+    if (details.frameId !== 0) {
+      return;
+    }
+
+    // Ignore about:, chrome:, and extension URLs
+    if (
+      details.url.startsWith('about:') ||
+      details.url.startsWith('chrome:') ||
+      details.url.startsWith('chrome-extension:')
+    ) {
+      return;
+    }
+
+    try {
+      // Process the URL with 'open-in-new-tab' context
+      const processedUrl = await processUrl(details.url, 'open-in-new-tab');
+
+      // If URL was modified, update the tab
+      if (processedUrl !== details.url) {
+        console.log('[urlProcessor] Processing URL on tab open:', details.url, '->', processedUrl);
+        await chrome.tabs.update(details.tabId, { url: processedUrl });
+      }
+    } catch (error) {
+      console.error('[urlProcessor] Failed to process URL on tab open:', error);
+    }
+  });
+}

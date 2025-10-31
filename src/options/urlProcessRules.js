@@ -5,7 +5,7 @@
  */
 
 /**
- * @typedef {'copy-to-clipboard' | 'save-to-raindrop'} ApplyWhenOption
+ * @typedef {'copy-to-clipboard' | 'save-to-raindrop' | 'open-in-new-tab'} ApplyWhenOption
  */
 
 /**
@@ -287,7 +287,7 @@ function normalizeRules(value) {
 
       const applyWhen = Array.isArray(raw.applyWhen)
         ? raw.applyWhen.filter((aw) =>
-            ['copy-to-clipboard', 'save-to-raindrop'].includes(aw),
+            ['copy-to-clipboard', 'save-to-raindrop', 'open-in-new-tab'].includes(aw),
           )
         : [];
       if (applyWhen.length === 0) {
@@ -550,6 +550,7 @@ function renderDetails(ruleId) {
     const applyWhenLabels = {
       'copy-to-clipboard': 'Copy to clipboard',
       'save-to-raindrop': 'Save to Raindrop',
+      'open-in-new-tab': 'Open in new tab',
     };
     applyWhenContainer.innerHTML = rule.applyWhen
       .map((aw) => {
@@ -1123,12 +1124,16 @@ function updateProcessorFormVisibility() {
 function updateApplyWhenDisplay() {
   const copyCheckbox = document.getElementById('urlProcessRuleApplyWhenCopy');
   const raindropCheckbox = document.getElementById('urlProcessRuleApplyWhenRaindrop');
+  const openTabCheckbox = document.getElementById('urlProcessRuleApplyWhenOpenTab');
 
   if (copyCheckbox) {
     copyCheckbox.checked = editingApplyWhen.includes('copy-to-clipboard');
   }
   if (raindropCheckbox) {
     raindropCheckbox.checked = editingApplyWhen.includes('save-to-raindrop');
+  }
+  if (openTabCheckbox) {
+    openTabCheckbox.checked = editingApplyWhen.includes('open-in-new-tab');
   }
 }
 
@@ -1211,6 +1216,7 @@ function init() {
   // Apply when checkboxes
   const copyCheckbox = document.getElementById('urlProcessRuleApplyWhenCopy');
   const raindropCheckbox = document.getElementById('urlProcessRuleApplyWhenRaindrop');
+  const openTabCheckbox = document.getElementById('urlProcessRuleApplyWhenOpenTab');
 
   if (copyCheckbox) {
     copyCheckbox.addEventListener('change', (e) => {
@@ -1223,6 +1229,13 @@ function init() {
     raindropCheckbox.addEventListener('change', (e) => {
       const target = /** @type {HTMLInputElement} */ (e.target);
       handleApplyWhenChange('save-to-raindrop', target.checked);
+    });
+  }
+
+  if (openTabCheckbox) {
+    openTabCheckbox.addEventListener('change', (e) => {
+      const target = /** @type {HTMLInputElement} */ (e.target);
+      handleApplyWhenChange('open-in-new-tab', target.checked);
     });
   }
 

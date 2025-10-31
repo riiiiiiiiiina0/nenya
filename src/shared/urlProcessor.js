@@ -5,7 +5,7 @@
  */
 
 /**
- * @typedef {'copy-to-clipboard' | 'save-to-raindrop'} ApplyWhenOption
+ * @typedef {'copy-to-clipboard' | 'save-to-raindrop' | 'open-in-new-tab'} ApplyWhenOption
  */
 
 /**
