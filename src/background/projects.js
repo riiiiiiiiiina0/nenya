@@ -1398,7 +1398,16 @@ function sanitizeProjectItemsForRestore(items) {
   }
 
   items.forEach((item, index) => {
-    const rawLink = typeof item?.link === 'string' ? item.link : '';
+    let rawLink = typeof item?.link === 'string' ? item.link : '';
+
+    // Special handling for split page URLs
+    if (rawLink.startsWith('https://nenya.local/split.html')) {
+      rawLink = rawLink.replace(
+        'https://nenya.local/split.html',
+        chrome.runtime.getURL('src/split/split.html'),
+      );
+    }
+
     const normalizedUrl = normalizeHttpUrl(rawLink);
     if (!normalizedUrl) {
       errors.push('Item at index ' + index + ' is missing a supported URL.');
@@ -1896,7 +1905,16 @@ async function resolveProjectTabs(descriptors) {
       }
 
       // Process URL according to URL processing rules
-      const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+      let processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+
+      // Special handling for split page URLs
+      const splitPageBaseUrl = chrome.runtime.getURL('src/split/split.html');
+      if (processedUrl.startsWith(splitPageBaseUrl)) {
+        processedUrl = processedUrl.replace(
+          splitPageBaseUrl,
+          'https://nenya.local/split.html',
+        );
+      }
 
       const title =
         typeof tab?.title === 'string' ? tab.title : descriptor.title;
