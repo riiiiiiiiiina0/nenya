@@ -14,7 +14,7 @@
   <script src="../libs/dayjs.min.js"></script>
 </head>
 
-<body class="bg-base-200">
+<body class="bg-base-200 min-h-screen">
   <div class="navbar bg-base-100 shadow-sm sticky top-0 z-10">
     <a class="btn btn-ghost text-xl">🐻‍❄️💍 Nenya</a>
   </div>
@@ -105,11 +105,12 @@
   </nav>
 
   <!-- sections -->
-  <main class="min-h-screen flex flex-col items-center p-6 mr-64">
+  <main class="flex flex-col items-center p-6 mr-64">
     <div class="w-full max-w-4xl flex flex-col items-center gap-6">
 
       <!-- Bookmarks section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="mirror-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="mirror-heading"
+        data-section="mirror-heading">
         <div class="card-body gap-6">
           <header class="space-y-2">
             <h1 id="mirror-heading" class="card-title text-3xl">🔖 Cloud Bookmarks Provider</h1>
@@ -176,7 +177,8 @@
       </section>
 
       <!-- Options backup section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="backup-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="backup-heading"
+        data-section="backup-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="backup-heading" class="card-title text-3xl">🗃️ Options Backup</h2>
@@ -218,7 +220,8 @@
       </section>
 
       <!-- Auto reload rules section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="auto-reload-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="auto-reload-heading"
+        data-section="auto-reload-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="auto-reload-heading" class="card-title text-3xl">🔁 Auto Reload Rules</h2>
@@ -294,7 +297,8 @@
       </section>
 
       <!-- Bright mode section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="bright-mode-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="bright-mode-heading"
+        data-section="bright-mode-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="bright-mode-heading" class="card-title text-3xl">☀️ Bright Mode</h2>
@@ -392,7 +396,8 @@
       </section>
 
       <!-- Highlight text section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="highlight-text-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="highlight-text-heading"
+        data-section="highlight-text-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="highlight-text-heading" class="card-title text-3xl">🎨 Highlight Text</h2>
@@ -557,7 +562,8 @@
       </section>
 
       <!-- Block elements section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="block-elements-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="block-elements-heading"
+        data-section="block-elements-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="block-elements-heading" class="card-title text-3xl">🚫 Block Elements</h2>
@@ -620,7 +626,8 @@
       </section>
 
       <!-- Custom JS CSS section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="custom-code-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="custom-code-heading"
+        data-section="custom-code-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="custom-code-heading" class="card-title text-3xl">💻 Custom JS CSS</h2>
@@ -721,7 +728,8 @@
       </section>
 
       <!-- LLM Saved Prompts section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="llm-prompts-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="llm-prompts-heading"
+        data-section="llm-prompts-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="llm-prompts-heading" class="card-title text-3xl">🤖 LLM Saved Prompts</h2>
@@ -810,7 +818,8 @@
       </section>
 
       <!-- URL Process Rules section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="url-process-rules-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="url-process-rules-heading"
+        data-section="url-process-rules-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="url-process-rules-heading" class="card-title text-3xl">🔗 URL Process Rules</h2>
@@ -942,7 +951,8 @@
       </section>
 
       <!-- Notifications section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="notifications-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="notifications-heading"
+        data-section="notifications-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="notifications-heading" class="card-title text-3xl">🔔 Notifications</h2>
@@ -1022,7 +1032,8 @@
       </section>
 
       <!-- Debug section -->
-      <section class="card w-full bg-base-100 shadow-xl" aria-labelledby="debug-heading">
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="debug-heading"
+        data-section="debug-heading" hidden>
         <div class="card-body gap-6">
           <div class="space-y-1">
             <h2 id="debug-heading" class="card-title text-3xl">🐛 Debug</h2>

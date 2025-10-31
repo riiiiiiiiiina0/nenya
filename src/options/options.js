@@ -18,40 +18,42 @@ import './debug.js';
 class NavigationManager {
   constructor() {
     this.navLinks = document.querySelectorAll('.nav-link');
-    this.sections = document.querySelectorAll('section[aria-labelledby]');
+    this.sections = document.querySelectorAll('.section-content');
     this.init();
   }
 
   init() {
-    this.setupSmoothScrolling();
-    this.setupActiveLinkHighlighting();
+    this.setupSectionSwitching();
     this.handleInitialHash();
+    this.setupPopStateHandler();
   }
 
   /**
-   * Scroll to a section
-   * @param {HTMLElement} element
+   * Show a specific section and hide all others
+   * @param {string} sectionId - The ID of the section to show
    */
-  scrollToSection(element) {
-    const section = element.closest('section');
-    if (!section) return;
-
-    // Calculate offset for sticky navbar (assuming navbar height is 4rem = 64px)
-    const navbarHeight = 80;
-    const targetPosition = section.offsetTop - navbarHeight;
-    console.log('targetPosition', targetPosition, element);
-
-    // Smooth scroll to target with offset
-    window.scrollTo({
-      top: targetPosition,
-      behavior: 'smooth',
+  showSection(sectionId) {
+    // Hide all sections
+    this.sections.forEach((section) => {
+      section.setAttribute('hidden', 'true');
     });
+
+    // Show the target section
+    const targetSection = document.querySelector(
+      `[data-section="${sectionId}"]`,
+    );
+    if (targetSection) {
+      targetSection.removeAttribute('hidden');
+    }
+
+    // Update active link
+    this.updateActiveLink(sectionId);
   }
 
   /**
-   * Setup smooth scrolling for navigation links
+   * Setup section switching for navigation links
    */
-  setupSmoothScrolling() {
+  setupSectionSwitching() {
     this.navLinks.forEach((link) => {
       link.addEventListener('click', (e) => {
         e.preventDefault();
@@ -59,41 +61,13 @@ class NavigationManager {
         if (!href) return;
 
         const targetId = href.substring(1);
-        const targetElement = document.getElementById(targetId);
 
-        if (targetElement) {
-          // Update URL hash
-          window.history.pushState(null, '', `#${targetId}`);
+        // Update URL hash
+        window.history.pushState(null, '', `#${targetId}`);
 
-          this.scrollToSection(targetElement);
-        }
+        // Show the selected section
+        this.showSection(targetId);
       });
-    });
-  }
-
-  /**
-   * Setup active link highlighting based on scroll position
-   */
-  setupActiveLinkHighlighting() {
-    const observerOptions = {
-      root: null,
-      rootMargin: '-10% 0px -80% 0px',
-      threshold: 0,
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const sectionId = entry.target.getAttribute('aria-labelledby');
-          if (sectionId) {
-            this.updateActiveLink(sectionId);
-          }
-        }
-      });
-    }, observerOptions);
-
-    this.sections.forEach((section) => {
-      observer.observe(section);
     });
   }
 
@@ -123,15 +97,26 @@ class NavigationManager {
   handleInitialHash() {
     if (window.location.hash) {
       const targetId = window.location.hash.substring(1);
-      const targetElement = document.getElementById(targetId);
-
-      if (targetElement) {
-        // Small delay to ensure page is fully loaded
-        setTimeout(() => {
-          this.scrollToSection(targetElement);
-        }, 100);
+      this.showSection(targetId);
+    } else {
+      // Default to first section if no hash
+      const firstSection = this.sections[0];
+      if (firstSection) {
+        const sectionId = firstSection.getAttribute('data-section');
+        if (sectionId) {
+          this.showSection(sectionId);
+        }
       }
     }
+  }
+
+  /**
+   * Setup popstate handler for browser back/forward navigation
+   */
+  setupPopStateHandler() {
+    window.addEventListener('popstate', () => {
+      this.handleInitialHash();
+    });
   }
 }
 
