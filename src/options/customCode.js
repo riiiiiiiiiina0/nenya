@@ -1,6 +1,29 @@
 /* global chrome */
 
 /**
+ * @typedef {Object} AceConfig
+ * @property {function(string, *): void} set
+ * @property {function(string): *} get
+ * @property {function(string, string): void} setModuleUrl
+ */
+
+/**
+ * @typedef {Object} AceApi
+ * @property {AceConfig} config
+ * @property {function(string[]|string, function?): *} require
+ * @property {function(HTMLElement): any} edit
+ * @property {function(string, string[], function): void} define
+ */
+
+/**
+ * @type {AceApi | undefined}
+ */
+const ace =
+  typeof window !== 'undefined' && /** @type {any} */ (window).ace
+    ? /** @type {any} */ (window).ace
+    : undefined;
+
+/**
  * @typedef {Object} ToastifyOptions
  * @property {string} text
  * @property {number} duration
@@ -44,12 +67,17 @@ const form = /** @type {HTMLFormElement | null} */ (
 const patternInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('customCodePatternInput')
 );
-const cssInput = /** @type {HTMLTextAreaElement | null} */ (
+const cssInputContainer = /** @type {HTMLDivElement | null} */ (
   document.getElementById('customCodeCSSInput')
 );
-const jsInput = /** @type {HTMLTextAreaElement | null} */ (
+const jsInputContainer = /** @type {HTMLDivElement | null} */ (
   document.getElementById('customCodeJSInput')
 );
+
+/** @type {any} */
+let cssEditor = null;
+/** @type {any} */
+let jsEditor = null;
 const saveButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('customCodeSaveButton')
 );
@@ -265,6 +293,200 @@ function findRule(ruleId) {
 }
 
 /**
+ * Resize Ace editors to match their containers.
+ * @returns {void}
+ */
+function resizeAceEditors() {
+  if (cssEditor) {
+    cssEditor.resize();
+  }
+  if (jsEditor) {
+    jsEditor.resize();
+  }
+}
+
+/**
+ * Configure Ace workers to use blob URLs with embedded code for Chrome extension CSP compliance.
+ * This patches Ace's worker creation to embed worker code directly instead of using importScripts.
+ * @returns {Promise<void>}
+ */
+async function configureAceWorkers() {
+  if (typeof ace === 'undefined' || !ace.config) {
+    return;
+  }
+
+  // Enable blob URL loading for workers
+  ace.config.set('loadWorkerFromBlob', true);
+
+  // Load worker files and store their content
+  let cssWorkerCode = null;
+  let jsWorkerCode = null;
+
+  try {
+    // Load CSS worker
+    const cssWorkerResponse = await fetch(
+      chrome.runtime.getURL('src/libs/worker-css.js'),
+    );
+    cssWorkerCode = await cssWorkerResponse.text();
+
+    // Load JavaScript worker
+    const jsWorkerResponse = await fetch(
+      chrome.runtime.getURL('src/libs/worker-javascript.js'),
+    );
+    jsWorkerCode = await jsWorkerResponse.text();
+  } catch (error) {
+    console.warn(
+      '[options:customCode] Failed to load Ace worker files:',
+      error,
+    );
+    return;
+  }
+
+  // Patch Ace's worker creation to embed code directly
+  // Access worker client module through Ace's require system
+  return new Promise((resolve) => {
+    try {
+      // Use async require to access the worker client module
+      if (ace.require && typeof ace.require === 'function') {
+        ace.require(
+          ['ace/worker/worker_client'],
+          function (workerClientModule) {
+            if (workerClientModule && workerClientModule.createWorker) {
+              const originalCreateWorker = workerClientModule.createWorker;
+
+              workerClientModule.createWorker = function (workerUrl) {
+                if (workerUrl && typeof workerUrl === 'string') {
+                  let workerCode = null;
+                  if (
+                    workerUrl.includes('worker-css') ||
+                    workerUrl.includes('css_worker')
+                  ) {
+                    workerCode = cssWorkerCode;
+                  } else if (
+                    workerUrl.includes('worker-javascript') ||
+                    workerUrl.includes('javascript_worker')
+                  ) {
+                    workerCode = jsWorkerCode;
+                  }
+
+                  if (workerCode) {
+                    // Create blob with worker code embedded directly (no importScripts)
+                    const blob = new Blob([workerCode], {
+                      type: 'application/javascript',
+                    });
+                    const blobURL = URL.createObjectURL(blob);
+                    return new Worker(blobURL);
+                  }
+                }
+                return originalCreateWorker.call(this, workerUrl);
+              };
+            }
+            resolve();
+          },
+        );
+      } else {
+        resolve();
+      }
+    } catch (error) {
+      console.warn(
+        '[options:customCode] Failed to patch Ace worker creation:',
+        error,
+      );
+      resolve();
+    }
+  });
+}
+
+/**
+ * Initialize Ace editors for CSS and JavaScript.
+ * @returns {Promise<void>}
+ */
+async function initAceEditors() {
+  if (typeof ace === 'undefined') {
+    console.warn('[options:customCode] Ace editor not available');
+    return;
+  }
+
+  // Configure workers first - this patches Ace to use embedded worker code
+  await configureAceWorkers();
+
+  // Enable language tools for autocomplete
+  // The extension is loaded via script tag, so it should be available automatically
+  // We just need to ensure it's initialized by referencing it
+  if (ace && ace.require) {
+    try {
+      ace.require(['ace/ext/language_tools'], function () {
+        // Language tools extension loaded
+      });
+    } catch (error) {
+      console.warn(
+        '[options:customCode] Failed to load Ace language tools:',
+        error,
+      );
+    }
+  }
+
+  // Initialize CSS editor
+  if (cssInputContainer && !cssEditor) {
+    cssEditor = ace.edit(cssInputContainer);
+    cssEditor.session.setMode('ace/mode/css');
+    cssEditor.setTheme('ace/theme/monokai');
+    cssEditor.setOptions({
+      fontSize: 14,
+      showPrintMargin: false,
+      wrap: true,
+      useSoftTabs: true,
+      tabSize: 2,
+      enableBasicAutocompletion: true,
+      enableLiveAutocompletion: true,
+      enableSnippets: true,
+    });
+    cssEditor.setValue('', -1);
+  }
+
+  // Initialize JavaScript editor
+  if (jsInputContainer && !jsEditor) {
+    jsEditor = ace.edit(jsInputContainer);
+    jsEditor.session.setMode('ace/mode/javascript');
+    jsEditor.setTheme('ace/theme/monokai');
+    jsEditor.setOptions({
+      fontSize: 14,
+      showPrintMargin: false,
+      wrap: true,
+      useSoftTabs: true,
+      tabSize: 2,
+      enableBasicAutocompletion: true,
+      enableLiveAutocompletion: true,
+      enableSnippets: true,
+    });
+    jsEditor.setValue('', -1);
+  }
+
+  // Resize editors when window resizes
+  window.addEventListener('resize', resizeAceEditors);
+
+  // Observe section visibility to resize editors when section becomes visible
+  const section = form?.closest('[data-section]');
+  if (section) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === 'attributes' &&
+          mutation.attributeName === 'hidden'
+        ) {
+          // Section visibility changed, resize editors after a short delay
+          setTimeout(resizeAceEditors, 100);
+        }
+      });
+    });
+    observer.observe(section, {
+      attributes: true,
+      attributeFilter: ['hidden'],
+    });
+  }
+}
+
+/**
  * Reset the form to its default (create) state.
  * @returns {void}
  */
@@ -272,6 +494,12 @@ function resetForm() {
   editingRuleId = '';
   if (form) {
     form.reset();
+  }
+  if (cssEditor) {
+    cssEditor.setValue('', -1);
+  }
+  if (jsEditor) {
+    jsEditor.setValue('', -1);
   }
   if (saveButton) {
     saveButton.textContent = 'Add rule';
@@ -413,11 +641,15 @@ function renderList() {
       if (patternInput) {
         patternInput.value = rule.pattern;
       }
-      if (cssInput) {
-        cssInput.value = rule.css || '';
+      if (cssEditor) {
+        cssEditor.setValue(rule.css || '', -1);
+        // Resize editor after setting value to ensure proper display
+        setTimeout(() => cssEditor?.resize(), 50);
       }
-      if (jsInput) {
-        jsInput.value = rule.js || '';
+      if (jsEditor) {
+        jsEditor.setValue(rule.js || '', -1);
+        // Resize editor after setting value to ensure proper display
+        setTimeout(() => jsEditor?.resize(), 50);
       }
       if (saveButton) {
         saveButton.textContent = 'Save changes';
@@ -486,7 +718,7 @@ function render() {
  */
 function handleFormSubmit(event) {
   event.preventDefault();
-  if (!patternInput || !cssInput || !jsInput) {
+  if (!patternInput || !cssEditor || !jsEditor) {
     return;
   }
 
@@ -505,8 +737,8 @@ function handleFormSubmit(event) {
     return;
   }
 
-  const css = cssInput.value || '';
-  const js = jsInput.value || '';
+  const css = cssEditor.getValue() || '';
+  const js = jsEditor.getValue() || '';
 
   if (!css.trim() && !js.trim()) {
     showFormError('Enter at least some CSS or JavaScript code.');
@@ -647,6 +879,15 @@ function exportRule(rule) {
  * @returns {void}
  */
 function init() {
+  // Initialize Ace editors after DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      void initAceEditors();
+    });
+  } else {
+    void initAceEditors();
+  }
+
   if (form) {
     form.addEventListener('submit', handleFormSubmit);
   }

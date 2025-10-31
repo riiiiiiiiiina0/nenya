@@ -12,6 +12,29 @@
   <script src="../libs/tailwindcss@4.js"></script>
   <script src="../libs/toastify-js.js"></script>
   <script src="../libs/dayjs.min.js"></script>
+  <script src="../libs/ace.js"></script>
+  <script src="../libs/ace-theme-monokai.js"></script>
+  <script src="../libs/ace-mode-javascript.js"></script>
+  <script src="../libs/ace-mode-css.js"></script>
+  <script src="../libs/ace-ext-language_tools.js"></script>
+  <style>
+    /* Ace editor styling to match DaisyUI theme */
+    #customCodeCSSInput .ace_editor,
+    #customCodeJSInput .ace_editor {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+    }
+
+    #customCodeCSSInput .ace_gutter,
+    #customCodeJSInput .ace_gutter {
+      background-color: hsl(var(--b2));
+      color: hsl(var(--bc) / 0.5);
+    }
+
+    #customCodeCSSInput .ace_gutter-active-line,
+    #customCodeJSInput .ace_gutter-active-line {
+      background-color: hsl(var(--b3));
+    }
+  </style>
 </head>
 
 <body class="bg-base-200 min-h-screen">
@@ -642,7 +665,7 @@
                 exports for syncing across devices.</span>
             </div>
           </div>
-          <form id="customCodeRuleForm" class="space-y-4" novalidate>
+          <form id="customCodeRuleForm" class="space-y-2 flex flex-col" novalidate>
             <label class="form-control w-full">
               <span class="label">
                 <span class="label-text uppercase tracking-wide text-xs text-base-content/60">URL pattern</span>
@@ -657,8 +680,8 @@
               <span class="label">
                 <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Custom CSS</span>
               </span>
-              <textarea id="customCodeCSSInput" class="textarea textarea-bordered w-full font-mono text-sm"
-                placeholder="body { background-color: red; }" rows="6"></textarea>
+              <div id="customCodeCSSInput" class="border border-base-300 rounded-lg w-full" style="height: 400px;">
+              </div>
               <span class="label-text-alt text-xs text-base-content/60 mt-2">
                 CSS is injected at the end of the page head for high priority. Use <code>!important</code> if needed to
                 override existing styles.
@@ -668,14 +691,13 @@
               <span class="label">
                 <span class="label-text uppercase tracking-wide text-xs text-base-content/60">Custom JavaScript</span>
               </span>
-              <textarea id="customCodeJSInput" class="textarea textarea-bordered w-full font-mono text-sm"
-                placeholder="console.log('Hello from custom code!');" rows="6"></textarea>
+              <div id="customCodeJSInput" class="border border-base-300 rounded-lg w-full" style="height: 400px;"></div>
               <span class="label-text-alt text-xs text-base-content/60 mt-2">
                 Enter JavaScript code to execute on matching pages.
               </span>
             </label>
             <p id="customCodeFormError" class="text-sm text-error" hidden></p>
-            <div class="flex flex-wrap gap-3">
+            <div class="flex flex-wrap gap-3 mt-2">
               <button id="customCodeSaveButton" class="btn btn-primary" type="submit">
                 Add rule
               </button>
