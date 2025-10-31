@@ -9,6 +9,7 @@ import {
 } from './mirror.js';
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
+import { icons } from '../shared/icons.js';
 
 const getMarkdownButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('getMarkdownButton')
@@ -34,6 +35,32 @@ const customFilterButton = /** @type {HTMLButtonElement | null} */ (
 const importCustomCodeButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('importCustomCodeButton')
 );
+
+// Set icon SVGs for header buttons
+if (getMarkdownButton) {
+  getMarkdownButton.innerHTML = icons['chat-bubble-oval-left-ellipsis'];
+}
+if (pullButton) {
+  pullButton.innerHTML = icons['cloud-arrow-down'];
+}
+if (saveUnsortedButton) {
+  saveUnsortedButton.innerHTML = icons['document-arrow-up'];
+}
+if (importCustomCodeButton) {
+  importCustomCodeButton.innerHTML = icons['code-bracket-square'];
+}
+if (customFilterButton) {
+  customFilterButton.innerHTML = icons.bolt;
+}
+if (openOptionsButton) {
+  openOptionsButton.innerHTML = icons['adjustments-horizontal'];
+}
+if (saveProjectButton) {
+  saveProjectButton.innerHTML = icons['rectangle-group'];
+}
+if (renameTabButton) {
+  renameTabButton.innerHTML = icons['pencil-square'];
+}
 const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('importCustomCodeFileInput')
 );

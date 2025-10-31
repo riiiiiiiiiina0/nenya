@@ -8,6 +8,7 @@ import {
   normalizeUrlForSave,
   collectSavableTabs,
 } from './shared.js';
+import { icons } from '../shared/icons.js';
 
 /**
  * @typedef {Object} SavedProject
@@ -41,8 +42,8 @@ import {
  */
 
 /**
- * Create a button element with the given label and click handler.
- * @param {string} label
+ * Create a button element with the given label/content and click handler.
+ * @param {string} label - Text label or SVG HTML content
  * @param {(e: MouseEvent) => void} onClick
  * @returns {HTMLButtonElement}
  */
@@ -50,7 +51,13 @@ function createButton(label, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
-  button.textContent = label;
+  // Check if label contains SVG (starts with <svg)
+  if (label.trim().startsWith('<svg')) {
+    button.innerHTML = label;
+    button.classList.add('project-icon-button');
+  } else {
+    button.textContent = label;
+  }
   button.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -355,7 +362,7 @@ function renderProjectRow(project) {
   const addButton = createTooltip(
     'Add highlighted tabs to project',
     'left',
-    createButton('➕', (event) => {
+    createButton(icons['arrow-up-tray'], (event) => {
       void handleAddTabsToProject(
         id,
         title,
@@ -363,12 +370,13 @@ function renderProjectRow(project) {
       );
     }),
   );
+  addButton.classList.add('project-action-button');
 
   // replace project items with highlighted/active tabs button
   const replaceButton = createTooltip(
     'Replace with highlighted tabs',
     'left',
-    createButton('🔼', (event) => {
+    createButton(icons['arrow-up-on-square'], (event) => {
       void handleReplaceProjectItems(
         id,
         title,
@@ -376,12 +384,13 @@ function renderProjectRow(project) {
       );
     }),
   );
+  replaceButton.classList.add('project-action-button');
 
   // replace project items with all tabs in current window button
   const replaceWindowButton = createTooltip(
     'Replace with current window tabs',
     'left',
-    createButton('⏫', (event) => {
+    createButton(icons['arrow-up-on-square-stack'], (event) => {
       void handleReplaceProjectItemsWithWindowTabs(
         id,
         title,
@@ -389,6 +398,7 @@ function renderProjectRow(project) {
       );
     }),
   );
+  replaceWindowButton.classList.add('project-action-button');
 
   container.append(
     openButton,
@@ -1229,20 +1239,16 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
       }
     });
 
-    if (validCount >= 1 && validCount <= 10) {
-      const numbers = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-      saveProjectButton.textContent = numbers[validCount - 1];
-      saveProjectButton.disabled = false;
-    } else if (validCount > 10) {
-      saveProjectButton.textContent = '🅽';
+    // Always show the icon, enable/disable based on tab count
+    saveProjectButton.innerHTML = icons['rectangle-group'];
+    if (validCount > 0) {
       saveProjectButton.disabled = false;
     } else {
-      saveProjectButton.textContent = '0️⃣';
       saveProjectButton.disabled = true;
     }
   } catch (error) {
     console.error('[popup] Unable to update save project button label.', error);
-    saveProjectButton.textContent = '😳';
+    saveProjectButton.innerHTML = icons['rectangle-group'];
     saveProjectButton.disabled = true;
   }
 }
