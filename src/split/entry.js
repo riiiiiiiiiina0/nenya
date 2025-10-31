@@ -3,6 +3,7 @@
  */
 
 import { showTabPicker, createEmbeddedTabPicker } from './tab-picker.js';
+import { icons } from '../shared/icons.js';
 
 // Parse URL state from query parameters
 const urlParams = new URLSearchParams(window.location.search);
@@ -71,7 +72,7 @@ function normalizeStateSizes(rawSizes, expectedLength) {
  * @returns {string}
  */
 function getBackwardMoveIcon() {
-  return currentLayout === 'horizontal' ? '◀️' : '🔼';
+  return currentLayout === 'horizontal' ? icons.leftCircle : icons.upCircle;
 }
 
 /**
@@ -79,7 +80,7 @@ function getBackwardMoveIcon() {
  * @returns {string}
  */
 function getForwardMoveIcon() {
-  return currentLayout === 'horizontal' ? '▶️' : '🔽';
+  return currentLayout === 'horizontal' ? icons.rightCircle : icons.downCircle;
 }
 
 /**
@@ -107,7 +108,7 @@ function createControlButton({ icon, title, className = '', onClick }) {
   const btn = document.createElement('button');
   btn.className =
     (className ? className : '') +
-    ' size-5 p-1 flex items-center justify-center rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
+    ' text-white size-5 p-1 flex items-center justify-center rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed';
   btn.innerHTML = icon;
   btn.addEventListener('click', onClick);
 
@@ -248,9 +249,9 @@ function updateAllLayoutButtons() {
           : 'Switch to horizontal layout';
 
       if (currentLayout === 'horizontal') {
-        btn.innerHTML = '🇱🇺';
+        btn.innerHTML = icons.bars;
       } else {
-        btn.innerHTML = '🇫🇷';
+        btn.innerHTML = icons.columns;
       }
 
       if (layoutTooltip && layoutTooltip.classList.contains('tooltip')) {
@@ -383,7 +384,7 @@ if (!iframeContainer) {
     });
 
     const layoutToggleButton = createControlButton({
-      icon: currentLayout === 'horizontal' ? '🇱🇺' : '🇫🇷',
+      icon: currentLayout === 'horizontal' ? icons.bars : icons.columns,
       title:
         currentLayout === 'horizontal'
           ? 'Switch to vertical layout'
@@ -396,7 +397,7 @@ if (!iframeContainer) {
     });
 
     const reloadButton = createControlButton({
-      icon: '🔄',
+      icon: icons.reload,
       title: 'Reload iframe',
       onClick: (e) => {
         e.stopPropagation();
@@ -416,7 +417,7 @@ if (!iframeContainer) {
     });
 
     const restoreButton = createControlButton({
-      icon: '↗️',
+      icon: icons.arrowTopRight,
       title: 'Restore as browser tab',
       onClick: async (e) => {
         e.stopPropagation();
@@ -431,7 +432,7 @@ if (!iframeContainer) {
     });
 
     const deleteButton = createControlButton({
-      icon: '🗑️',
+      icon: icons.trash,
       title: 'Delete from split page',
       className: 'bg-red-500/70 hover:bg-red-600/90 text-white',
       onClick: (e) => {
@@ -1464,7 +1465,7 @@ function createIframeWrapper(url, order) {
   });
 
   const layoutToggleButton = createControlButton({
-    icon: currentLayout === 'horizontal' ? '🇱🇺' : '🇫🇷',
+    icon: currentLayout === 'horizontal' ? icons.bars : icons.columns,
     title:
       currentLayout === 'horizontal'
         ? 'Switch to vertical layout'
@@ -1477,7 +1478,7 @@ function createIframeWrapper(url, order) {
   });
 
   const reloadButton = createControlButton({
-    icon: '🔄',
+    icon: icons.reload,
     title: 'Reload iframe',
     onClick: (e) => {
       e.stopPropagation();
@@ -1497,7 +1498,7 @@ function createIframeWrapper(url, order) {
   });
 
   const restoreButton = createControlButton({
-    icon: '↗️',
+    icon: icons.arrowTopRight,
     title: 'Restore as browser tab',
     onClick: async (e) => {
       e.stopPropagation();
@@ -1509,7 +1510,7 @@ function createIframeWrapper(url, order) {
   });
 
   const deleteButton = createControlButton({
-    icon: '🗑️',
+    icon: icons.trash,
     title: 'Delete from split page',
     className: 'bg-red-500/70 hover:bg-red-600/90 text-white',
     onClick: (e) => {
