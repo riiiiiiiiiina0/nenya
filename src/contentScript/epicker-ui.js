@@ -79,10 +79,23 @@
    * Handle quit button click
    */
   const onQuitClicked = () => {
+    document.removeEventListener('keydown', onKeyPressed, true);
     if (pickerContentPort) {
       pickerContentPort.postMessage({ what: 'quitPicker' });
       pickerContentPort.close();
       pickerContentPort = null;
+    }
+  };
+
+  /**
+   * Handle key press events
+   * @param {KeyboardEvent} ev
+   */
+  const onKeyPressed = (ev) => {
+    if (ev.key === 'Escape' || ev.which === 27) {
+      ev.stopPropagation();
+      ev.preventDefault();
+      onQuitClicked();
     }
   };
 
@@ -330,6 +343,7 @@
     if (specificitySlider) {
       specificitySlider.addEventListener('input', onSliderChanged);
     }
+    document.addEventListener('keydown', onKeyPressed, true);
 
     // Notify content script that we're ready
     if (pickerContentPort) {
