@@ -112,8 +112,8 @@
 .nenya-tab-switcher-item {
   all: initial;
   display: block;
-  min-width: 280px;
-  max-width: 280px;
+  min-width: 200px;
+  max-width: 200px;
   background: #f8f9fa;
   border-radius: 8px;
   overflow: hidden;
@@ -141,7 +141,7 @@
 .nenya-tab-switcher-thumbnail {
   all: initial;
   width: 100%;
-  height: 160px;
+  height: 150px;
   object-fit: cover;
   display: block;
   background: #e9ecef;
@@ -151,7 +151,7 @@
 .nenya-tab-switcher-thumbnail-placeholder {
   all: initial;
   width: 100%;
-  height: 160px;
+  height: 150px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -271,8 +271,8 @@
 /* Responsive design for smaller screens */
 @media (max-width: 768px) {
   .nenya-tab-switcher-item {
-    min-width: 220px;
-    max-width: 220px;
+    min-width: 160px;
+    max-width: 160px;
   }
 
   .nenya-tab-switcher-thumbnail,
