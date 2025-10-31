@@ -921,6 +921,22 @@ window.addEventListener('message', (event) => {
       updateUrlStateParameter();
     }
   }
+
+  // Handle iframe reload request
+  if (event.data.type === 'request-iframe-reload') {
+    const { frameName } = event.data;
+    const data = iframeData.get(frameName);
+    if (data && data.wrapper) {
+      const iframe = data.wrapper.querySelector('iframe');
+      if (iframe) {
+        console.log('[split] Reloading iframe from request:', frameName);
+        const currentUrl = data.url || iframe.src;
+        clearIframeLoadTimeout(iframe.name);
+        data.loaded = false;
+        iframe.src = currentUrl;
+      }
+    }
+  }
 });
 
 /**
@@ -1911,31 +1927,3 @@ function hideEmbeddedTabPickerPanel() {
     existing.remove();
   }
 }
-
-// Listen for keyboard shortcuts
-window.addEventListener('keydown', (e) => {
-  // Check for Cmd+R on Mac or Ctrl+R on Windows/Linux
-  if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
-    e.preventDefault();
-
-    if (activeIframeName) {
-      const data = iframeData.get(activeIframeName);
-      if (data && data.wrapper) {
-        const iframe = data.wrapper.querySelector('iframe');
-        if (iframe) {
-          console.log('[split] Reloading active iframe:', activeIframeName);
-          // Get the current URL from iframe data
-          const currentUrl = data.url || iframe.src;
-          // Clear any existing timeout
-          clearIframeLoadTimeout(iframe.name);
-          // Reset loaded state
-          data.loaded = false;
-          // Reload the iframe by setting src to current URL
-          iframe.src = currentUrl;
-        }
-      }
-    } else {
-      console.log('[split] No active iframe to reload.');
-    }
-  }
-});
