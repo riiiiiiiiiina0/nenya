@@ -642,6 +642,53 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab) {
     void updateContextMenuVisibility(tab);
   }
+
+  // Enforce custom titles
+  if (changeInfo.title) {
+    const key = `customTitle_${tabId}`;
+    try {
+      const result = await chrome.storage.local.get(key);
+      const customTitleData = result?.[key];
+
+      if (
+        customTitleData &&
+        typeof customTitleData.title === 'string' &&
+        customTitleData.title.trim() !== ''
+      ) {
+        const customTitle = customTitleData.title.trim();
+        if (customTitle !== changeInfo.title) {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            func: (title) => {
+              // Try to set the document title
+              try {
+                document.title = title;
+              } catch (e) {
+                // Ignore errors
+              }
+
+              // Also try to find and update the <title> element directly
+              const titleElement = document.querySelector('title');
+              if (titleElement) {
+                titleElement.textContent = title;
+              } else {
+                const newTitleElement = document.createElement('title');
+                newTitleElement.textContent = title;
+                (document.head || document.documentElement).appendChild(
+                  newTitleElement,
+                );
+              }
+            },
+            args: [customTitle],
+            world: 'ISOLATED',
+          });
+        }
+      }
+    } catch (error) {
+      // Silently ignore cases where script injection might fail
+      // (e.g., on chrome:// pages, protected pages)
+    }
+  }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
