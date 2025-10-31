@@ -125,6 +125,9 @@ const pullMirrorButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('pullMirrorButton')
 );
 
+const mainContent = /** @type {HTMLElement} */ (document.querySelector('main'));
+const rightSidebar = /** @type {HTMLElement} */ (document.querySelector('nav'));
+
 const STATUS_BASE_CLASS = 'text-sm font-medium min-h-6';
 const TOAST_BACKGROUND_BY_VARIANT = {
   success: 'linear-gradient(135deg, #22c55e, #16a34a)',
@@ -1148,10 +1151,31 @@ function renderProviderState() {
   }
 
   void updateRootFolderSection(storedTokens);
-  
+
   // Update notification sections visibility based on login status
   const isLoggedIn = hasSelection && Boolean(storedTokens);
   updateNotificationSectionsVisibility(isLoggedIn);
+
+  // Show/hide sections based on login status
+  const sections = document.querySelectorAll('.section-content');
+  if (isLoggedIn) {
+    rightSidebar.style.display = '';
+    mainContent.style.marginRight = '';
+    sections.forEach((section) => {
+      // The first section is the bookmarks section, which is always visible
+      if (section !== sections[0]) {
+        section.hidden = false;
+      }
+    });
+  } else {
+    rightSidebar.style.display = 'none';
+    mainContent.style.marginRight = '0';
+    sections.forEach((section) => {
+      if (section !== sections[0]) {
+        section.hidden = true;
+      }
+    });
+  }
 }
 
 /**
