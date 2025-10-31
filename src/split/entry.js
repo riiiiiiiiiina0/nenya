@@ -1860,7 +1860,7 @@ async function checkAndShowEmbeddedTabPicker() {
 }
 
 /**
- * Show the embedded tab picker panel on the right half
+ * Show the embedded tab picker panel taking up 50% of the space
  */
 async function showEmbeddedTabPickerPanel() {
   if (!iframeContainer) return;
@@ -1875,8 +1875,9 @@ async function showEmbeddedTabPickerPanel() {
   const pickerWrapper = document.createElement('div');
   pickerWrapper.id = 'nenya-embedded-tab-picker-wrapper';
   pickerWrapper.className =
-    'flex-shrink-0 flex-grow-0 flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-900';
-  pickerWrapper.style.flex = '1';
+    'flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-900 min-w-0';
+  // Set to exactly 50% using flex-basis
+  pickerWrapper.style.flex = '0 0 50%';
   pickerWrapper.style.order = '1000'; // Place it at the end
 
   // Create card container for the picker
@@ -1894,10 +1895,10 @@ async function showEmbeddedTabPickerPanel() {
   pickerWrapper.appendChild(cardContainer);
   iframeContainer.appendChild(pickerWrapper);
 
-  // Adjust the single iframe to take up half the space
+  // Adjust the single iframe to take up exactly 50% of the space
   const wrapper = document.querySelector('.iframe-wrapper');
   if (wrapper) {
-    /** @type {HTMLElement} */ (wrapper).style.flex = '1';
+    /** @type {HTMLElement} */ (wrapper).style.flex = '0 0 50%';
   }
 }
 
