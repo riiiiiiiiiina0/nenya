@@ -1402,10 +1402,9 @@ function sanitizeProjectItemsForRestore(items) {
 
     // Special handling for split page URLs
     if (rawLink.startsWith('https://nenya.local/split.html')) {
-      rawLink = rawLink.replace(
-        'https://nenya.local/split.html',
-        chrome.runtime.getURL('src/split/split.html'),
-      );
+      const url = new URL(rawLink);
+      const search = url.search;
+      rawLink = `${chrome.runtime.getURL('src/split/split.html')}${search}`;
     }
 
     const normalizedUrl = normalizeHttpUrl(rawLink);
@@ -1908,12 +1907,13 @@ async function resolveProjectTabs(descriptors) {
       let processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
 
       // Special handling for split page URLs
-      const splitPageBaseUrl = chrome.runtime.getURL('src/split/split.html');
-      if (processedUrl.startsWith(splitPageBaseUrl)) {
-        processedUrl = processedUrl.replace(
-          splitPageBaseUrl,
-          'https://nenya.local/split.html',
-        );
+      if (processedUrl.includes('/split.html')) {
+        const url = new URL(processedUrl);
+        url.protocol = 'https';
+        url.hostname = 'nenya.local';
+        url.port = '';
+        const search = url.search;
+        processedUrl = `https://nenya.local/split.html${search}`;
       }
 
       const title =

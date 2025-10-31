@@ -2602,7 +2602,11 @@ function normalizeHttpUrl(value) {
   try {
     const parsed = new URL(value);
     const protocol = parsed.protocol.toLowerCase();
-    if (protocol !== 'http:' && protocol !== 'https:') {
+    if (
+      protocol !== 'http:' &&
+      protocol !== 'https:' &&
+      !protocol.endsWith('-extension:')
+    ) {
       return undefined;
     }
     return parsed.toString();
