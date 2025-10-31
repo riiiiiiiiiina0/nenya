@@ -8,6 +8,7 @@ import {
   normalizeUrlForSave,
   collectSavableTabs,
 } from './shared.js';
+import { convertSplitUrlForSave } from '../shared/splitUrl.js';
 
 /**
  * Check if user is logged in to any cloud bookmark provider.
@@ -202,7 +203,9 @@ function buildSaveEntriesFromTabs(tabs) {
     if (!tab.url) {
       return;
     }
-    const normalizedUrl = normalizeUrlForSave(tab.url);
+    // Convert split page URLs to nenya.local format before normalizing
+    const convertedUrl = convertSplitUrlForSave(tab.url);
+    const normalizedUrl = normalizeUrlForSave(convertedUrl);
     if (!normalizedUrl || seen.has(normalizedUrl)) {
       return;
     }

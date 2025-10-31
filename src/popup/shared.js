@@ -1,5 +1,7 @@
 /* global chrome */
 
+import { convertSplitUrlForSave } from '../shared/splitUrl.js';
+
 /**
  * Send a runtime message with promise semantics.
  * @template T
@@ -119,7 +121,12 @@ export async function collectSavableTabs() {
           currentWindow: true,
           active: true,
         });
-  return candidates.filter(
-    (tab) => Boolean(tab.url) && Boolean(normalizeUrlForSave(tab.url)),
-  );
+  return candidates.filter((tab) => {
+    if (!tab.url) {
+      return false;
+    }
+    // Convert split page URLs to nenya.local format before checking
+    const convertedUrl = convertSplitUrlForSave(tab.url);
+    return Boolean(normalizeUrlForSave(convertedUrl));
+  });
 }

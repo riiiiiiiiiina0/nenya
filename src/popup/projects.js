@@ -9,6 +9,7 @@ import {
   collectSavableTabs,
 } from './shared.js';
 import { icons } from '../shared/icons.js';
+import { convertSplitUrlForRestore, convertSplitUrlForSave } from '../shared/splitUrl.js';
 
 /**
  * @typedef {Object} SavedProject
@@ -419,7 +420,9 @@ function renderProjectRow(project) {
  */
 function openProjectUrl(url, id) {
   try {
-    const maybePromise = chrome.tabs.create({ url });
+    // Convert nenya.local split URLs back to extension format
+    const restoredUrl = convertSplitUrlForRestore(url);
+    const maybePromise = chrome.tabs.create({ url: restoredUrl });
     if (maybePromise && typeof maybePromise.then === 'function') {
       void maybePromise.catch((error) => {
         console.error('[popup] Failed to open project', id, error);
@@ -983,7 +986,9 @@ async function buildProjectTabDescriptors(tabs) {
       return;
     }
 
-    const normalizedUrl = normalizeUrlForSave(tab.url);
+    // Convert split page URLs to nenya.local format before normalizing
+    const convertedUrl = convertSplitUrlForSave(tab.url);
+    const normalizedUrl = normalizeUrlForSave(convertedUrl);
     if (!normalizedUrl || seen.has(normalizedUrl)) {
       return;
     }
@@ -1042,7 +1047,9 @@ async function collectCurrentWindowSavableTabs() {
     if (!tab?.url) {
       return false;
     }
-    return Boolean(normalizeUrlForSave(tab.url));
+    // Convert split page URLs to nenya.local format before checking
+    const convertedUrl = convertSplitUrlForSave(tab.url);
+    return Boolean(normalizeUrlForSave(convertedUrl));
   });
 }
 
@@ -1233,7 +1240,9 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
       if (!tab.url) {
         return;
       }
-      const normalizedUrl = normalizeUrlForSave(tab.url);
+      // Convert split page URLs to nenya.local format before checking
+      const convertedUrl = convertSplitUrlForSave(tab.url);
+      const normalizedUrl = normalizeUrlForSave(convertedUrl);
       if (normalizedUrl) {
         validCount += 1;
       }

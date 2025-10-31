@@ -47,6 +47,7 @@ import {
   getLLMProviderFromURL,
 } from '../shared/llmProviders.js';
 import { processUrl } from '../shared/urlProcessor.js';
+import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/splitUrl.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -133,9 +134,10 @@ chrome.commands.onCommand.addListener((command) => {
         /** @type {{ url: string, title?: string }[]} */
         const entries = [];
         tabs.forEach((tab) => {
-          const normalized = normalizeHttpUrl(
-            typeof tab.url === 'string' ? tab.url : '',
-          );
+          const rawUrl = typeof tab.url === 'string' ? tab.url : '';
+          // Convert split page URLs to nenya.local format before normalization
+          const convertedUrl = convertSplitUrlForSave(rawUrl);
+          const normalized = normalizeHttpUrl(convertedUrl);
           if (!normalized || seen.has(normalized)) {
             return;
           }
@@ -172,9 +174,10 @@ chrome.commands.onCommand.addListener((command) => {
           if (!tab || typeof tab.id !== 'number') {
             return;
           }
-          const normalized = normalizeHttpUrl(
-            typeof tab.url === 'string' ? tab.url : '',
-          );
+          const rawUrl = typeof tab.url === 'string' ? tab.url : '';
+          // Convert split page URLs to nenya.local format before normalization
+          const convertedUrl = convertSplitUrlForSave(rawUrl);
+          const normalized = normalizeHttpUrl(convertedUrl);
           if (!normalized || seen.has(normalized)) {
             return;
           }
@@ -638,7 +641,42 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
+// Intercept navigation to nenya.local split URLs early
+if (chrome.webNavigation) {
+  chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+    if (
+      details.frameId === 0 && // Only main frame
+      details.url &&
+      details.url.startsWith('https://nenya.local/split')
+    ) {
+      const restoredUrl = convertSplitUrlForRestore(details.url);
+      if (restoredUrl !== details.url) {
+        try {
+          await chrome.tabs.update(details.tabId, { url: restoredUrl });
+        } catch (error) {
+          console.warn('[background] Failed to redirect nenya.local URL:', error);
+        }
+      }
+    }
+  });
+}
+
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // Intercept nenya.local split URLs and convert them to extension URLs
+  // Check both changeInfo.url (when URL changes) and tab.url (current URL)
+  const urlToCheck = changeInfo.url || (tab ? tab.url : null);
+  if (urlToCheck && typeof urlToCheck === 'string' && urlToCheck.startsWith('https://nenya.local/split')) {
+    const restoredUrl = convertSplitUrlForRestore(urlToCheck);
+    if (restoredUrl !== urlToCheck) {
+      try {
+        await chrome.tabs.update(tabId, { url: restoredUrl });
+        return; // Don't process further if we redirected
+      } catch (error) {
+        console.warn('[background] Failed to redirect nenya.local URL:', error);
+      }
+    }
+  }
+
   if (changeInfo.status === 'complete' && tab) {
     void updateContextMenuVisibility(tab);
   }
@@ -2050,7 +2088,9 @@ if (chrome.contextMenus) {
       if (!url) {
         return;
       }
-      const normalizedUrl = normalizeHttpUrl(url);
+      // Convert split page URLs to nenya.local format before normalization
+      const convertedUrl = convertSplitUrlForSave(url);
+      const normalizedUrl = normalizeHttpUrl(convertedUrl);
       if (!normalizedUrl) {
         return;
       }
@@ -2067,7 +2107,9 @@ if (chrome.contextMenus) {
       if (!url) {
         return;
       }
-      const normalizedUrl = normalizeHttpUrl(url);
+      // Convert split page URLs to nenya.local format before normalization
+      const convertedUrl = convertSplitUrlForSave(url);
+      const normalizedUrl = normalizeHttpUrl(convertedUrl);
       if (!normalizedUrl) {
         return;
       }

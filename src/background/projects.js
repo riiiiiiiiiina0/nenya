@@ -13,6 +13,7 @@ import {
   getNotificationPreferences,
 } from './mirror.js';
 import { processUrl } from '../shared/urlProcessor.js';
+import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/splitUrl.js';
 
 /**
  * @typedef {Object} ProjectTabDescriptor
@@ -1567,9 +1568,11 @@ async function applyProjectRestore(entries, options) {
       ? pinnedOffset
       : existingTabCount + totalCreated;
     try {
+      // Convert nenya.local split URLs back to extension format
+      const restoredUrl = convertSplitUrlForRestore(entry.url);
       const tab = await tabsCreate({
         windowId,
-        url: entry.url,
+        url: restoredUrl,
         active: false,
         index: targetIndex,
         pinned: entry.pinned,
@@ -1592,7 +1595,7 @@ async function applyProjectRestore(entries, options) {
             await chrome.storage.local.set({
               [`customTitle_${tab.id}`]: {
                 tabId: tab.id,
-                url: entry.url,
+                url: restoredUrl,
                 title: entry.customTitle.trim(),
               },
             });
@@ -1889,7 +1892,10 @@ async function resolveProjectTabs(descriptors) {
   for (const descriptor of descriptors) {
     try {
       const tab = await tabsGet(descriptor.id);
-      const normalizedUrl = normalizeHttpUrl(tab?.url ?? descriptor.url);
+      // Convert split page URLs to nenya.local format before normalizing
+      const rawUrl = tab?.url ?? descriptor.url;
+      const convertedUrl = convertSplitUrlForSave(rawUrl);
+      const normalizedUrl = normalizeHttpUrl(convertedUrl);
       if (!normalizedUrl) {
         skipped += 1;
         continue;
@@ -1897,6 +1903,9 @@ async function resolveProjectTabs(descriptors) {
 
       // Process URL according to URL processing rules
       const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+
+      // Final URL (already converted, but processUrl might have changed it, so check again)
+      const finalUrl = convertSplitUrlForSave(processedUrl);
 
       const title =
         typeof tab?.title === 'string' ? tab.title : descriptor.title;
@@ -1912,7 +1921,7 @@ async function resolveProjectTabs(descriptors) {
           ? Number(tab.groupId)
           : descriptor.groupId,
         pinned: Boolean(tab?.pinned ?? descriptor.pinned),
-        url: processedUrl,
+        url: finalUrl,
         title: typeof title === 'string' ? title : '',
       });
     } catch (error) {

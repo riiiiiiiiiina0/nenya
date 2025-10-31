@@ -123,6 +123,7 @@ export {
 };
 
 import { processUrl } from '../shared/urlProcessor.js';
+import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/splitUrl.js';
 
 const PROVIDER_ID = 'raindrop';
 const STORAGE_KEY_TOKENS = 'cloudAuthTokens';
@@ -176,7 +177,9 @@ if (chrome && chrome.notifications) {
     }
 
     try {
-      const maybePromise = chrome.tabs.create({ url: targetUrl });
+      // Convert nenya.local split URLs back to extension format
+      const restoredUrl = convertSplitUrlForRestore(targetUrl);
+      const maybePromise = chrome.tabs.create({ url: restoredUrl });
       if (isPromiseLike(maybePromise)) {
         void maybePromise.catch((error) => {
           console.warn(
@@ -1045,14 +1048,17 @@ export async function saveUrlsToUnsorted(entries) {
       // Process URL according to URL processing rules
       const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
 
-      if (seenUrls.has(processedUrl)) {
+      // Convert split page URLs to nenya.local format for saving
+      const finalUrl = convertSplitUrlForSave(processedUrl);
+
+      if (seenUrls.has(finalUrl)) {
         summary.skipped += 1;
         continue;
       }
 
-      seenUrls.add(processedUrl);
+      seenUrls.add(finalUrl);
       sanitized.push({
-        url: processedUrl,
+        url: finalUrl,
         title: typeof entry?.title === 'string' ? entry.title.trim() : '',
       });
     }
