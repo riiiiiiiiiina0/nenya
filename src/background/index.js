@@ -1520,6 +1520,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === 'tab-switcher:getActiveTabId') {
+    void (async () => {
+      try {
+        const tabs = await chrome.tabs.query({
+          active: true,
+          currentWindow: true,
+        });
+        if (tabs.length > 0) {
+          sendResponse({ success: true, tabId: tabs[0].id });
+        } else {
+          sendResponse({ success: false, tabId: null });
+        }
+      } catch (error) {
+        console.error('[tab-switcher] Failed to get active tab ID:', error);
+        sendResponse({ success: false, tabId: null });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === 'tab-switcher:getTabInfo') {
     const tabId = typeof message.tabId === 'number' ? message.tabId : null;
     if (tabId === null) {

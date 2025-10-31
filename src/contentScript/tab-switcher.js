@@ -55,6 +55,26 @@
   }
 
   /**
+   * Get active tab ID from background script
+   * @returns {Promise<number|null>}
+   */
+  async function getActiveTabId() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: 'tab-switcher:getActiveTabId' },
+        (response) => {
+          if (response && response.success && typeof response.tabId === 'number') {
+            resolve(response.tabId);
+          } else {
+            console.error('[tab-switcher] Failed to get active tab ID');
+            resolve(null);
+          }
+        },
+      );
+    });
+  }
+
+  /**
    * Load CSS content
    * @returns {Promise<string>}
    */
@@ -409,6 +429,18 @@
     // Filter out snapshots for tabs that no longer exist or are in other windows
     snapshots = await filterValidSnapshots(allSnapshots, currentWindowId);
 
+    // Sort snapshots according to the new requirements
+    const activeTabId = await getActiveTabId();
+    if (activeTabId) {
+      const activeTabIndex = snapshots.findIndex(
+        (s) => s.tabId === activeTabId,
+      );
+      if (activeTabIndex > 0) {
+        const activeSnapshot = snapshots.splice(activeTabIndex, 1)[0];
+        snapshots.unshift(activeSnapshot);
+      }
+    }
+
     // Debug: Log snapshot data
     console.log(
       '[tab-switcher] Loaded snapshots for current window:',
@@ -427,7 +459,11 @@
     });
 
     // Set default selection to second item (index 1) or first if only one
-    selectedIndex = snapshots.length > 1 ? 1 : 0;
+    if (snapshots.length > 1) {
+      selectedIndex = 1;
+    } else {
+      selectedIndex = 0;
+    }
 
     // Always create a fresh overlay (removed from DOM when closed)
     overlayElement = await createOverlay();
