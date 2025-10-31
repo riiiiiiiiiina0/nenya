@@ -395,6 +395,26 @@ if (!iframeContainer) {
       },
     });
 
+    const reloadButton = createControlButton({
+      icon: '🔄',
+      title: 'Reload iframe',
+      onClick: (e) => {
+        e.stopPropagation();
+        // Get the current URL from iframe data
+        const data = iframeData.get(iframe.name);
+        const currentUrl = data ? data.url : iframe.src;
+        // Clear any existing timeout
+        clearIframeLoadTimeout(iframe.name);
+        // Reset loaded state
+        if (data) {
+          data.loaded = false;
+        }
+        // Reload the iframe by setting src to current URL
+        // This will trigger a new load event, which will set up new timeouts
+        iframe.src = currentUrl;
+      },
+    });
+
     const restoreButton = createControlButton({
       icon: '↗️',
       title: 'Restore as browser tab',
@@ -433,6 +453,7 @@ if (!iframeContainer) {
     buttonsWrapper.appendChild(moveLeftButton.tooltip);
     buttonsWrapper.appendChild(moveRightButton.tooltip);
     buttonsWrapper.appendChild(layoutToggleButton.tooltip);
+    buttonsWrapper.appendChild(reloadButton.tooltip);
     buttonsWrapper.appendChild(restoreButton.tooltip);
     buttonsWrapper.appendChild(deleteButton.tooltip);
 
@@ -1455,6 +1476,26 @@ function createIframeWrapper(url, order) {
     },
   });
 
+  const reloadButton = createControlButton({
+    icon: '🔄',
+    title: 'Reload iframe',
+    onClick: (e) => {
+      e.stopPropagation();
+      // Get the current URL from iframe data
+      const data = iframeData.get(iframe.name);
+      const currentUrl = data ? data.url : iframe.src;
+      // Clear any existing timeout
+      clearIframeLoadTimeout(iframe.name);
+      // Reset loaded state
+      if (data) {
+        data.loaded = false;
+      }
+      // Reload the iframe by setting src to current URL
+      // This will trigger a new load event, which will set up new timeouts
+      iframe.src = currentUrl;
+    },
+  });
+
   const restoreButton = createControlButton({
     icon: '↗️',
     title: 'Restore as browser tab',
@@ -1490,6 +1531,7 @@ function createIframeWrapper(url, order) {
   buttonsWrapper.appendChild(moveLeftButton.tooltip);
   buttonsWrapper.appendChild(moveRightButton.tooltip);
   buttonsWrapper.appendChild(layoutToggleButton.tooltip);
+  buttonsWrapper.appendChild(reloadButton.tooltip);
   buttonsWrapper.appendChild(restoreButton.tooltip);
   buttonsWrapper.appendChild(deleteButton.tooltip);
 
