@@ -138,27 +138,7 @@ async function createSnapshot(tabId) {
       return null;
     }
 
-    // Ensure tab is active before capturing
-    if (!tab.active) {
-      console.log('[tab-snapshots] Tab is not active, skipping screenshot');
-      return null;
-    }
-
-    console.log('[tab-snapshots] Attempting to capture screenshot...');
-    const thumbnail = await captureTabScreenshot(tab.windowId);
-
-    console.log(
-      '[tab-snapshots] Screenshot captured, length:',
-      thumbnail.length,
-    );
-
-    // Check if thumbnail is actually captured
-    if (!thumbnail || thumbnail.length === 0) {
-      console.warn(
-        '[tab-snapshots] Thumbnail is empty, capture may have failed',
-      );
-      // Still save the snapshot without thumbnail for metadata
-    }
+    const thumbnail = '';
 
     /** @type {TabSnapshot} */
     const snapshot = {
@@ -220,6 +200,41 @@ async function saveSnapshot(snapshot) {
 }
 
 /**
+ * Update the thumbnail of an existing snapshot.
+ * @param {number} tabId - The ID of the tab
+ * @param {number} windowId - The ID of the window containing the tab
+ * @returns {Promise<void>}
+ */
+async function updateSnapshotThumbnail(tabId, windowId) {
+  try {
+    const thumbnail = await captureTabScreenshot(windowId);
+    if (!thumbnail) {
+      return;
+    }
+
+    const result = await chrome.storage.local.get(SNAPSHOTS_STORAGE_KEY);
+    /** @type {TabSnapshot[]} */
+    let snapshots = Array.isArray(result[SNAPSHOTS_STORAGE_KEY])
+      ? result[SNAPSHOTS_STORAGE_KEY]
+      : [];
+
+    const snapshotIndex = snapshots.findIndex((s) => s.tabId === tabId);
+    if (snapshotIndex === -1) {
+      return;
+    }
+
+    snapshots[snapshotIndex].thumbnail = thumbnail;
+    snapshots[snapshotIndex].timestamp = Date.now();
+
+    await chrome.storage.local.set({
+      [SNAPSHOTS_STORAGE_KEY]: snapshots,
+    });
+  } catch (error) {
+    console.warn('[tab-snapshots] Failed to update snapshot thumbnail:', error);
+  }
+}
+
+/**
  * Handle tab activation - capture snapshot when user switches to a different tab.
  * @param {Object} activeInfo - Information about the activated tab
  * @param {number} activeInfo.tabId - The tab ID that was activated
@@ -233,10 +248,7 @@ async function handleTabActivated(activeInfo) {
     // 3. Any UI animations have completed
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    const snapshot = await createSnapshot(activeInfo.tabId);
-    if (snapshot) {
-      await saveSnapshot(snapshot);
-    }
+    await updateSnapshotThumbnail(activeInfo.tabId, activeInfo.windowId);
   } catch (error) {
     console.warn('[tab-snapshots] Failed to handle tab activation:', error);
   }
@@ -252,8 +264,8 @@ async function handleTabActivated(activeInfo) {
  * @returns {Promise<void>}
  */
 async function handleTabUpdated(tabId, changeInfo, tab) {
-  // Only capture when page finishes loading and the tab is active
-  if (changeInfo.status !== 'complete' || !tab.active) {
+  // Only capture when page finishes loading
+  if (changeInfo.status !== 'complete') {
     return;
   }
 
