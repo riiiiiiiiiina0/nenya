@@ -115,6 +115,22 @@
   // Handle hash changes
   window.addEventListener('hashchange', () => sendUpdate());
 
+  // Listen for keyboard shortcuts
+  window.addEventListener('keydown', (e) => {
+    // Check for Cmd+R on Mac or Ctrl+R on Windows/Linux
+    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+      e.preventDefault();
+      // Send a message to the parent to request a reload
+      window.parent.postMessage(
+        {
+          type: 'request-iframe-reload',
+          frameName: window.name,
+        },
+        '*',
+      );
+    }
+  });
+
   // 3. Monitor DOM mutations for title changes
   const titleObserver = new MutationObserver(() => {
     const newTitle = document.title;

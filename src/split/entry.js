@@ -921,6 +921,22 @@ window.addEventListener('message', (event) => {
       updateUrlStateParameter();
     }
   }
+
+  // Handle iframe reload request
+  if (event.data.type === 'request-iframe-reload') {
+    const { frameName } = event.data;
+    const data = iframeData.get(frameName);
+    if (data && data.wrapper) {
+      const iframe = data.wrapper.querySelector('iframe');
+      if (iframe) {
+        console.log('[split] Reloading iframe from request:', frameName);
+        const currentUrl = data.url || iframe.src;
+        clearIframeLoadTimeout(iframe.name);
+        data.loaded = false;
+        iframe.src = currentUrl;
+      }
+    }
+  }
 });
 
 /**
