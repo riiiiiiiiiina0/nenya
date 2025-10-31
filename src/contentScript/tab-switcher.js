@@ -274,6 +274,58 @@
   }
 
   /**
+   * Get current active tab ID from background script
+   * @returns {Promise<number|null>}
+   */
+  async function getActiveTabId() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: 'tab-switcher:getActiveTabId' },
+        (response) => {
+          if (
+            response &&
+            response.success &&
+            typeof response.tabId === 'number'
+          ) {
+            resolve(response.tabId);
+          } else {
+            console.error('[tab-switcher] Failed to get active tab ID');
+            resolve(null);
+          }
+        },
+      );
+    });
+  }
+
+  /**
+   * Sort snapshots: active tab first, then by timestamp descending
+   * @param {Array} snapshots - Array of snapshots to sort
+   * @param {number|null} activeTabId - The ID of the currently active tab
+   * @returns {Array} Sorted snapshots
+   */
+  function sortSnapshots(snapshots, activeTabId) {
+    if (!activeTabId || snapshots.length === 0) {
+      // If no active tab ID, just sort by timestamp descending
+      return [...snapshots].sort((a, b) => b.timestamp - a.timestamp);
+    }
+
+    // Separate active tab from others
+    const activeTab = snapshots.find((s) => s.tabId === activeTabId);
+    const otherTabs = snapshots.filter((s) => s.tabId !== activeTabId);
+
+    // Sort other tabs by timestamp descending (most recently activated first)
+    otherTabs.sort((a, b) => b.timestamp - a.timestamp);
+
+    // Put active tab first, then other tabs
+    if (activeTab) {
+      return [activeTab, ...otherTabs];
+    } else {
+      // Active tab not found in snapshots, just return sorted others
+      return otherTabs;
+    }
+  }
+
+  /**
    * Get info for multiple tabs at once via background script (batched for performance)
    * @param {Array<number>} tabIds
    * @returns {Promise<Array<{tabId: number, exists: boolean, windowId: number|null}>>}
@@ -399,6 +451,10 @@
     const currentWindowId = await getCurrentWindowId();
     console.log('[tab-switcher] Current window ID:', currentWindowId);
 
+    // Get current active tab ID
+    const activeTabId = await getActiveTabId();
+    console.log('[tab-switcher] Active tab ID:', activeTabId);
+
     // Load snapshots
     let allSnapshots = await getSnapshots();
     console.log(
@@ -407,7 +463,13 @@
     );
 
     // Filter out snapshots for tabs that no longer exist or are in other windows
-    snapshots = await filterValidSnapshots(allSnapshots, currentWindowId);
+    let validSnapshots = await filterValidSnapshots(
+      allSnapshots,
+      currentWindowId,
+    );
+
+    // Sort snapshots: active tab first, then by timestamp descending
+    snapshots = sortSnapshots(validSnapshots, activeTabId);
 
     // Debug: Log snapshot data
     console.log(
@@ -418,6 +480,7 @@
       console.log(`[tab-switcher] Snapshot ${index}:`, {
         tabId: snapshot.tabId,
         title: snapshot.title,
+        isActive: snapshot.tabId === activeTabId,
         hasThumbnail: Boolean(snapshot.thumbnail),
         thumbnailLength: snapshot.thumbnail ? snapshot.thumbnail.length : 0,
         thumbnailPreview: snapshot.thumbnail

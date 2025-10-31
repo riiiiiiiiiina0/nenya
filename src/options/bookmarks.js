@@ -252,16 +252,18 @@ function showToast(message, variant = 'info') {
   const background =
     TOAST_BACKGROUND_BY_VARIANT[variant] ?? TOAST_BACKGROUND_BY_VARIANT.info;
 
-  windowWithToastify.Toastify({
-    text: message,
-    duration: 4000,
-    gravity: 'top',
-    position: 'right',
-    close: true,
-    style: {
-      background,
-    },
-  }).showToast();
+  windowWithToastify
+    .Toastify({
+      text: message,
+      duration: 4000,
+      gravity: 'top',
+      position: 'right',
+      close: true,
+      style: {
+        background,
+      },
+    })
+    .showToast();
 }
 
 /**
@@ -1097,7 +1099,9 @@ function getProviderStatus(storedTokens) {
   const isActive = storedTokens.expiresAt > now;
   if (isActive) {
     // @ts-ignore - dayjs is loaded globally via script tag
-    const formattedDate = dayjs(storedTokens.expiresAt).format('YYYY-MM-DD HH:mm');
+    const formattedDate = dayjs(storedTokens.expiresAt).format(
+      'YYYY-MM-DD HH:mm',
+    );
     return {
       message:
         'Connected to ' +
@@ -1156,25 +1160,22 @@ function renderProviderState() {
   const isLoggedIn = hasSelection && Boolean(storedTokens);
   updateNotificationSectionsVisibility(isLoggedIn);
 
-  // Show/hide sections based on login status
-  const sections = document.querySelectorAll('.section-content');
+  // Show/hide sidebar based on login status (section visibility is controlled by NavigationManager)
   if (isLoggedIn) {
     rightSidebar.style.display = '';
     mainContent.style.marginRight = '';
-    sections.forEach((section) => {
-      // The first section is the bookmarks section, which is always visible
-      if (section !== sections[0]) {
-        section.hidden = false;
-      }
-    });
   } else {
     rightSidebar.style.display = 'none';
     mainContent.style.marginRight = '0';
-    sections.forEach((section) => {
-      if (section !== sections[0]) {
-        section.hidden = true;
-      }
-    });
+  }
+
+  // Re-apply section visibility to ensure only one section is shown
+  // This is important after login verification which may happen after NavigationManager initializes
+  if (
+    window.navigationManager &&
+    typeof window.navigationManager.reapplySectionVisibility === 'function'
+  ) {
+    window.navigationManager.reapplySectionVisibility();
   }
 }
 
@@ -1219,7 +1220,7 @@ async function handleDisconnectClick() {
   try {
     // Clear provider tokens
     await clearProviderTokens(currentProvider.id);
-    
+
     // Reset mirror state (bookmark root folder and timestamps)
     const rootFolderSettings = await readRootFolderSettings();
     const providerSettings = rootFolderSettings[currentProvider.id];
@@ -1227,21 +1228,29 @@ async function handleDisconnectClick() {
       const settingsData = {
         settings: providerSettings,
         map: rootFolderSettings,
-        didMutate: false
+        didMutate: false,
       };
       await resetMirrorState(settingsData);
     }
-    
+
     // Clear all project-related data and custom title records
     await clearAllProjectData();
-    
+
     renderProviderState();
     setBackupConnectionState(false);
     await refreshBackupStatus();
-    showToast('Disconnected from ' + currentProvider.name + '. All local data has been cleared.', 'info');
+    showToast(
+      'Disconnected from ' +
+        currentProvider.name +
+        '. All local data has been cleared.',
+      'info',
+    );
   } catch (error) {
     console.error('[bookmarks] Error during logout:', error);
-    showToast('Error during logout. Some data may not have been cleared.', 'error');
+    showToast(
+      'Error during logout. Some data may not have been cleared.',
+      'error',
+    );
   }
 }
 
@@ -1272,9 +1281,11 @@ async function processOAuthSuccess(message) {
 
   setBackupConnectionState(true);
   showToast('Connected to ' + provider.name + '.', 'success');
-  
+
   try {
-    await sendRuntimeMessage({ type: OPTIONS_BACKUP_MESSAGES.RESTORE_AFTER_LOGIN });
+    await sendRuntimeMessage({
+      type: OPTIONS_BACKUP_MESSAGES.RESTORE_AFTER_LOGIN,
+    });
   } catch (error) {
     console.warn(
       '[bookmarks] Failed to restore options after login:',
@@ -1283,12 +1294,15 @@ async function processOAuthSuccess(message) {
   }
 
   await refreshBackupStatus();
-  
+
   // Automatically start pulling when user logs in
   try {
     await sendRuntimeMessage({ type: 'mirror:pull' });
   } catch (error) {
-    console.warn('[bookmarks] Failed to start automatic pull after login:', error);
+    console.warn(
+      '[bookmarks] Failed to start automatic pull after login:',
+      error,
+    );
     // Don't show error to user as the login was successful
   }
 }
@@ -1385,7 +1399,8 @@ function subscribeToRootFolderStorageChanges() {
 
     void (async () => {
       /** @type {RootFolderSettingsMap | undefined} */
-      const newMap = /** @type {*} */ (changes[ROOT_FOLDER_SETTINGS_KEY].newValue) || {};
+      const newMap =
+        /** @type {*} */ (changes[ROOT_FOLDER_SETTINGS_KEY].newValue) || {};
 
       // Determine provider to apply (default to 'raindrop' if none selected yet)
       const providerId = currentProvider ? currentProvider.id : 'raindrop';
@@ -1398,7 +1413,8 @@ function subscribeToRootFolderStorageChanges() {
       // Update local caches immediately
       rootFolderSettingsCache = newMap || {};
       if (rawNext) {
-        pendingRootFolderSettings[providerId] = cloneRootFolderSettings(rawNext);
+        pendingRootFolderSettings[providerId] =
+          cloneRootFolderSettings(rawNext);
       }
 
       /**
@@ -1427,7 +1443,9 @@ function subscribeToRootFolderStorageChanges() {
           const sanitizedMap = { ...(newMap || {}) };
           sanitizedMap[providerId] = next;
           suppressOnce = true;
-          await chrome.storage.sync.set({ [ROOT_FOLDER_SETTINGS_KEY]: sanitizedMap });
+          await chrome.storage.sync.set({
+            [ROOT_FOLDER_SETTINGS_KEY]: sanitizedMap,
+          });
 
           // Update caches to sanitized values
           rootFolderSettingsCache = sanitizedMap;
@@ -1449,7 +1467,9 @@ function subscribeToRootFolderStorageChanges() {
       bookmarkFoldersLoadPromise = undefined;
 
       // Refresh the Root bookmark folder section UI
-      const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
+      const storedTokens = currentProvider
+        ? tokenCache[currentProvider.id]
+        : undefined;
       await updateRootFolderSection(storedTokens);
     })();
   });

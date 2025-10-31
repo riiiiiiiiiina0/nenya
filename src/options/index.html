@@ -40,7 +40,7 @@
 <body class="bg-base-200 min-h-screen">
   <script>
     // Set extension icon URL using chrome.runtime.getURL()
-    (function() {
+    (function () {
       function setIconUrl() {
         if (chrome?.runtime?.getURL) {
           const iconImg = document.getElementById('extensionIcon');
@@ -154,7 +154,7 @@
 
       <!-- Bookmarks section -->
       <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="mirror-heading"
-        data-section="mirror-heading">
+        data-section="mirror-heading" hidden>
         <div class="card-body gap-6">
           <header class="space-y-2">
             <h1 id="mirror-heading" class="card-title text-3xl">🔖 Cloud Bookmarks Provider</h1>

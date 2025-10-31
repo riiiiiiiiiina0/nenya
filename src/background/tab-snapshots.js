@@ -184,6 +184,7 @@ async function createSnapshot(tabId) {
 
 /**
  * Save a snapshot to storage, maintaining only the last 10 unique snapshots by tab ID.
+ * If a snapshot with the same tab ID already exists, merge them (preserve thumbnail if it exists).
  * @param {TabSnapshot} snapshot - The snapshot to save
  * @returns {Promise<void>}
  */
@@ -195,11 +196,35 @@ async function saveSnapshot(snapshot) {
       ? result[SNAPSHOTS_STORAGE_KEY]
       : [];
 
-    // Remove any existing snapshot with the same tab ID
-    snapshots = snapshots.filter((s) => s.tabId !== snapshot.tabId);
+    // Find existing snapshot with the same tab ID
+    const existingIndex = snapshots.findIndex(
+      (s) => s.tabId === snapshot.tabId,
+    );
 
-    // Add the new snapshot at the beginning
-    snapshots.unshift(snapshot);
+    if (existingIndex >= 0) {
+      // Merge with existing snapshot: preserve thumbnail if it exists and new one is empty
+      const existing = snapshots[existingIndex];
+      const mergedSnapshot = {
+        ...snapshot,
+        // Preserve existing thumbnail if new one is empty or missing
+        thumbnail:
+          snapshot.thumbnail && snapshot.thumbnail.length > 0
+            ? snapshot.thumbnail
+            : existing.thumbnail || '',
+        // Use newer timestamp
+        timestamp: Math.max(snapshot.timestamp, existing.timestamp),
+      };
+      snapshots[existingIndex] = mergedSnapshot;
+      // Move to beginning (most recent)
+      snapshots = [
+        mergedSnapshot,
+        ...snapshots.slice(0, existingIndex),
+        ...snapshots.slice(existingIndex + 1),
+      ];
+    } else {
+      // Add new snapshot at the beginning
+      snapshots.unshift(snapshot);
+    }
 
     // Keep only the last MAX_SNAPSHOTS
     snapshots = snapshots.slice(0, MAX_SNAPSHOTS);
@@ -220,7 +245,60 @@ async function saveSnapshot(snapshot) {
 }
 
 /**
- * Handle tab activation - capture snapshot when user switches to a different tab.
+ * Save tab metadata immediately without waiting for screenshot.
+ * This ensures all tabs are visible in the tab switcher even without screenshots.
+ * @param {number} tabId - The ID of the tab
+ * @returns {Promise<void>}
+ */
+async function saveTabMetadata(tabId) {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+
+    // Validate tab ID
+    if (typeof tab.id !== 'number') {
+      return;
+    }
+
+    // Skip chrome:// and other internal URLs
+    if (
+      !tab.url ||
+      tab.url.startsWith('chrome://') ||
+      tab.url.startsWith('chrome-extension://') ||
+      tab.url.startsWith('about:') ||
+      tab.url === ''
+    ) {
+      return;
+    }
+
+    // Create metadata snapshot without screenshot
+    /** @type {TabSnapshot} */
+    const metadataSnapshot = {
+      tabId: tab.id,
+      title: tab.title || tab.url || 'Untitled',
+      favicon: tab.favIconUrl || '',
+      thumbnail: '', // No screenshot yet
+      timestamp: Date.now(),
+    };
+
+    await saveSnapshot(metadataSnapshot);
+    console.log(
+      '[tab-snapshots] Saved metadata for tab',
+      tabId,
+      '(without screenshot)',
+    );
+  } catch (error) {
+    // Tab might have been closed already, ignore error
+    console.log(
+      '[tab-snapshots] Could not save metadata for tab',
+      tabId,
+      error,
+    );
+  }
+}
+
+/**
+ * Handle tab activation - update screenshot when user switches to a different tab.
+ * The metadata should already be saved, so we just update the screenshot.
  * @param {Object} activeInfo - Information about the activated tab
  * @param {number} activeInfo.tabId - The tab ID that was activated
  * @returns {Promise<void>}
@@ -233,6 +311,7 @@ async function handleTabActivated(activeInfo) {
     // 3. Any UI animations have completed
     await new Promise((resolve) => setTimeout(resolve, 300));
 
+    // Update screenshot (metadata is already saved)
     const snapshot = await createSnapshot(activeInfo.tabId);
     if (snapshot) {
       await saveSnapshot(snapshot);
@@ -243,7 +322,8 @@ async function handleTabActivated(activeInfo) {
 }
 
 /**
- * Handle tab update - capture snapshot when page finishes loading.
+ * Handle tab update - save metadata immediately when page finishes loading.
+ * If the tab is active, also update the screenshot.
  * @param {number} tabId - The ID of the updated tab
  * @param {Object} changeInfo - Information about what changed
  * @param {string} [changeInfo.status] - The loading status of the tab
@@ -252,25 +332,31 @@ async function handleTabActivated(activeInfo) {
  * @returns {Promise<void>}
  */
 async function handleTabUpdated(tabId, changeInfo, tab) {
-  // Only capture when page finishes loading and the tab is active
-  if (changeInfo.status !== 'complete' || !tab.active) {
-    return;
-  }
+  // Save metadata immediately when page finishes loading
+  if (changeInfo.status === 'complete') {
+    void saveTabMetadata(tabId);
 
-  try {
-    // Add delay to ensure:
-    // 1. Page is fully rendered (DOM ready + initial paint)
-    // 2. Dynamic content has loaded
-    // 3. CSS animations/transitions have completed
-    // 4. Lazy-loaded images are visible
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // If tab is active, also update screenshot after a delay
+    if (tab.active) {
+      try {
+        // Add delay to ensure:
+        // 1. Page is fully rendered (DOM ready + initial paint)
+        // 2. Dynamic content has loaded
+        // 3. CSS animations/transitions have completed
+        // 4. Lazy-loaded images are visible
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-    const snapshot = await createSnapshot(tabId);
-    if (snapshot) {
-      await saveSnapshot(snapshot);
+        const snapshot = await createSnapshot(tabId);
+        if (snapshot) {
+          await saveSnapshot(snapshot);
+        }
+      } catch (error) {
+        console.warn('[tab-snapshots] Failed to handle tab update:', error);
+      }
     }
-  } catch (error) {
-    console.warn('[tab-snapshots] Failed to handle tab update:', error);
+  } else if (changeInfo.title || changeInfo.favIconUrl) {
+    // Update metadata immediately when title or favicon changes
+    void saveTabMetadata(tabId);
   }
 }
 
@@ -310,18 +396,38 @@ async function handleTabRemoved(tabId) {
 }
 
 /**
+ * Handle tab creation - save metadata immediately when a new tab is created.
+ * @param {chrome.tabs.Tab} tab - The newly created tab
+ * @returns {Promise<void>}
+ */
+async function handleTabCreated(tab) {
+  // Save metadata immediately when tab is created
+  if (tab.id && typeof tab.id === 'number') {
+    void saveTabMetadata(tab.id);
+  }
+}
+
+/**
  * Initialize the tab snapshots feature by setting up event listeners.
  * @returns {void}
  */
 export function initializeTabSnapshots() {
+  // Save metadata immediately when tabs are created
+  chrome.tabs.onCreated.addListener((tab) => {
+    void handleTabCreated(tab);
+  });
+
+  // Update metadata when tabs are activated (also update screenshot)
   chrome.tabs.onActivated.addListener((activeInfo) => {
     void handleTabActivated(activeInfo);
   });
 
+  // Update metadata when tabs are updated (also update screenshot if active)
   chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     void handleTabUpdated(tabId, changeInfo, tab);
   });
 
+  // Remove metadata when tabs are closed
   chrome.tabs.onRemoved.addListener((tabId) => {
     void handleTabRemoved(tabId);
   });

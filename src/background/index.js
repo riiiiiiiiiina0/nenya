@@ -1520,6 +1520,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === 'tab-switcher:getActiveTabId') {
+    const windowId =
+      sender.tab && typeof sender.tab.windowId === 'number'
+        ? sender.tab.windowId
+        : null;
+    if (windowId === null) {
+      sendResponse({ success: false, tabId: null });
+      return false;
+    }
+
+    void chrome.tabs
+      .query({ active: true, windowId: windowId })
+      .then((tabs) => {
+        if (tabs && tabs.length > 0 && typeof tabs[0].id === 'number') {
+          sendResponse({ success: true, tabId: tabs[0].id });
+        } else {
+          sendResponse({ success: false, tabId: null });
+        }
+      })
+      .catch((error) => {
+        console.error('[tab-switcher] Failed to get active tab:', error);
+        sendResponse({ success: false, tabId: null });
+      });
+    return true;
+  }
+
   if (message.type === 'tab-switcher:getTabInfo') {
     const tabId = typeof message.tabId === 'number' ? message.tabId : null;
     if (tabId === null) {

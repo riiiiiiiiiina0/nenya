@@ -23,6 +23,11 @@ class NavigationManager {
   }
 
   init() {
+    // Hide all sections first to prevent showing all at once
+    this.sections.forEach((section) => {
+      section.setAttribute('hidden', 'true');
+    });
+
     this.setupSectionSwitching();
     this.handleInitialHash();
     this.setupPopStateHandler();
@@ -104,6 +109,8 @@ class NavigationManager {
       if (firstSection) {
         const sectionId = firstSection.getAttribute('data-section');
         if (sectionId) {
+          // Update URL hash to match the default section
+          window.history.replaceState(null, '', `#${sectionId}`);
           this.showSection(sectionId);
         }
       }
@@ -118,9 +125,37 @@ class NavigationManager {
       this.handleInitialHash();
     });
   }
+
+  /**
+   * Re-apply section visibility based on current hash or default section
+   * Useful after external code may have changed section visibility
+   */
+  reapplySectionVisibility() {
+    // Hide all sections first
+    this.sections.forEach((section) => {
+      section.setAttribute('hidden', 'true');
+    });
+
+    // Then show the correct section based on hash or default
+    this.handleInitialHash();
+  }
 }
+
+// Store NavigationManager instance globally so other modules can access it
+let navigationManagerInstance;
 
 // Initialize navigation when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  new NavigationManager();
+  navigationManagerInstance = new NavigationManager();
+
+  // Make it accessible globally for other modules
+  window.navigationManager = navigationManagerInstance;
+
+  // Re-apply section visibility after a short delay to ensure all modules have initialized
+  // This handles cases where login verification happens after DOMContentLoaded
+  setTimeout(() => {
+    if (navigationManagerInstance) {
+      navigationManagerInstance.reapplySectionVisibility();
+    }
+  }, 100);
 });
