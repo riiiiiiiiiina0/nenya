@@ -251,7 +251,7 @@ function renderProjectRow(project) {
   const openButton = document.createElement('button');
   openButton.type = 'button';
   openButton.className =
-    'btn btn-ghost btn-sm flex-1 justify-between gap-3 min-w-0 py-2 group-hover:flex-none';
+    'btn btn-ghost btn-sm flex-1 justify-between gap-3 min-w-0 py-2';
 
   // Create icon element with hover affordance for Raindrop link
   const iconElement = document.createElement('div');
