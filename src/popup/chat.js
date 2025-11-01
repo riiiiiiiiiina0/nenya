@@ -2,6 +2,7 @@
 
 import '../options/theme.js';
 import { loadLLMPrompts } from '../options/llmPrompts.js';
+import { icons } from '../shared/icons.js';
 
 const promptTextarea = /** @type {HTMLTextAreaElement | null} */ (
   document.getElementById('promptTextarea')
@@ -108,11 +109,17 @@ async function loadSelectedProviders() {
       STORAGE_KEY_SELECTED_PROVIDERS,
     );
     const saved = result[STORAGE_KEY_SELECTED_PROVIDERS];
-    if (Array.isArray(saved)) {
+    if (Array.isArray(saved) && saved.length > 0) {
       selectedProviders = new Set(saved);
+    } else {
+      // Default to ChatGPT if no providers are saved
+      selectedProviders = new Set(['chatgpt']);
+      await saveSelectedProviders();
     }
   } catch (error) {
     console.error('[chat] Failed to load selected providers:', error);
+    // Default to ChatGPT on error
+    selectedProviders = new Set(['chatgpt']);
   }
 }
 
@@ -158,20 +165,14 @@ function updateSelectedProvidersDisplay() {
 
     const badge = document.createElement('div');
     badge.className = 'llm-provider-badge';
-    badge.innerHTML = `
-      <span>${provider.name}</span>
-      <button class="ml-1 hover:opacity-70" data-provider-id="${providerId}" type="button">✕</button>
-    `;
+    badge.style.cursor = 'pointer';
+    badge.innerHTML = `<span>${provider.name}</span>`;
 
-    // Add click handler to remove button
-    const removeBtn = badge.querySelector('button');
-    if (removeBtn) {
-      removeBtn.addEventListener('click', () => {
-        selectedProviders.delete(providerId);
-        updateSelectedProvidersDisplay();
-        void saveSelectedProviders();
-      });
-    }
+    // Add click handler to show dropdown when clicking on badge
+    badge.addEventListener('click', (event) => {
+      event.stopPropagation();
+      showProvidersDropdown(badge);
+    });
 
     selectedProvidersDiv.appendChild(badge);
   });
@@ -814,12 +815,14 @@ document.addEventListener('click', (event) => {
     promptsDropdown.classList.remove('show');
   }
 
-  // Close providers dropdown if clicking anywhere except the dropdown or the button
+  // Close providers dropdown if clicking anywhere except the dropdown, the button, or provider badges
+  const isProviderBadge = target.closest('.llm-provider-badge');
   if (
     providersDropdown &&
     !providersDropdown.contains(target) &&
     target !== selectProvidersButton &&
-    !(selectProvidersButton && selectProvidersButton.contains(target))
+    !(selectProvidersButton && selectProvidersButton.contains(target)) &&
+    !isProviderBadge
   ) {
     providersDropdown.classList.remove('show');
   }
@@ -837,6 +840,22 @@ async function initChatPage() {
   await loadSelectedProviders();
   updateSelectedProvidersDisplay();
   await updateTabsInfoDisplay();
+
+  // Set SVG icons for buttons
+  const editPromptsButton = document.getElementById('editPromptsButton');
+  if (editPromptsButton) {
+    editPromptsButton.innerHTML = icons['pencil-square'];
+  }
+
+  const downloadBtn = document.getElementById('downloadButton');
+  if (downloadBtn) {
+    downloadBtn.innerHTML = icons['arrow-down-tray'];
+  }
+
+  const sendBtn = document.getElementById('sendButton');
+  if (sendBtn) {
+    sendBtn.innerHTML = icons['chat-bubble-oval-left-ellipsis'];
+  }
 
   // Focus the textarea
   if (promptTextarea) {
