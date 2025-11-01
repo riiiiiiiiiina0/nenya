@@ -245,7 +245,7 @@ function renderProjectRow(project) {
 
   const container = document.createElement('div');
   container.className =
-    'flex items-center w-full border border-base-content/10 rounded-md p-1 my-2';
+    'group flex items-center w-full border border-base-content/10 rounded-md p-1 my-2';
   container.setAttribute('role', 'listitem');
 
   const openButton = document.createElement('button');
@@ -371,7 +371,7 @@ function renderProjectRow(project) {
       );
     }),
   );
-  addButton.classList.add('project-action-button');
+  addButton.classList.add('project-action-button', 'hidden', 'group-hover:flex');
 
   // replace project items with highlighted/active tabs button
   const replaceButton = createTooltip(
@@ -385,7 +385,7 @@ function renderProjectRow(project) {
       );
     }),
   );
-  replaceButton.classList.add('project-action-button');
+  replaceButton.classList.add('project-action-button', 'hidden', 'group-hover:flex');
 
   // replace project items with all tabs in current window button
   const replaceWindowButton = createTooltip(
@@ -399,7 +399,7 @@ function renderProjectRow(project) {
       );
     }),
   );
-  replaceWindowButton.classList.add('project-action-button');
+  replaceWindowButton.classList.add('project-action-button', 'hidden', 'group-hover:flex');
 
   container.append(
     openButton,
