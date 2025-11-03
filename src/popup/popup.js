@@ -67,6 +67,12 @@ const autoReloadStatusElement = /** @type {HTMLSpanElement | null} */ (
 const projectsContainer = /** @type {HTMLDivElement | null} */ (
   document.getElementById('projectsContainer')
 );
+const bookmarksSearchInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('bookmarksSearchInput')
+);
+const bookmarksSearchResults = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('bookmarksSearchResults')
+);
 const mirrorSection = /** @type {HTMLElement | null} */ (
   document.querySelector('article[aria-labelledby="mirror-heading"]')
 );
@@ -79,6 +85,11 @@ if (pullButton && saveUnsortedButton && statusMessage) {
 // Initialize projects functionality
 if (saveProjectButton && projectsContainer && statusMessage) {
   initializeProjects(saveProjectButton, projectsContainer, statusMessage);
+}
+
+// Initialize bookmarks search functionality
+if (bookmarksSearchInput && bookmarksSearchResults) {
+  initializeBookmarksSearch(bookmarksSearchInput, bookmarksSearchResults);
 }
 
 if (!statusMessage) {
@@ -537,3 +548,54 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     void initializePopup();
   }
 });
+
+/**
+ * Initializes the bookmark search functionality.
+ * @param {HTMLInputElement} inputElement
+ * @param {HTMLDivElement} resultsElement
+ */
+function initializeBookmarksSearch(inputElement, resultsElement) {
+  inputElement.addEventListener('input', (event) => {
+    const target = /** @type {HTMLInputElement | null} */ (event.target);
+    if (!target) {
+      return;
+    }
+    const query = target.value;
+    if (query.length > 2) {
+      performSearch(query, resultsElement);
+    } else {
+      resultsElement.innerHTML = '';
+    }
+  });
+}
+
+/**
+ * Performs a bookmark search and renders the results.
+ * @param {string} query
+ * @param {HTMLDivElement} resultsElement
+ */
+function performSearch(query, resultsElement) {
+  chrome.bookmarks.search(query, (results) => {
+    renderSearchResults(results, resultsElement);
+  });
+}
+
+/**
+ * Renders the bookmark search results.
+ * @param {chrome.bookmarks.BookmarkTreeNode[]} results
+ * @param {HTMLDivElement} resultsElement
+ */
+function renderSearchResults(results, resultsElement) {
+  resultsElement.innerHTML = '';
+  results.forEach((bookmark) => {
+    if (bookmark.url) {
+      const resultItem = document.createElement('div');
+      resultItem.className = 'p-2 hover:bg-base-300 cursor-pointer';
+      resultItem.textContent = bookmark.title || bookmark.url;
+      resultItem.addEventListener('click', () => {
+        chrome.tabs.create({ url: bookmark.url });
+      });
+      resultsElement.appendChild(resultItem);
+    }
+  });
+}
