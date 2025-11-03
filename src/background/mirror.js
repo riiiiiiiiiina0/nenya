@@ -123,7 +123,10 @@ export {
 };
 
 import { processUrl } from '../shared/urlProcessor.js';
-import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/splitUrl.js';
+import {
+  convertSplitUrlForSave,
+  convertSplitUrlForRestore,
+} from '../shared/splitUrl.js';
 
 const PROVIDER_ID = 'raindrop';
 const STORAGE_KEY_TOKENS = 'cloudAuthTokens';
@@ -1294,8 +1297,6 @@ function escapeSearchValue(value) {
  * @returns {Promise<{ stats: MirrorStats, rootFolderId: string }>}
  */
 async function performMirrorPull(trigger) {
-  console.info('[mirror] Starting Raindrop pull (trigger:', trigger + ')');
-
   const stats = createEmptyStats();
 
   const tokens = await loadValidProviderTokens();
@@ -1320,7 +1321,6 @@ async function performMirrorPull(trigger) {
   await processDeletedItems(tokens, mirrorContext, stats);
   await processUpdatedItems(tokens, mirrorContext, stats);
 
-  console.info('[mirror] Raindrop pull complete with stats:', stats);
   return {
     stats,
     rootFolderId: mirrorContext.rootFolderId,
@@ -2368,63 +2368,13 @@ async function processDeletedItems(tokens, context, stats) {
   let page = 0;
   let shouldContinue = true;
 
-  console.log(
-    '[mirror] Starting to pull deleted items from Raindrop',
-    '(collection: -99, threshold:',
-    threshold > 0 ? new Date(threshold).toISOString() : 'none',
-    ')',
-  );
-
   while (shouldContinue) {
-    console.log(
-      '[mirror] Fetching page',
-      page,
-      'of deleted items (collection: -99)',
-    );
     const items = await fetchRaindropItems(tokens, -99, page);
-    
-    if (!items) {
-      console.log(
-        '[mirror] Stopping pull: pageItems is null/undefined',
-        '(page:',
-        page,
-        ', collection: -99)',
-      );
+
+    if (!items || items.length === 0) {
       break;
     }
 
-    if (items.length === 0) {
-      console.log(
-        '[mirror] Stopping pull: no items returned',
-        '(page:',
-        page,
-        ', collection: -99)',
-      );
-      break;
-    }
-
-    console.log(
-      '[mirror] Fetched',
-      items.length,
-      'deleted items from page',
-      page,
-      '(collection: -99)',
-    );
-
-    // Log URLs of fetched items
-    const urls = items
-      .map((item) => {
-        const url = typeof item?.link === 'string' ? item.link : '';
-        return url || '(no URL)';
-      })
-      .filter((url) => url !== '(no URL)');
-    if (urls.length > 0) {
-      console.log('[mirror] URLs from page', page + ':', urls);
-    } else {
-      console.log('[mirror] No URLs found in items from page', page);
-    }
-
-    let itemsProcessed = 0;
     let stoppedByThreshold = false;
 
     for (const item of items) {
@@ -2432,15 +2382,6 @@ async function processDeletedItems(tokens, context, stats) {
         item?.lastUpdate ?? item?.created,
       );
       if (threshold > 0 && lastUpdate > 0 && lastUpdate <= threshold) {
-        console.log(
-          '[mirror] Stopping pull: reached threshold timestamp',
-          new Date(threshold).toISOString(),
-          '(item timestamp:',
-          new Date(lastUpdate).toISOString(),
-          ', page:',
-          page,
-          ', collection: -99)',
-        );
         shouldContinue = false;
         stoppedByThreshold = true;
         break;
@@ -2456,34 +2397,14 @@ async function processDeletedItems(tokens, context, stats) {
       }
 
       await removeBookmarksByUrl(url, context, stats);
-      itemsProcessed += 1;
     }
 
-    if (stoppedByThreshold) {
-      console.log(
-        '[mirror] Processed',
-        itemsProcessed,
-        'items before stopping at threshold',
-        '(page:',
-        page,
-        ', collection: -99)',
-      );
-      break;
-    }
-
-    if (!shouldContinue) {
+    if (stoppedByThreshold || !shouldContinue) {
       break;
     }
 
     page += 1;
   }
-
-  console.log(
-    '[mirror] Finished pulling deleted items',
-    '- total pages fetched:',
-    page + 1,
-    '(collection: -99)',
-  );
 
   if (newestProcessed > 0) {
     await writeLocalNumber(LOCAL_KEY_OLDEST_DELETED, newestProcessed);
@@ -2503,63 +2424,13 @@ async function processUpdatedItems(tokens, context, stats) {
   let page = 0;
   let shouldContinue = true;
 
-  console.log(
-    '[mirror] Starting to pull updated items from Raindrop',
-    '(collection: 0, threshold:',
-    threshold > 0 ? new Date(threshold).toISOString() : 'none',
-    ')',
-  );
-
   while (shouldContinue) {
-    console.log(
-      '[mirror] Fetching page',
-      page,
-      'of updated items (collection: 0)',
-    );
     const items = await fetchRaindropItems(tokens, 0, page);
-    
-    if (!items) {
-      console.log(
-        '[mirror] Stopping pull: pageItems is null/undefined',
-        '(page:',
-        page,
-        ', collection: 0)',
-      );
+
+    if (!items || items.length === 0) {
       break;
     }
 
-    if (items.length === 0) {
-      console.log(
-        '[mirror] Stopping pull: no items returned',
-        '(page:',
-        page,
-        ', collection: 0)',
-      );
-      break;
-    }
-
-    console.log(
-      '[mirror] Fetched',
-      items.length,
-      'updated items from page',
-      page,
-      '(collection: 0)',
-    );
-
-    // Log URLs of fetched items
-    const urls = items
-      .map((item) => {
-        const url = typeof item?.link === 'string' ? item.link : '';
-        return url || '(no URL)';
-      })
-      .filter((url) => url !== '(no URL)');
-    if (urls.length > 0) {
-      console.log('[mirror] URLs from page', page + ':', urls);
-    } else {
-      console.log('[mirror] No URLs found in items from page', page);
-    }
-
-    let itemsProcessed = 0;
     let stoppedByThreshold = false;
 
     for (const item of items) {
@@ -2567,15 +2438,6 @@ async function processUpdatedItems(tokens, context, stats) {
         item?.lastUpdate ?? item?.created,
       );
       if (threshold > 0 && lastUpdate > 0 && lastUpdate <= threshold) {
-        console.log(
-          '[mirror] Stopping pull: reached threshold timestamp',
-          new Date(threshold).toISOString(),
-          '(item timestamp:',
-          new Date(lastUpdate).toISOString(),
-          ', page:',
-          page,
-          ', collection: 0)',
-        );
         shouldContinue = false;
         stoppedByThreshold = true;
         break;
@@ -2587,14 +2449,6 @@ async function processUpdatedItems(tokens, context, stats) {
 
       const url = typeof item?.link === 'string' ? item.link : '';
       if (!url) {
-        console.log(
-          '[mirror] Skipping item: missing URL',
-          '(itemId:',
-          extractItemId(item),
-          ', collectionId:',
-          extractCollectionId(item),
-          ')',
-        );
         continue;
       }
 
@@ -2608,36 +2462,12 @@ async function processUpdatedItems(tokens, context, stats) {
       }
 
       if (!targetFolderId) {
-        console.log(
-          '[mirror] Skipping item: no target folder found',
-          '(URL:',
-          url,
-          ', collectionId:',
-          collectionId,
-          ', available collections:',
-          Array.from(context.collectionFolderMap.keys()),
-          ')',
-        );
         continue;
       }
 
       const bookmarkTitle = normalizeBookmarkTitle(item?.title, url);
       const itemId = extractItemId(item);
-      
-      console.log(
-        '[mirror] Processing item:',
-        url,
-        '(itemId:',
-        itemId,
-        ', collectionId:',
-        collectionId,
-        ', targetFolderId:',
-        targetFolderId,
-        ', title:',
-        bookmarkTitle,
-        ')',
-      );
-      
+
       try {
         await upsertBookmark(
           tokens,
@@ -2649,7 +2479,6 @@ async function processUpdatedItems(tokens, context, stats) {
           stats,
           collectionId,
         );
-        itemsProcessed += 1;
       } catch (error) {
         console.error(
           '[mirror] Failed to upsert bookmark:',
@@ -2661,31 +2490,12 @@ async function processUpdatedItems(tokens, context, stats) {
       }
     }
 
-    if (stoppedByThreshold) {
-      console.log(
-        '[mirror] Processed',
-        itemsProcessed,
-        'items before stopping at threshold',
-        '(page:',
-        page,
-        ', collection: 0)',
-      );
-      break;
-    }
-
-    if (!shouldContinue) {
+    if (stoppedByThreshold || !shouldContinue) {
       break;
     }
 
     page += 1;
   }
-
-  console.log(
-    '[mirror] Finished pulling updated items',
-    '- total pages fetched:',
-    page + 1,
-    '(collection: 0)',
-  );
 
   if (newestProcessed > 0) {
     await writeLocalNumber(LOCAL_KEY_OLDEST_ITEM, newestProcessed);
@@ -2882,17 +2692,6 @@ async function removeDuplicateTitleBookmarksInFolder(
   let children;
   try {
     children = await bookmarksGetChildren(targetFolderId);
-    console.log(
-      '[mirror] removeDuplicateTitleBookmarksInFolder: checking',
-      children.length,
-      'children in folder',
-      targetFolderId,
-      '(title:',
-      title,
-      ', urlToKeep:',
-      urlToKeep,
-      ')',
-    );
   } catch (error) {
     console.warn('[dedupe] Failed to read folder children for dedupe:', error);
     return;
@@ -2911,28 +2710,15 @@ async function removeDuplicateTitleBookmarksInFolder(
     const normalizedChildUrl = normalizeHttpUrl(child.url);
     const normalizedUrlToKeep = normalizeHttpUrl(urlToKeep);
     // If URLs normalize to the same value, they're the same bookmark - don't delete
-    if (normalizedChildUrl && normalizedUrlToKeep && normalizedChildUrl === normalizedUrlToKeep) {
+    if (
+      normalizedChildUrl &&
+      normalizedUrlToKeep &&
+      normalizedChildUrl === normalizedUrlToKeep
+    ) {
       return false;
     }
     return true;
   });
-
-  console.log(
-    '[mirror] removeDuplicateTitleBookmarksInFolder: found',
-    duplicates.length,
-    'duplicates',
-    '(title:',
-    title,
-    ', urlToKeep:',
-    urlToKeep,
-    ', duplicates:',
-    duplicates.map((d) => ({
-      id: d.id,
-      title: d.title,
-      url: d.url,
-    })),
-    ')',
-  );
 
   if (duplicates.length === 0) {
     return;
@@ -2946,28 +2732,9 @@ async function removeDuplicateTitleBookmarksInFolder(
         typeof collectionId === 'number' &&
         (await doesRaindropItemExistInCollection(tokens, collectionId, dupUrl))
       ) {
-        console.log(
-          '[mirror] Skipping duplicate deletion: URL exists in Raindrop collection',
-          '(bookmarkId:',
-          dup.id,
-          ', URL:',
-          dupUrl,
-          ', collectionId:',
-          collectionId,
-          ')',
-        );
         continue;
       }
 
-      console.log(
-        '[mirror] Removing duplicate bookmark:',
-        dupUrl,
-        '(bookmarkId:',
-        dup.id,
-        ', title:',
-        dup.title,
-        ')',
-      );
       await bookmarksRemove(dup.id);
       stats.bookmarksDeleted += 1;
 
@@ -3173,15 +2940,6 @@ async function upsertBookmark(
           if (didUpdate) {
             await bookmarksUpdate(node.id, changes);
             stats.bookmarksUpdated += 1;
-            console.log(
-              '[mirror] Updated mapped bookmark:',
-              url,
-              '(bookmarkId:',
-              node.id,
-              ', changes:',
-              changes,
-              ')',
-            );
 
             // Update index: remove oldUrl mapping if URL changed, and add new
             const existingEntry = context.index.bookmarks.get(node.id) || {
@@ -3218,17 +2976,6 @@ async function upsertBookmark(
           if (node.parentId !== targetFolderId) {
             await bookmarksMove(node.id, { parentId: targetFolderId });
             stats.bookmarksMoved += 1;
-            console.log(
-              '[mirror] Moved bookmark:',
-              url,
-              '(bookmarkId:',
-              node.id,
-              ', from:',
-              node.parentId,
-              ', to:',
-              targetFolderId,
-              ')',
-            );
           }
 
           // Ensure mapping is set
@@ -3243,13 +2990,6 @@ async function upsertBookmark(
             targetFolderId,
             context,
             stats,
-          );
-          console.log(
-            '[mirror] Processed mapped bookmark (no changes needed):',
-            url,
-            '(bookmarkId:',
-            node.id,
-            ')',
           );
           return;
         }
@@ -3275,23 +3015,6 @@ async function upsertBookmark(
     if (existingBookmark.title !== title) {
       await bookmarksUpdate(existingBookmark.id, { title });
       stats.bookmarksUpdated += 1;
-      console.log(
-        '[mirror] Updated existing bookmark title:',
-        url,
-        '(bookmarkId:',
-        existingBookmark.id,
-        ', new title:',
-        title,
-        ')',
-      );
-    } else {
-      console.log(
-        '[mirror] Bookmark already exists (no changes needed):',
-        url,
-        '(bookmarkId:',
-        existingBookmark.id,
-        ')',
-      );
     }
 
     // Update the context index
@@ -3342,17 +3065,6 @@ async function upsertBookmark(
     if (bookmarkEntry.parentId !== targetFolderId) {
       await bookmarksMove(bookmarkEntry.id, { parentId: targetFolderId });
       stats.bookmarksMoved += 1;
-      console.log(
-        '[mirror] Moved bookmark from index:',
-        url,
-        '(bookmarkId:',
-        bookmarkEntry.id,
-        ', from:',
-        bookmarkEntry.parentId,
-        ', to:',
-        targetFolderId,
-        ')',
-      );
       bookmarkEntry.parentId = targetFolderId;
       bookmarkEntry.pathSegments = [...folderInfo.pathSegments];
     }
@@ -3363,23 +3075,6 @@ async function upsertBookmark(
       await bookmarksUpdate(bookmarkEntry.id, { title });
       bookmarkEntry.title = title;
       stats.bookmarksUpdated += 1;
-      console.log(
-        '[mirror] Updated bookmark from index:',
-        url,
-        '(bookmarkId:',
-        bookmarkEntry.id,
-        ', new title:',
-        title,
-        ')',
-      );
-    } else {
-      console.log(
-        '[mirror] Bookmark found in index (no changes needed):',
-        url,
-        '(bookmarkId:',
-        bookmarkEntry.id,
-        ')',
-      );
     }
     context.index.bookmarks.set(bookmarkEntry.id, bookmarkEntry);
     if (!existingEntries.includes(bookmarkEntry)) {
@@ -3408,53 +3103,6 @@ async function upsertBookmark(
   });
 
   stats.bookmarksCreated += 1;
-  
-  console.log(
-    '[mirror] Created bookmark:',
-    url,
-    '(bookmarkId:',
-    created.id,
-    ', targetFolderId:',
-    targetFolderId,
-    ')',
-  );
-
-  // Verify bookmark exists after creation
-  try {
-    const verifyNodes = await bookmarksGet(created.id);
-    if (!verifyNodes || verifyNodes.length === 0) {
-      console.error(
-        '[mirror] WARNING: Bookmark was not found immediately after creation!',
-        '(bookmarkId:',
-        created.id,
-        ', URL:',
-        url,
-        ')',
-      );
-    } else {
-      console.log(
-        '[mirror] Verified bookmark exists after creation:',
-        url,
-        '(bookmarkId:',
-        created.id,
-        ', actual parentId:',
-        verifyNodes[0].parentId,
-        ', expected parentId:',
-        targetFolderId,
-        ')',
-      );
-    }
-  } catch (error) {
-    console.error(
-      '[mirror] Failed to verify bookmark after creation:',
-      error,
-      '(bookmarkId:',
-      created.id,
-      ', URL:',
-      url,
-      ')',
-    );
-  }
 
   const newEntry = {
     id: created.id,
@@ -3475,16 +3123,6 @@ async function upsertBookmark(
 
   await setMappedBookmarkId(itemId, newEntry.id);
   // Remove same-title duplicates that point to a different URL in this folder
-  console.log(
-    '[mirror] Calling removeDuplicateTitleBookmarksInFolder before dedupe',
-    '(bookmarkId:',
-    created.id,
-    ', URL:',
-    url,
-    ', title:',
-    title,
-    ')',
-  );
   await removeDuplicateTitleBookmarksInFolder(
     tokens,
     collectionId,
@@ -3494,41 +3132,6 @@ async function upsertBookmark(
     context,
     stats,
   );
-  
-  // Verify bookmark still exists after dedupe
-  try {
-    const verifyAfterDedupe = await bookmarksGet(created.id);
-    if (!verifyAfterDedupe || verifyAfterDedupe.length === 0) {
-      console.error(
-        '[mirror] ERROR: Bookmark was DELETED by removeDuplicateTitleBookmarksInFolder!',
-        '(bookmarkId:',
-        created.id,
-        ', URL:',
-        url,
-        ', title:',
-        title,
-        ')',
-      );
-    } else {
-      console.log(
-        '[mirror] Verified bookmark still exists after dedupe:',
-        url,
-        '(bookmarkId:',
-        created.id,
-        ')',
-      );
-    }
-  } catch (error) {
-    console.error(
-      '[mirror] Failed to verify bookmark after dedupe:',
-      error,
-      '(bookmarkId:',
-      created.id,
-      ', URL:',
-      url,
-      ')',
-    );
-  }
 }
 
 /**
