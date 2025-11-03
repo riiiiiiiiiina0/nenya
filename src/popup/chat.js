@@ -302,7 +302,7 @@ async function showPromptsDropdown() {
     window.innerWidth - dropdownWidth - 20,
   );
 
-  promptsDropdown.style.left = `${Math.max(20, maxLeft)}px`;
+  promptsDropdown.style.left = `${Math.max(10, maxLeft)}px`;
   promptsDropdown.style.top = `${cursorPosition.top + 20}px`;
   promptsDropdown.classList.add('show');
 
@@ -367,7 +367,7 @@ function showProvidersDropdown(referenceElement) {
     const dropdownWidth = 400;
     const maxLeft = Math.min(rect.left, window.innerWidth - dropdownWidth - 20);
 
-    providersDropdown.style.left = `${Math.max(20, maxLeft)}px`;
+    providersDropdown.style.left = `${Math.max(10, maxLeft)}px`;
     // Position above the button - we'll adjust after showing to get accurate height
     providersDropdown.style.top = '0px';
     providersDropdown.classList.add('show');
@@ -384,7 +384,7 @@ function showProvidersDropdown(referenceElement) {
       window.innerWidth - dropdownWidth - 20,
     );
 
-    providersDropdown.style.left = `${Math.max(20, maxLeft)}px`;
+    providersDropdown.style.left = `${Math.max(10, maxLeft)}px`;
     providersDropdown.style.top = `${cursorPosition.top + 20}px`;
     providersDropdown.classList.add('show');
   }
