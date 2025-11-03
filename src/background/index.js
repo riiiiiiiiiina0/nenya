@@ -504,8 +504,22 @@ function handleLifecycleEvent(trigger) {
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   handleLifecycleEvent('install');
+  if (details.reason === 'install' || details.reason === 'update') {
+    const windows = await chrome.windows.getAll({ populate: true });
+    for (const window of windows) {
+      for (const tab of window.tabs) {
+        if (tab.id && tab.url && (tab.url.startsWith('http:') || tab.url.startsWith('https:'))) {
+          try {
+            await chrome.tabs.reload(tab.id, { bypassCache: true });
+          } catch (error) {
+            console.warn(`[background] Failed to reload tab ${tab.id}:`, error);
+          }
+        }
+      }
+    }
+  }
 });
 
 chrome.runtime.onStartup.addListener(() => {
