@@ -579,6 +579,7 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
           query,
         )}`;
         chrome.tabs.create({ url: searchUrl });
+        window.close();
       }
     }
   });
@@ -605,10 +606,12 @@ function renderSearchResults(results, resultsElement) {
   results.forEach((bookmark) => {
     if (bookmark.url) {
       const resultItem = document.createElement('div');
-      resultItem.className = 'p-2 hover:bg-base-300 cursor-pointer';
+      resultItem.className =
+        'p-2 hover:bg-base-300 cursor-pointer rounded-md';
       resultItem.textContent = bookmark.title || bookmark.url;
       resultItem.addEventListener('click', () => {
         chrome.tabs.create({ url: bookmark.url });
+        window.close();
       });
       resultsElement.appendChild(resultItem);
     }
