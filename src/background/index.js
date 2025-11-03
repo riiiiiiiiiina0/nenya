@@ -417,6 +417,22 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
+
+  if (command === 'bookmarks-rename-tab') {
+    void (async () => {
+      try {
+        // Set a flag in storage to indicate we should show rename prompt
+        await chrome.storage.local.set({ openRenamePrompt: true });
+
+        // Open the extension popup (this will trigger the popup to open)
+        // The popup will check the flag and show the rename prompt
+        await chrome.action.openPopup();
+      } catch (error) {
+        console.warn('[commands] Rename tab failed:', error);
+      }
+    })();
+    return;
+  }
 });
 
 // ============================================================================
@@ -512,6 +528,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install' || details.reason === 'update') {
     const windows = await chrome.windows.getAll({ populate: true });
     for (const window of windows) {
+      if (!window.tabs) {
+        continue;
+      }
       for (const tab of window.tabs) {
         if (
           tab.id &&
@@ -553,6 +572,17 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     }
   } catch (error) {
     console.warn('Failed to get tab for context menu update:', error);
+  }
+});
+
+// Clean up custom title records when tabs close
+chrome.tabs.onRemoved.addListener(async (tabId) => {
+  try {
+    const storageKey = `customTitle_${tabId}`;
+    await chrome.storage.local.remove(storageKey);
+    console.log('[background] Cleaned up custom title for closed tab:', tabId);
+  } catch (error) {
+    console.warn('[background] Failed to clean up custom title:', error);
   }
 });
 
@@ -1018,6 +1048,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === GET_CURRENT_TAB_ID_MESSAGE) {
     if (sender.tab) {
       sendResponse({ tabId: sender.tab.id });
+    } else {
+      sendResponse({ tabId: null });
     }
     return true;
   }

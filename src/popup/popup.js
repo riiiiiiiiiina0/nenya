@@ -36,6 +36,9 @@ const importCustomCodeButton = /** @type {HTMLButtonElement | null} */ (
 const splitPageButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('splitPageButton')
 );
+const setCustomTitleButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('setCustomTitleButton')
+);
 
 // Set icon SVGs for header buttons
 if (getMarkdownButton) {
@@ -61,6 +64,9 @@ if (splitPageButton) {
 }
 if (saveProjectButton) {
   saveProjectButton.innerHTML = icons['rectangle-group'];
+}
+if (setCustomTitleButton) {
+  setCustomTitleButton.innerHTML = icons['pencil-square'];
 }
 const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('importCustomCodeFileInput')
@@ -169,6 +175,14 @@ if (splitPageButton) {
   console.error('[popup] Split page button not found.');
 }
 
+if (setCustomTitleButton) {
+  setCustomTitleButton.addEventListener('click', () => {
+    void handleSetCustomTitle();
+  });
+} else {
+  console.error('[popup] Set custom title button not found.');
+}
+
 /**
  * Handle the custom filter creation.
  * @returns {Promise<void>}
@@ -266,6 +280,7 @@ function validateImportedRule(data) {
   // Validate URL pattern
   try {
     // eslint-disable-next-line no-new
+    // @ts-ignore - URLPattern is a browser API not yet in TypeScript types
     new URLPattern(raw.pattern);
   } catch (error) {
     return { isValid: false, error: 'Invalid URL pattern format' };
@@ -462,6 +477,20 @@ void (async () => {
     console.error('[popup] Failed to check chat page flag:', error);
   }
 
+  // Check if we should show rename prompt (triggered by keyboard shortcut)
+  try {
+    const renameResult = await chrome.storage.local.get('openRenamePrompt');
+    if (renameResult.openRenamePrompt) {
+      // Clear the flag
+      await chrome.storage.local.remove('openRenamePrompt');
+      // Trigger the rename prompt
+      void handleSetCustomTitle();
+      return;
+    }
+  } catch (error) {
+    console.error('[popup] Failed to check rename prompt flag:', error);
+  }
+
   // Initialize the popup normally
   void initializePopup();
 })();
@@ -584,6 +613,92 @@ async function handleSplitPage() {
     if (statusMessage) {
       concludeStatus(
         'Unable to trigger split/unsplit page.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * Handle setting a custom title for the current tab.
+ * @returns {Promise<void>}
+ */
+async function handleSetCustomTitle() {
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    const currentTab = tabs[0];
+
+    // Check if tab has a valid ID
+    if (typeof currentTab.id !== 'number') {
+      if (statusMessage) {
+        concludeStatus('Invalid tab ID.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Get current title as default
+    const currentTitle = typeof currentTab.title === 'string' ? currentTab.title : '';
+
+    // Get Prompts object (loaded via script tag)
+    // @ts-ignore - Prompts is loaded globally via script tag
+    const Prompts = typeof window !== 'undefined' && window.Prompts ? window.Prompts : null;
+    if (!Prompts) {
+      if (statusMessage) {
+        concludeStatus('Prompt library not loaded.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Prompt user for custom title
+    const customTitle = await Prompts.prompt('Enter custom title for this tab:', currentTitle);
+    if (customTitle === null) {
+      // User cancelled
+      return;
+    }
+
+    const trimmedTitle = customTitle.trim();
+    if (!trimmedTitle) {
+      if (statusMessage) {
+        concludeStatus('Title cannot be empty.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Save to chrome local storage
+    const storageKey = `customTitle_${currentTab.id}`;
+    await chrome.storage.local.set({
+      [storageKey]: {
+        tabId: currentTab.id,
+        title: trimmedTitle,
+      },
+    });
+
+    if (statusMessage) {
+      concludeStatus(
+        'Custom title set successfully.',
+        'success',
+        2000,
+        statusMessage,
+      );
+    }
+
+    // Close the popup
+    window.close();
+  } catch (error) {
+    console.error('[popup] Error setting custom title:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to set custom title.',
         'error',
         3000,
         statusMessage,

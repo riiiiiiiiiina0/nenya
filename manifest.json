@@ -69,7 +69,8 @@
       "js": [
         "src/contentScript/bright-mode.js",
         "src/contentScript/block-elements.js",
-        "src/contentScript/custom-js-css.js"
+        "src/contentScript/custom-js-css.js",
+        "src/contentScript/custom-title.js"
       ],
       "run_at": "document_start"
     },
@@ -149,6 +150,9 @@
     },
     "llm-chat-with-llm": {
       "description": "🤖 Chat with LLM"
+    },
+    "bookmarks-rename-tab": {
+      "description": "✏️ Rename tab"
     }
   }
 }

@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="../libs/daisyui@5-themes.css">
   <link rel="stylesheet" href="./popup.css">
   <script src="../libs/tailwindcss@4.js"></script>
+  <script src="../libs/prompt.js"></script>
   <style>
     body {
       min-height: 200px;
@@ -23,7 +24,8 @@
     #customFilterButton,
     #splitPageButton,
     #openOptionsButton,
-    #saveProjectButton {
+    #saveProjectButton,
+    #setCustomTitleButton {
       color: #000000;
     }
 
@@ -34,7 +36,8 @@
     [data-theme="dark"] #customFilterButton,
     [data-theme="dark"] #splitPageButton,
     [data-theme="dark"] #openOptionsButton,
-    [data-theme="dark"] #saveProjectButton {
+    [data-theme="dark"] #saveProjectButton,
+    [data-theme="dark"] #setCustomTitleButton {
       color: #ffffff;
     }
 
@@ -107,6 +110,10 @@
           <div class="flex flex-row items-center gap-2">
             <h1 class="text-xl font-semibold text-base-content">📚 Projects</h1>
             <div class="flex-1"></div>
+            <div class="tooltip tooltip-left" data-tip="Set custom title for current tab">
+              <button id="setCustomTitleButton" class="btn btn-sm btn-square btn-ghost" type="button">
+              </button>
+            </div>
             <div class="tooltip tooltip-left" data-tip="Save tabs as project">
               <button id="saveProjectButton" class="btn btn-sm btn-square btn-ghost" type="button">
               </button>
