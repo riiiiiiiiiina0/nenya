@@ -674,11 +674,52 @@ async function loadBackupItemMap(tokens, collectionId) {
   const normalizedTitle = (title) =>
     typeof title === 'string' ? title.trim().toLowerCase() : '';
 
+  console.log(
+    '[options-backup] Starting to pull items from Raindrop collection',
+    collectionId,
+  );
+
   while (shouldContinue) {
+    console.log(
+      '[options-backup] Fetching page',
+      page,
+      'from collection',
+      collectionId,
+    );
     const pageItems = await fetchRaindropItems(tokens, collectionId, page);
-    if (!Array.isArray(pageItems) || pageItems.length === 0) {
+
+    if (!Array.isArray(pageItems)) {
+      console.log(
+        '[options-backup] Stopping pull: pageItems is not an array',
+        '(page:',
+        page,
+        ', collection:',
+        collectionId,
+        ')',
+      );
       break;
     }
+
+    if (pageItems.length === 0) {
+      console.log(
+        '[options-backup] Stopping pull: no items returned',
+        '(page:',
+        page,
+        ', collection:',
+        collectionId,
+        ')',
+      );
+      break;
+    }
+
+    console.log(
+      '[options-backup] Fetched',
+      pageItems.length,
+      'items from page',
+      page,
+      'of collection',
+      collectionId,
+    );
 
     pageItems.forEach((item) => {
       const title = normalizedTitle(item?.title);
@@ -689,11 +730,30 @@ async function loadBackupItemMap(tokens, collectionId) {
     });
 
     if (pageItems.length < 100) {
+      console.log(
+        '[options-backup] Stopping pull: received',
+        pageItems.length,
+        'items (less than page size 100), last page reached',
+        '(page:',
+        page,
+        ', collection:',
+        collectionId,
+        ')',
+      );
       shouldContinue = false;
     } else {
       page += 1;
     }
   }
+
+  console.log(
+    '[options-backup] Finished pulling from collection',
+    collectionId,
+    '- total pages fetched:',
+    page + 1,
+    ', total unique items collected:',
+    map.size,
+  );
 
   return map;
 }
@@ -3236,58 +3296,33 @@ async function performRestore(trigger, notifyOnError) {
  * @returns {void}
  */
 function handleStorageChanges(changes, areaName) {
-  console.log('[options-backup] Storage change detected:', {
-    changes,
-    areaName,
-  });
-
   // Handle sync storage changes
   if (areaName === 'sync') {
     if (ROOT_FOLDER_SETTINGS_KEY in changes) {
-      console.log(
-        '[options-backup] Storage change detected for auth-provider-settings',
-      );
       queueCategoryBackup('auth-provider-settings', 'storage');
     }
     if (NOTIFICATION_PREFERENCES_KEY in changes) {
-      console.log(
-        '[options-backup] Storage change detected for notification-preferences',
-      );
       queueCategoryBackup('notification-preferences', 'storage');
     }
     if (AUTO_RELOAD_RULES_KEY in changes) {
-      console.log(
-        '[options-backup] Storage change detected for auto-reload-rules',
-      );
       queueCategoryBackup('auto-reload-rules', 'storage');
     }
     if (
       BRIGHT_MODE_WHITELIST_KEY in changes ||
       BRIGHT_MODE_BLACKLIST_KEY in changes
     ) {
-      console.log(
-        '[options-backup] Storage change detected for bright-mode-settings',
-      );
       queueCategoryBackup('bright-mode-settings', 'storage');
     }
     if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
-      console.log(
-        '[options-backup] Storage change detected for highlight-text-rules',
-      );
       queueCategoryBackup('highlight-text-rules', 'storage');
     }
     if (BLOCK_ELEMENT_RULES_KEY in changes) {
-      console.log(
-        '[options-backup] Storage change detected for block-element-rules',
-      );
       queueCategoryBackup('block-element-rules', 'storage');
     }
     if (LLM_PROMPTS_KEY in changes) {
-      console.log('[options-backup] Storage change detected for llm-prompts');
       queueCategoryBackup('llm-prompts', 'storage');
     }
     if (URL_PROCESS_RULES_KEY in changes) {
-      console.log('[options-backup] Storage change detected for url-process-rules');
       queueCategoryBackup('url-process-rules', 'storage');
     }
   }
