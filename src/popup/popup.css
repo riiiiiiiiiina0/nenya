@@ -1,0 +1,11 @@
+/* Common popup styles */
+
+:root {
+  --popup-width: 420px;
+}
+
+/* Popup width constraint - shared across all popup pages */
+body {
+  width: var(--popup-width);
+  max-width: var(--popup-width);
+}
