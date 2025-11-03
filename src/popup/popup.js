@@ -683,6 +683,26 @@ async function handleSetCustomTitle() {
       },
     });
 
+    // Update the tab title immediately by injecting script
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: currentTab.id },
+        func: (title) => {
+          // Update document.title directly
+          document.title = title;
+          // Also update the title element if it exists
+          const titleElement = document.querySelector('title');
+          if (titleElement) {
+            titleElement.textContent = title;
+          }
+        },
+        args: [trimmedTitle],
+      });
+    } catch (updateError) {
+      console.warn('[popup] Failed to update tab title immediately:', updateError);
+      // Continue anyway - content script will handle it via storage listener
+    }
+
     if (statusMessage) {
       concludeStatus(
         'Custom title set successfully.',
