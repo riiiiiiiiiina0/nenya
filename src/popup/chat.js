@@ -247,19 +247,48 @@ async function updateTabsInfoDisplay() {
 
 /**
  * Show the saved prompts dropdown.
+ * @param {string} [searchQuery] - Optional search query to filter prompts
  * @returns {Promise<void>}
  */
-async function showPromptsDropdown() {
+async function showPromptsDropdown(searchQuery = '') {
   if (!promptsDropdown || !promptTextarea) return;
 
   const prompts = await loadLLMPrompts();
 
-  if (prompts.length === 0) {
+  // Filter and sort prompts based on search query
+  const query = searchQuery.toLowerCase().trim();
+  let filteredPrompts = query
+    ? prompts.filter(
+        (prompt) =>
+          prompt.name.toLowerCase().includes(query) ||
+          prompt.prompt.toLowerCase().includes(query),
+      )
+    : prompts;
+
+  // Sort by matching priority: title matches first, then content matches
+  if (query) {
+    filteredPrompts.sort((a, b) => {
+      const aNameMatch = a.name.toLowerCase().includes(query);
+      const bNameMatch = b.name.toLowerCase().includes(query);
+
+      // If one matches in name and the other doesn't, prioritize the name match
+      if (aNameMatch && !bNameMatch) return -1;
+      if (!aNameMatch && bNameMatch) return 1;
+
+      // If both match in name or both don't, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+  } else {
+    // When no query, sort alphabetically by name
+    filteredPrompts.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  if (filteredPrompts.length === 0) {
     promptsDropdown.innerHTML =
-      '<div class="dropdown-item text-base-content/60">No saved prompts</div>';
+      '<div class="dropdown-item text-base-content/60">No matching prompts</div>';
   } else {
     promptsDropdown.innerHTML = '';
-    prompts.forEach((prompt, index) => {
+    filteredPrompts.forEach((prompt, index) => {
       const item = document.createElement('div');
       item.className = 'dropdown-item';
       item.setAttribute('data-prompt-id', prompt.id);
@@ -313,9 +342,10 @@ async function showPromptsDropdown() {
 /**
  * Show the LLM providers dropdown.
  * @param {HTMLElement} [referenceElement] - Optional element to position dropdown near
+ * @param {string} [searchQuery] - Optional search query to filter providers
  * @returns {void}
  */
-function showProvidersDropdown(referenceElement) {
+function showProvidersDropdown(referenceElement, searchQuery = '') {
   if (!providersDropdown || !promptTextarea) return;
 
   // Track if opened via button or '@' trigger
@@ -324,41 +354,59 @@ function showProvidersDropdown(referenceElement) {
   providersDropdown.innerHTML = '';
 
   // Filter providers based on whether current prompt requires search
-  const availableProviders = currentPromptRequiresSearch
+  let availableProviders = currentPromptRequiresSearch
     ? LLM_PROVIDERS.filter((p) => p.supportsSearch)
     : LLM_PROVIDERS;
 
-  availableProviders.forEach((provider, index) => {
-    const item = document.createElement('div');
-    item.className = 'dropdown-item';
-    item.setAttribute('data-provider-id', provider.id);
-    item.setAttribute('data-index', String(index));
+  // Filter providers based on search query
+  const query = searchQuery.toLowerCase().trim();
+  if (query) {
+    availableProviders = availableProviders.filter((p) =>
+      p.name.toLowerCase().includes(query),
+    );
+    // Sort alphabetically by name (providers only have name, no separate content)
+    availableProviders.sort((a, b) => a.name.localeCompare(b.name));
+  } else {
+    // When no query, sort alphabetically by name
+    availableProviders.sort((a, b) => a.name.localeCompare(b.name));
+  }
 
-    if (selectedProviders.has(provider.id)) {
-      item.classList.add('selected');
-      item.innerHTML = `<span>● ${provider.name}</span>`;
-    } else {
-      item.innerHTML = `<span>○ ${provider.name}</span>`;
-    }
+  if (availableProviders.length === 0) {
+    providersDropdown.innerHTML =
+      '<div class="dropdown-item text-base-content/60">No matching providers</div>';
+  } else {
+    availableProviders.forEach((provider, index) => {
+      const item = document.createElement('div');
+      item.className = 'dropdown-item';
+      item.setAttribute('data-provider-id', provider.id);
+      item.setAttribute('data-index', String(index));
 
-    // Disable ChatGPT if prompt requires search
-    if (currentPromptRequiresSearch && provider.id === 'chatgpt') {
-      item.classList.add('opacity-50', 'cursor-not-allowed');
-      item.innerHTML = `<span>○ ${provider.name} (disabled - prompt requires search)</span>`;
-      return;
-    }
-
-    item.addEventListener('click', () => {
-      // Use appropriate toggle function based on how dropdown was opened
-      if (providerDropdownTriggeredByButton) {
-        toggleProviderFromButton(provider.id);
+      if (selectedProviders.has(provider.id)) {
+        item.classList.add('selected');
+        item.innerHTML = `<span>● ${provider.name}</span>`;
       } else {
-        toggleProvider(provider.id);
+        item.innerHTML = `<span>○ ${provider.name}</span>`;
       }
-    });
 
-    providersDropdown.appendChild(item);
-  });
+      // Disable ChatGPT if prompt requires search
+      if (currentPromptRequiresSearch && provider.id === 'chatgpt') {
+        item.classList.add('opacity-50', 'cursor-not-allowed');
+        item.innerHTML = `<span>○ ${provider.name} (disabled - prompt requires search)</span>`;
+        return;
+      }
+
+      item.addEventListener('click', () => {
+        // Use appropriate toggle function based on how dropdown was opened
+        if (providerDropdownTriggeredByButton) {
+          toggleProviderFromButton(provider.id);
+        } else {
+          toggleProvider(provider.id);
+        }
+      });
+
+      providersDropdown.appendChild(item);
+    });
+  }
 
   // Position the dropdown
   if (referenceElement) {
@@ -749,37 +797,55 @@ if (promptTextarea) {
     const cursorPos = target.selectionStart;
 
     // Check for '/' trigger
-    const lastChar = text[cursorPos - 1];
-    if (lastChar === '/') {
-      void showPromptsDropdown();
-      return;
+    const lastSlashIndex = text.lastIndexOf('/', cursorPos);
+    if (lastSlashIndex !== -1) {
+      const textAfterSlash = text.substring(lastSlashIndex + 1, cursorPos);
+      // Check if there's a space before the cursor (which means we're done with the trigger)
+      if (textAfterSlash.includes(' ')) {
+        // Hide prompts dropdown if space is found
+        if (promptsDropdown && promptsDropdown.classList.contains('show')) {
+          hideAllDropdowns();
+        }
+      } else {
+        // Show or update prompts dropdown with search query
+        void showPromptsDropdown(textAfterSlash);
+        return;
+      }
     }
 
     // Check for '@' trigger
-    if (lastChar === '@') {
-      showProvidersDropdown();
-      return;
-    }
-
-    // Hide dropdowns if not triggered
-    if (promptsDropdown && promptsDropdown.classList.contains('show')) {
-      const lastSlashIndex = text.lastIndexOf('/', cursorPos);
-      if (
-        lastSlashIndex === -1 ||
-        text.substring(lastSlashIndex, cursorPos).includes(' ')
-      ) {
-        hideAllDropdowns();
+    const lastAtIndex = text.lastIndexOf('@', cursorPos);
+    if (lastAtIndex !== -1) {
+      const textAfterAt = text.substring(lastAtIndex + 1, cursorPos);
+      // Check if there's a space before the cursor (which means we're done with the trigger)
+      if (textAfterAt.includes(' ')) {
+        // Hide providers dropdown if space is found
+        if (providersDropdown && providersDropdown.classList.contains('show')) {
+          hideAllDropdowns();
+        }
+      } else {
+        // Show or update providers dropdown with search query
+        showProvidersDropdown(undefined, textAfterAt);
+        return;
       }
     }
 
-    if (providersDropdown && providersDropdown.classList.contains('show')) {
-      const lastAtIndex = text.lastIndexOf('@', cursorPos);
-      if (
-        lastAtIndex === -1 ||
-        text.substring(lastAtIndex, cursorPos).includes(' ')
-      ) {
-        hideAllDropdowns();
-      }
+    // Hide dropdowns if neither trigger is active
+    if (
+      lastSlashIndex === -1 &&
+      promptsDropdown &&
+      promptsDropdown.classList.contains('show')
+    ) {
+      hideAllDropdowns();
+    }
+
+    if (
+      lastAtIndex === -1 &&
+      providersDropdown &&
+      providersDropdown.classList.contains('show') &&
+      !providerDropdownTriggeredByButton
+    ) {
+      hideAllDropdowns();
     }
   });
 
