@@ -463,14 +463,22 @@ let autoReloadStatusTimer = null;
 function formatRemainingCountdown(remainingMs) {
   const safeMs = Math.max(0, Number(remainingMs) || 0);
   if (safeMs === 0) {
-    return 'Reload in 0 seconds';
+    return 'This tab will be reloaded in 0 seconds';
   }
   if (safeMs >= 60000) {
     const minutes = Math.max(1, Math.ceil(safeMs / 60000));
-    return 'Reload in ' + minutes + (minutes === 1 ? ' minute' : ' minutes');
+    return (
+      'This tab will be reloaded in ' +
+      minutes +
+      (minutes === 1 ? ' minute' : ' minutes')
+    );
   }
   const seconds = Math.max(1, Math.ceil(safeMs / 1000));
-  return 'Reload in ' + seconds + (seconds === 1 ? ' second' : ' seconds');
+  return (
+    'This tab will be reloaded in ' +
+    seconds +
+    (seconds === 1 ? ' second' : ' seconds')
+  );
 }
 
 /**
@@ -609,15 +617,17 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
     chrome.bookmarks.search(query, (results) => {
       // Filter to only bookmarks with URLs
       const bookmarkResults = results.filter((bookmark) => bookmark.url);
-      
+
       // Sort to prioritize title matches over URL matches
       const lowerQuery = query.toLowerCase();
       bookmarkResults.sort((a, b) => {
-        const aTitleMatch = a.title?.toLowerCase().includes(lowerQuery) ?? false;
-        const bTitleMatch = b.title?.toLowerCase().includes(lowerQuery) ?? false;
+        const aTitleMatch =
+          a.title?.toLowerCase().includes(lowerQuery) ?? false;
+        const bTitleMatch =
+          b.title?.toLowerCase().includes(lowerQuery) ?? false;
         const aUrlMatch = a.url?.toLowerCase().includes(lowerQuery) ?? false;
         const bUrlMatch = b.url?.toLowerCase().includes(lowerQuery) ?? false;
-        
+
         // If both have title matches or both don't, keep original order
         if (aTitleMatch === bTitleMatch) {
           // If neither has title match, prioritize URL matches
@@ -627,11 +637,11 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
           }
           return 0;
         }
-        
+
         // Prioritize title matches
         return aTitleMatch ? -1 : 1;
       });
-      
+
       currentResults = bookmarkResults;
       renderSearchResults(bookmarkResults);
     });
@@ -656,7 +666,7 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
     if (event.key === 'Enter') {
       event.preventDefault();
       const query = inputElement.value.trim();
-      
+
       // If there's a highlighted result, open it
       if (highlightedIndex >= 0 && highlightedIndex < currentResults.length) {
         const highlightedBookmark = currentResults[highlightedIndex];
@@ -666,7 +676,7 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
         }
         return;
       }
-      
+
       // Otherwise, always open Google search if there's a query
       if (query) {
         const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
