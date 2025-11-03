@@ -684,8 +684,10 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
         return aTitleMatch ? -1 : 1;
       });
 
-      currentResults = bookmarkResults;
-      renderSearchResults(bookmarkResults);
+      // Limit to top 10 results
+      const topResults = bookmarkResults.slice(0, 10);
+      currentResults = topResults;
+      renderSearchResults(topResults);
     });
   }
 
