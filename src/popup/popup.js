@@ -567,6 +567,21 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
       resultsElement.innerHTML = '';
     }
   });
+
+  inputElement.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      const query = inputElement.value.trim();
+      // If the input has a value and there are no search results,
+      // perform a Google search in a new tab.
+      if (query && resultsElement.childElementCount === 0) {
+        event.preventDefault();
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+          query,
+        )}`;
+        chrome.tabs.create({ url: searchUrl });
+      }
+    }
+  });
 }
 
 /**
