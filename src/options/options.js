@@ -1,4 +1,5 @@
 import './theme.js';
+import '../shared/iconUrl.js';
 import './bookmarks.js';
 import './backup.js';
 import './notifications.js';

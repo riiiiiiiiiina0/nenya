@@ -38,24 +38,6 @@
 </head>
 
 <body class="bg-base-200 min-h-screen">
-  <script>
-    // Set extension icon URL using chrome.runtime.getURL()
-    (function () {
-      function setIconUrl() {
-        if (chrome?.runtime?.getURL) {
-          const iconImg = document.getElementById('extensionIcon');
-          if (iconImg) {
-            iconImg.src = chrome.runtime.getURL('assets/icons/icon-48x48.png');
-          }
-        }
-      }
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setIconUrl);
-      } else {
-        setIconUrl();
-      }
-    })();
-  </script>
   <div class="navbar bg-base-100 shadow-sm sticky top-0 z-10">
     <a class="btn btn-ghost text-xl flex items-center gap-2">
       <img id="extensionIcon" src="../../assets/icons/icon-48x48.png" alt="Nenya" class="w-6 h-6" />

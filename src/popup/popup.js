@@ -1,6 +1,7 @@
 /* global chrome */
 
 import '../options/theme.js';
+import '../shared/iconUrl.js';
 import {
   isUserLoggedIn,
   toggleMirrorSection,
