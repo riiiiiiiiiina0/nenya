@@ -33,6 +33,9 @@ const customFilterButton = /** @type {HTMLButtonElement | null} */ (
 const importCustomCodeButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('importCustomCodeButton')
 );
+const splitPageButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('splitPageButton')
+);
 
 // Set icon SVGs for header buttons
 if (getMarkdownButton) {
@@ -52,6 +55,9 @@ if (customFilterButton) {
 }
 if (openOptionsButton) {
   openOptionsButton.innerHTML = icons['adjustments-horizontal'];
+}
+if (splitPageButton) {
+  splitPageButton.innerHTML = icons.bars;
 }
 if (saveProjectButton) {
   saveProjectButton.innerHTML = icons['rectangle-group'];
@@ -153,6 +159,14 @@ if (importCustomCodeButton && importCustomCodeFileInput) {
   });
 } else {
   console.error('[popup] Import custom code elements not found.');
+}
+
+if (splitPageButton) {
+  splitPageButton.addEventListener('click', () => {
+    void handleSplitPage();
+  });
+} else {
+  console.error('[popup] Split page button not found.');
 }
 
 /**
@@ -549,6 +563,33 @@ window.addEventListener('unload', () => {
 function handleGetMarkdown() {
   // Navigate to the chat page within the same popup window
   window.location.href = 'chat.html';
+}
+
+/**
+ * Handle split page functionality.
+ * Triggers the split/unsplit page feature for the current tab(s).
+ * @returns {Promise<void>}
+ */
+async function handleSplitPage() {
+  try {
+    // Send message to background to trigger split/unsplit functionality
+    await chrome.runtime.sendMessage({
+      type: 'splitTabs',
+    });
+
+    // Close the popup
+    window.close();
+  } catch (error) {
+    console.error('[popup] Error triggering split/unsplit page:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to trigger split/unsplit page.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
 }
 
 // Listen for storage changes to update popup when user logs in/out

@@ -47,7 +47,10 @@ import {
   getLLMProviderFromURL,
 } from '../shared/llmProviders.js';
 import { processUrl } from '../shared/urlProcessor.js';
-import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/splitUrl.js';
+import {
+  convertSplitUrlForSave,
+  convertSplitUrlForRestore,
+} from '../shared/splitUrl.js';
 
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
@@ -510,7 +513,11 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     const windows = await chrome.windows.getAll({ populate: true });
     for (const window of windows) {
       for (const tab of window.tabs) {
-        if (tab.id && tab.url && (tab.url.startsWith('http:') || tab.url.startsWith('https:'))) {
+        if (
+          tab.id &&
+          tab.url &&
+          (tab.url.startsWith('http:') || tab.url.startsWith('https:'))
+        ) {
           try {
             await chrome.tabs.reload(tab.id, { bypassCache: true });
           } catch (error) {
@@ -532,7 +539,6 @@ initializeOptionsBackupService();
 void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
 });
-
 
 chrome.tabs.onHighlighted.addListener(() => {
   void updateClipboardContextMenuVisibility();
@@ -563,7 +569,10 @@ if (chrome.webNavigation) {
         try {
           await chrome.tabs.update(details.tabId, { url: restoredUrl });
         } catch (error) {
-          console.warn('[background] Failed to redirect nenya.local URL:', error);
+          console.warn(
+            '[background] Failed to redirect nenya.local URL:',
+            error,
+          );
         }
       }
     }
@@ -574,7 +583,11 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   // Intercept nenya.local split URLs and convert them to extension URLs
   // Check both changeInfo.url (when URL changes) and tab.url (current URL)
   const urlToCheck = changeInfo.url || (tab ? tab.url : null);
-  if (urlToCheck && typeof urlToCheck === 'string' && urlToCheck.startsWith('https://nenya.local/split')) {
+  if (
+    urlToCheck &&
+    typeof urlToCheck === 'string' &&
+    urlToCheck.startsWith('https://nenya.local/split')
+  ) {
     const restoredUrl = convertSplitUrlForRestore(urlToCheck);
     if (restoredUrl !== urlToCheck) {
       try {
@@ -1068,6 +1081,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'splitTabs') {
+    void (async () => {
+      try {
+        const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+
+        // Get all highlighted tabs
+        const highlightedTabs = await chrome.tabs.query({
+          currentWindow: true,
+          highlighted: true,
+        });
+
+        // Check if any highlighted tab is a split.html page
+        const existingSplitTab = highlightedTabs.find(
+          (tab) => tab.url && tab.url.startsWith(splitBaseUrl),
+        );
+
+        if (existingSplitTab && highlightedTabs.length > 1) {
+          // If there are multiple highlighted tabs and one is split.html, activate it
+          if (existingSplitTab.id) {
+            await chrome.tabs.update(existingSplitTab.id, { active: true });
+          }
+          sendResponse({ success: true });
+          return;
+        }
+
+        // Get current active tab
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const currentTab = tabs && tabs[0];
+        if (!currentTab) {
+          sendResponse({ success: false, error: 'No active tab found' });
+          return;
+        }
+
+        const isSplitPage =
+          currentTab.url && currentTab.url.startsWith(splitBaseUrl);
+
+        if (isSplitPage) {
+          // Current tab is split.html - unsplit it
+          await handleUnsplitTabsContextMenu(currentTab);
+        } else {
+          // Current tab is NOT split.html - create split page
+          await handleSplitTabsContextMenu(currentTab);
+        }
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error('[background] Failed to split/unsplit tabs:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === 'blockElement:addSelector') {
     console.log(
       '[background] Received blockElement:addSelector message:',
@@ -1249,10 +1317,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               active: true,
             });
             const activeTab = activeTabs && activeTabs[0];
-            if (
-              activeTab &&
-              typeof activeTab.id === 'number'
-            ) {
+            if (activeTab && typeof activeTab.id === 'number') {
               tabIds = [activeTab.id];
             }
           }
@@ -1287,11 +1352,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const currentTab = currentTabs[0];
 
         // Capture screenshot if only current tab is selected
-        if (
-          tabIds.length === 1 &&
-          currentTab &&
-          tabIds[0] === currentTab.id
-        ) {
+        if (tabIds.length === 1 && currentTab && tabIds[0] === currentTab.id) {
           try {
             const dataUrl = await chrome.tabs.captureVisibleTab(
               currentTab.windowId,
@@ -2029,7 +2090,12 @@ if (chrome.webNavigation) {
 
       // If URL was modified, update the tab
       if (processedUrl !== details.url) {
-        console.log('[urlProcessor] Processing URL on tab open:', details.url, '->', processedUrl);
+        console.log(
+          '[urlProcessor] Processing URL on tab open:',
+          details.url,
+          '->',
+          processedUrl,
+        );
         await chrome.tabs.update(details.tabId, { url: processedUrl });
       }
     } catch (error) {
