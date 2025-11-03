@@ -67,6 +67,12 @@ const autoReloadStatusElement = /** @type {HTMLSpanElement | null} */ (
 const projectsContainer = /** @type {HTMLDivElement | null} */ (
   document.getElementById('projectsContainer')
 );
+const bookmarksSearchInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('bookmarksSearchInput')
+);
+const bookmarksSearchResults = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('bookmarksSearchResults')
+);
 const mirrorSection = /** @type {HTMLElement | null} */ (
   document.querySelector('article[aria-labelledby="mirror-heading"]')
 );
@@ -79,6 +85,11 @@ if (pullButton && saveUnsortedButton && statusMessage) {
 // Initialize projects functionality
 if (saveProjectButton && projectsContainer && statusMessage) {
   initializeProjects(saveProjectButton, projectsContainer, statusMessage);
+}
+
+// Initialize bookmarks search functionality
+if (bookmarksSearchInput && bookmarksSearchResults) {
+  initializeBookmarksSearch(bookmarksSearchInput, bookmarksSearchResults);
 }
 
 if (!statusMessage) {
@@ -537,3 +548,151 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     void initializePopup();
   }
 });
+
+/**
+ * Initializes the bookmark search functionality.
+ * @param {HTMLInputElement} inputElement
+ * @param {HTMLDivElement} resultsElement
+ */
+function initializeBookmarksSearch(inputElement, resultsElement) {
+  /** @type {number} */
+  let highlightedIndex = -1;
+  /** @type {chrome.bookmarks.BookmarkTreeNode[]} */
+  let currentResults = [];
+
+  /**
+   * Updates the visual highlight of search results.
+   * @param {number} index
+   */
+  function updateHighlight(index) {
+    const items = resultsElement.querySelectorAll('[data-index]');
+    items.forEach((item, i) => {
+      if (i === index) {
+        item.classList.add('bg-base-300');
+        item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } else {
+        item.classList.remove('bg-base-300');
+      }
+    });
+  }
+
+  /**
+   * Renders the bookmark search results.
+   * @param {chrome.bookmarks.BookmarkTreeNode[]} results
+   */
+  function renderSearchResults(results) {
+    resultsElement.innerHTML = '';
+    results.forEach((bookmark, index) => {
+      if (bookmark.url) {
+        const resultItem = document.createElement('div');
+        resultItem.className =
+          'p-2 hover:bg-base-300 cursor-pointer rounded-md';
+        resultItem.dataset.index = String(index);
+        resultItem.textContent = bookmark.title || bookmark.url;
+        resultItem.addEventListener('click', () => {
+          chrome.tabs.create({ url: bookmark.url });
+          window.close();
+        });
+        resultsElement.appendChild(resultItem);
+      }
+    });
+    // Reset highlight when results are re-rendered
+    highlightedIndex = -1;
+  }
+
+  /**
+   * Performs a bookmark search and renders the results.
+   * Prioritizes bookmarks with title matches over URL matches.
+   * @param {string} query
+   */
+  function performSearch(query) {
+    chrome.bookmarks.search(query, (results) => {
+      // Filter to only bookmarks with URLs
+      const bookmarkResults = results.filter((bookmark) => bookmark.url);
+      
+      // Sort to prioritize title matches over URL matches
+      const lowerQuery = query.toLowerCase();
+      bookmarkResults.sort((a, b) => {
+        const aTitleMatch = a.title?.toLowerCase().includes(lowerQuery) ?? false;
+        const bTitleMatch = b.title?.toLowerCase().includes(lowerQuery) ?? false;
+        const aUrlMatch = a.url?.toLowerCase().includes(lowerQuery) ?? false;
+        const bUrlMatch = b.url?.toLowerCase().includes(lowerQuery) ?? false;
+        
+        // If both have title matches or both don't, keep original order
+        if (aTitleMatch === bTitleMatch) {
+          // If neither has title match, prioritize URL matches
+          if (!aTitleMatch && !bTitleMatch) {
+            if (aUrlMatch && !bUrlMatch) return -1;
+            if (!aUrlMatch && bUrlMatch) return 1;
+          }
+          return 0;
+        }
+        
+        // Prioritize title matches
+        return aTitleMatch ? -1 : 1;
+      });
+      
+      currentResults = bookmarkResults;
+      renderSearchResults(bookmarkResults);
+    });
+  }
+
+  inputElement.addEventListener('input', (event) => {
+    const target = /** @type {HTMLInputElement | null} */ (event.target);
+    if (!target) {
+      return;
+    }
+    const query = target.value;
+    highlightedIndex = -1; // Reset highlight when query changes
+    if (query.length > 2) {
+      performSearch(query);
+    } else {
+      resultsElement.innerHTML = '';
+      currentResults = [];
+    }
+  });
+
+  inputElement.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const query = inputElement.value.trim();
+      
+      // If there's a highlighted result, open it
+      if (highlightedIndex >= 0 && highlightedIndex < currentResults.length) {
+        const highlightedBookmark = currentResults[highlightedIndex];
+        if (highlightedBookmark.url) {
+          chrome.tabs.create({ url: highlightedBookmark.url });
+          window.close();
+        }
+        return;
+      }
+      
+      // Otherwise, always open Google search if there's a query
+      if (query) {
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(
+          query,
+        )}`;
+        chrome.tabs.create({ url: searchUrl });
+        window.close();
+      }
+    } else if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (currentResults.length > 0) {
+        highlightedIndex =
+          highlightedIndex < currentResults.length - 1
+            ? highlightedIndex + 1
+            : 0;
+        updateHighlight(highlightedIndex);
+      }
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (currentResults.length > 0) {
+        highlightedIndex =
+          highlightedIndex > 0
+            ? highlightedIndex - 1
+            : currentResults.length - 1;
+        updateHighlight(highlightedIndex);
+      }
+    }
+  });
+}
