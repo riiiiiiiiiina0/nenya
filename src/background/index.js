@@ -265,95 +265,6 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'bookmarks-rename-tab') {
-    void (async () => {
-      try {
-        const tabs = await chrome.tabs.query({
-          currentWindow: true,
-          active: true,
-        });
-        const active = tabs && tabs[0];
-        if (!active || typeof active.id !== 'number') {
-          return;
-        }
-
-        // Attempt to prompt in-page for a title
-        let newTitle = null;
-        try {
-          const results = await chrome.scripting.executeScript({
-            target: { tabId: active.id },
-            func: () => {
-              const current = document.title || '';
-              const input = window.prompt(
-                'Enter custom title for this tab:',
-                current,
-              );
-              return input && input.trim() ? input.trim() : null;
-            },
-            world: 'ISOLATED',
-          });
-          newTitle =
-            Array.isArray(results) && results[0] ? results[0].result : null;
-        } catch (e) {
-          newTitle = null;
-        }
-
-        if (!newTitle) {
-          return;
-        }
-
-        // Persist the title
-        try {
-          await chrome.storage.local.set({
-            ['customTitle_' + active.id]: {
-              tabId: active.id,
-              url: active.url,
-              title: newTitle,
-              updatedAt: Date.now(),
-            },
-          });
-        } catch (e) {
-          // ignore storage errors
-        }
-
-        // Apply via content script if available
-        try {
-          await chrome.tabs.sendMessage(active.id, {
-            type: 'renameTab',
-            title: newTitle,
-          });
-        } catch (e) {
-          // Fallback: apply directly in the page
-          try {
-            await chrome.scripting.executeScript({
-              target: { tabId: active.id },
-              func: (title) => {
-                try {
-                  document.title = title;
-                } catch {}
-                const el = document.querySelector('title');
-                if (el) {
-                  el.textContent = title;
-                } else {
-                  const t = document.createElement('title');
-                  t.textContent = title;
-                  (document.head || document.documentElement).appendChild(t);
-                }
-              },
-              args: [newTitle],
-              world: 'ISOLATED',
-            });
-          } catch (err) {
-            // ignore
-          }
-        }
-      } catch (error) {
-        console.warn('[commands] Rename tab failed:', error);
-      }
-    })();
-    return;
-  }
-
   if (command === 'pip-quit') {
     void (async () => {
       try {
@@ -608,22 +519,6 @@ void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
 });
 
-/**
- * Handle tab removal to clean up custom title records.
- * @param {number} tabId - The ID of the tab that was removed.
- * @param {Object} removeInfo - Information about the tab removal.
- * @returns {void}
- */
-chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-  // Clean up custom title record for the closed tab
-  void chrome.storage.local.remove([`customTitle_${tabId}`]).catch((error) => {
-    console.warn(
-      '[background] Failed to clean up custom title for tab:',
-      tabId,
-      error,
-    );
-  });
-});
 
 chrome.tabs.onHighlighted.addListener(() => {
   void updateClipboardContextMenuVisibility();
@@ -679,53 +574,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
   if (changeInfo.status === 'complete' && tab) {
     void updateContextMenuVisibility(tab);
-  }
-
-  // Enforce custom titles
-  if (changeInfo.title) {
-    const key = `customTitle_${tabId}`;
-    try {
-      const result = await chrome.storage.local.get(key);
-      const customTitleData = result?.[key];
-
-      if (
-        customTitleData &&
-        typeof customTitleData.title === 'string' &&
-        customTitleData.title.trim() !== ''
-      ) {
-        const customTitle = customTitleData.title.trim();
-        if (customTitle !== changeInfo.title) {
-          await chrome.scripting.executeScript({
-            target: { tabId },
-            func: (title) => {
-              // Try to set the document title
-              try {
-                document.title = title;
-              } catch (e) {
-                // Ignore errors
-              }
-
-              // Also try to find and update the <title> element directly
-              const titleElement = document.querySelector('title');
-              if (titleElement) {
-                titleElement.textContent = title;
-              } else {
-                const newTitleElement = document.createElement('title');
-                newTitleElement.textContent = title;
-                (document.head || document.documentElement).appendChild(
-                  newTitleElement,
-                );
-              }
-            },
-            args: [customTitle],
-            world: 'ISOLATED',
-          });
-        }
-      }
-    } catch (error) {
-      // Silently ignore cases where script injection might fail
-      // (e.g., on chrome:// pages, protected pages)
-    }
   }
 });
 

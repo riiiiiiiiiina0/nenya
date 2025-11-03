@@ -23,9 +23,6 @@ const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (
 const saveProjectButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('saveProjectButton')
 );
-const renameTabButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('renameTabButton')
-);
 const openOptionsButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('openOptionsButton')
 );
@@ -57,9 +54,6 @@ if (openOptionsButton) {
 }
 if (saveProjectButton) {
   saveProjectButton.innerHTML = icons['rectangle-group'];
-}
-if (renameTabButton) {
-  renameTabButton.innerHTML = icons['pencil-square'];
 }
 const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('importCustomCodeFileInput')
@@ -120,14 +114,6 @@ if (openOptionsButton) {
   console.error('[popup] Options button not found.');
 }
 
-if (renameTabButton) {
-  renameTabButton.addEventListener('click', () => {
-    void handleRenameTab();
-  });
-} else {
-  console.error('[popup] Rename tab button not found.');
-}
-
 if (customFilterButton) {
   customFilterButton.addEventListener('click', () => {
     void handleCustomFilter();
@@ -155,133 +141,6 @@ if (importCustomCodeButton && importCustomCodeFileInput) {
   });
 } else {
   console.error('[popup] Import custom code elements not found.');
-}
-
-/**
- * Handle the rename tab action.
- * @returns {Promise<void>}
- */
-async function handleRenameTab() {
-  try {
-    // Get the current active tab
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tabs || tabs.length === 0) {
-      if (statusMessage) {
-        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
-      }
-      return;
-    }
-
-    const currentTab = tabs[0];
-    const currentTitle = currentTab.title || '';
-
-    // Check if tab has a valid ID
-    if (typeof currentTab.id !== 'number') {
-      if (statusMessage) {
-        concludeStatus('Invalid tab ID.', 'error', 3000, statusMessage);
-      }
-      return;
-    }
-
-    // Prompt user for custom title with current title as default
-    const customTitle = window.prompt(
-      'Enter custom title for this tab:',
-      currentTitle,
-    );
-
-    if (customTitle === null) {
-      // User cancelled
-      if (statusMessage) {
-        concludeStatus('Rename cancelled.', 'info', 2000, statusMessage);
-      }
-      return;
-    }
-
-    if (customTitle.trim() === '') {
-      if (statusMessage) {
-        concludeStatus('Title cannot be empty.', 'error', 3000, statusMessage);
-      }
-      return;
-    }
-
-    // Save custom title as object with tab ID, URL, and title to Chrome local storage
-    try {
-      await chrome.storage.local.set({
-        [`customTitle_${currentTab.id}`]: {
-          tabId: currentTab.id,
-          url: currentTab.url,
-          title: customTitle.trim(),
-        },
-      });
-    } catch (error) {
-      console.error('[popup] Failed to save custom title to storage:', error);
-    }
-
-    // Send message to content script to rename the tab
-    try {
-      await chrome.tabs.sendMessage(currentTab.id, {
-        type: 'renameTab',
-        title: customTitle.trim(),
-      });
-      if (statusMessage) {
-        concludeStatus(
-          'Tab renamed successfully!',
-          'success',
-          3000,
-          statusMessage,
-        );
-      }
-    } catch (error) {
-      // Fallback: if the content script isn't ready yet, apply directly in the page
-      console.error(
-        '[popup] Failed to send rename message, applying fallback:',
-        error,
-      );
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: currentTab.id },
-          func: (title) => {
-            try {
-              document.title = title;
-            } catch (e) {}
-            const el = document.querySelector('title');
-            if (el) {
-              el.textContent = title;
-            } else {
-              const t = document.createElement('title');
-              t.textContent = title;
-              (document.head || document.documentElement).appendChild(t);
-            }
-          },
-          args: [customTitle.trim()],
-          world: 'ISOLATED',
-        });
-        if (statusMessage) {
-          concludeStatus(
-            'Tab renamed successfully!',
-            'success',
-            3000,
-            statusMessage,
-          );
-        }
-      } catch (fallbackError) {
-        console.error('[popup] Fallback title apply failed:', fallbackError);
-        if (statusMessage) {
-          concludeStatus(
-            'Failed to rename tab. Please refresh the page and try again.',
-            'error',
-            4000,
-            statusMessage,
-          );
-        }
-      }
-    }
-  } catch (error) {
-    console.error('[popup] Error in handleRenameTab:', error);
-    if (statusMessage) {
-      concludeStatus('Unable to rename tab.', 'error', 3000, statusMessage);
-    }
-  }
 }
 
 /**
