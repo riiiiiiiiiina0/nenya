@@ -1225,13 +1225,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             highlighted: true,
           });
 
-          // Filter out LLM pages from highlighted tabs
-          const filteredHighlighted = highlightedTabs.filter(
-            (tab) => !isLLMPage(tab.url || ''),
-          );
-
-          if (filteredHighlighted.length > 0) {
-            tabIds = filteredHighlighted
+          if (highlightedTabs.length > 0) {
+            tabIds = highlightedTabs
               .map((t) => t.id)
               .filter((id) => typeof id === 'number');
           } else {
@@ -1240,11 +1235,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               active: true,
             });
             const activeTab = activeTabs && activeTabs[0];
-            if (
-              activeTab &&
-              typeof activeTab.id === 'number' &&
-              !isLLMPage(activeTab.url || '')
-            ) {
+            if (activeTab && typeof activeTab.id === 'number') {
               tabIds = [activeTab.id];
             }
           }
@@ -1278,13 +1269,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         const currentTab = currentTabs[0];
 
-        // Capture screenshot if only current tab is selected and it's not an LLM page
-        if (
-          tabIds.length === 1 &&
-          currentTab &&
-          tabIds[0] === currentTab.id &&
-          !isLLMPage(currentTab.url || '')
-        ) {
+        // Capture screenshot if only current tab is selected
+        if (tabIds.length === 1 && currentTab && tabIds[0] === currentTab.id) {
           try {
             const dataUrl = await chrome.tabs.captureVisibleTab(
               currentTab.windowId,
