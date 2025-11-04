@@ -181,6 +181,7 @@ function toggleLayout() {
   currentLayout = currentLayout === 'horizontal' ? 'vertical' : 'horizontal';
   applyLayout(undefined);
   updateAllLayoutButtons();
+  updateEdgePlusButtons(); // Update edge button positions
   setupResizing(); // Re-setup resizing for new layout
   updateUrlStateParameter(); // Persist layout state
 }
@@ -1259,49 +1260,79 @@ function addPlusButtonToDivider(divider) {
 }
 
 /**
- * Add + buttons to left and right edges of the split page
+ * Add + buttons to the edges of the split page
  */
 function addEdgePlusButtons() {
-  // Left edge button
-  const leftEdgeButton = document.createElement('button');
-  leftEdgeButton.id = 'nenya-edge-plus-left';
-  leftEdgeButton.className =
-    'edge-plus-btn fixed left-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100 cursor-pointer';
-  leftEdgeButton.innerHTML = `
+  // Create edge buttons
+  const firstEdgeButton = document.createElement('button');
+  firstEdgeButton.id = 'nenya-edge-plus-first';
+  firstEdgeButton.innerHTML = `
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
   `;
-  leftEdgeButton.title = 'Add tab to the left';
 
-  leftEdgeButton.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await showTabPicker({ x: e.clientX, y: e.clientY }, (tab) => {
-      insertIframeAtEdge('left', tab);
-    });
-  });
-
-  // Right edge button
-  const rightEdgeButton = document.createElement('button');
-  rightEdgeButton.id = 'nenya-edge-plus-right';
-  rightEdgeButton.className =
-    'edge-plus-btn fixed right-2 top-1/2 -translate-y-1/2 bg-blue-500 hover:bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100 cursor-pointer';
-  rightEdgeButton.innerHTML = `
+  const secondEdgeButton = document.createElement('button');
+  secondEdgeButton.id = 'nenya-edge-plus-second';
+  secondEdgeButton.innerHTML = `
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
     </svg>
   `;
-  rightEdgeButton.title = 'Add tab to the right';
 
-  rightEdgeButton.addEventListener('click', async (e) => {
+  // Add event listeners
+  firstEdgeButton.addEventListener('click', async (e) => {
     e.stopPropagation();
+    const position = currentLayout === 'horizontal' ? 'left' : 'top';
     await showTabPicker({ x: e.clientX, y: e.clientY }, (tab) => {
-      insertIframeAtEdge('right', tab);
+      insertIframeAtEdge(position, tab);
     });
   });
 
-  document.body.appendChild(leftEdgeButton);
-  document.body.appendChild(rightEdgeButton);
+  secondEdgeButton.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const position = currentLayout === 'horizontal' ? 'right' : 'bottom';
+    await showTabPicker({ x: e.clientX, y: e.clientY }, (tab) => {
+      insertIframeAtEdge(position, tab);
+    });
+  });
+
+  // Append to body
+  document.body.appendChild(firstEdgeButton);
+  document.body.appendChild(secondEdgeButton);
+
+  // Set initial positions
+  updateEdgePlusButtons();
+}
+
+/**
+ * Update the position and tooltips of edge plus buttons based on layout
+ */
+function updateEdgePlusButtons() {
+  const firstBtn = document.getElementById('nenya-edge-plus-first');
+  const secondBtn = document.getElementById('nenya-edge-plus-second');
+
+  if (!firstBtn || !secondBtn) return;
+
+  const baseClasses =
+    'edge-plus-btn fixed bg-blue-500 hover:bg-blue-600 text-white rounded-full w-5 h-5 flex items-center justify-center shadow-lg transition-all duration-200 z-10 opacity-50 hover:opacity-100 cursor-pointer';
+
+  if (currentLayout === 'horizontal') {
+    // Left button
+    firstBtn.className = `${baseClasses} left-2 top-1/2 -translate-y-1/2`;
+    firstBtn.title = 'Add tab to the left';
+    // Right button
+    secondBtn.className = `${baseClasses} right-2 top-1/2 -translate-y-1/2`;
+    secondBtn.title = 'Add tab to the right';
+  } else {
+    // Vertical layout
+    // Top button
+    firstBtn.className = `${baseClasses} top-2 left-1/2 -translate-x-1/2`;
+    firstBtn.title = 'Add tab to the top';
+    // Bottom button
+    secondBtn.className = `${baseClasses} bottom-2 left-1/2 -translate-x-1/2`;
+    secondBtn.title = 'Add tab to the bottom';
+  }
 }
 
 /**
@@ -1389,9 +1420,9 @@ function insertIframeAtDivider(divider, tab) {
 }
 
 /**
- * Insert an iframe at edge (left or right)
- * @param {string} position - 'left' or 'right'
- * @param {Object} tab - Chrome tab object
+ * Insert an iframe at an edge of the layout
+ * @param {'left' | 'right' | 'top' | 'bottom'} position
+ * @param {chrome.tabs.Tab} tab
  */
 function insertIframeAtEdge(position, tab) {
   if (!iframeContainer) return;
@@ -1400,7 +1431,7 @@ function insertIframeAtEdge(position, tab) {
   if (wrappers.length === 0) return;
 
   let newOrder;
-  if (position === 'left') {
+  if (position === 'left' || position === 'top') {
     // Insert at the beginning
     // Shift all existing elements by 2 first
     const allElements = Array.from(iframeContainer.children);
@@ -1429,8 +1460,9 @@ function insertIframeAtEdge(position, tab) {
   // Add divider
   const divider = document.createElement('div');
   divider.className = `iframe-divider bg-gray-300 dark:bg-gray-600 ${currentLayout}`;
-  divider.style.order =
-    position === 'left' ? String(newOrder + 1) : String(newOrder - 1);
+  divider.style.order = String(
+    position === 'left' || position === 'top' ? newOrder + 1 : newOrder - 1,
+  );
   if (currentLayout === 'horizontal') {
     divider.style.width = '4px';
   } else {
