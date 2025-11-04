@@ -53,8 +53,7 @@
         "src/split/*",
         "src/libs/*",
         "src/contentScript/epicker-ui.html",
-        "src/contentScript/epicker-ui.js",
-        "src/contentScript/tab-switcher.css"
+        "src/contentScript/epicker-ui.js"
       ],
       "matches": [
         "<all_urls>"
@@ -90,8 +89,7 @@
       ],
       "js": [
         "src/contentScript/video-controller.js",
-        "src/contentScript/highlight-text.js",
-        "src/contentScript/tab-switcher.js"
+        "src/contentScript/highlight-text.js"
       ],
       "css": [
         "src/contentScript/video-controller.css"
@@ -141,12 +139,6 @@
     },
     "block-element-picker": {
       "description": "🎯 Element Picker"
-    },
-    "tab-switcher": {
-      "suggested_key": {
-        "default": "Alt+Shift+Tab"
-      },
-      "description": "🔄 Tab Switcher"
     },
     "llm-chat-with-llm": {
       "description": "🤖 Chat with LLM"
