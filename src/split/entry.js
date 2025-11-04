@@ -1103,6 +1103,9 @@ function showIframeError(iframeWrapper, iframe, url, message) {
     return;
   }
 
+  // Store iframe name for retry
+  const iframeName = iframe.name;
+
   const errorDiv = document.createElement('div');
   errorDiv.className =
     'iframe-error-message flex flex-col items-center justify-center h-full bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300';
@@ -1112,6 +1115,9 @@ function showIframeError(iframeWrapper, iframe, url, message) {
       <p class="font-semibold text-lg mb-2">${message}</p>
       <p class="text-sm mb-4 opacity-80">Due to browser security policies, some sites (like X.com, Perplexity) cannot be embedded in iframes.</p>
       <div class="flex gap-2 justify-center">
+        <button class="retry-btn bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
+          Retry
+        </button>
         <button class="open-in-tab-btn bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg transition-colors">
           Open in New Tab
         </button>
@@ -1124,8 +1130,54 @@ function showIframeError(iframeWrapper, iframe, url, message) {
   `;
 
   // Add button handlers
+  const retryBtn = errorDiv.querySelector('.retry-btn');
   const openBtn = errorDiv.querySelector('.open-in-tab-btn');
   const removeBtn = errorDiv.querySelector('.remove-frame-btn');
+
+  if (retryBtn) {
+    retryBtn.addEventListener('click', () => {
+      // Remove error div
+      errorDiv.remove();
+
+      // Create new iframe with same configuration
+      const newIframe = document.createElement('iframe');
+      newIframe.src = url;
+      newIframe.name = iframeName;
+      newIframe.className = 'w-full h-full border-0';
+      newIframe.setAttribute(
+        'sandbox',
+        'allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads',
+      );
+      newIframe.setAttribute('allow', 'fullscreen');
+
+      // Apply current theme to iframe
+      applyThemeToIframe(newIframe, currentTheme);
+
+      // Reset loaded state in iframeData
+      const data = iframeData.get(iframeName);
+      if (data) {
+        data.loaded = false;
+      }
+
+      // Inject monitoring script when iframe loads
+      newIframe.addEventListener('load', async () => {
+        requestBackgroundInjection(newIframe);
+        setupIframeLoadedCheck(iframeName, iframeWrapper, newIframe, url);
+      });
+
+      // Add error handling for iframe loading
+      newIframe.addEventListener('error', () => {
+        clearIframeLoadTimeout(iframeName);
+        showIframeError(iframeWrapper, newIframe, url, 'Failed to load page');
+      });
+
+      // Set up initial timeout for iframe loading
+      setupIframeLoadTimeout(iframeName, iframeWrapper, newIframe, url, 10000);
+
+      // Insert the new iframe as the first child (before control bar and URL display)
+      iframeWrapper.insertBefore(newIframe, iframeWrapper.firstChild);
+    });
+  }
 
   if (openBtn) {
     openBtn.addEventListener('click', async () => {
