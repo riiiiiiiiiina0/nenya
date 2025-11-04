@@ -471,6 +471,50 @@ async function initLLMPrompts() {
 
   const prompts = await loadLLMPrompts();
   renderPromptsList(prompts);
+
+  // Listen for storage changes to update UI when options are restored/imported
+  if (chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(changes, LLM_PROMPTS_KEY)) {
+        return;
+      }
+      void (async () => {
+        const prompts = await loadLLMPrompts();
+        renderPromptsList(prompts);
+        // Clear selection if selected prompt no longer exists
+        if (selectedPromptId && !prompts.find(p => p.id === selectedPromptId)) {
+          selectedPromptId = null;
+          if (promptDetails) promptDetails.hidden = true;
+        }
+        // Clear editing state if editing prompt no longer exists
+        if (currentlyEditingPromptId && !prompts.find(p => p.id === currentlyEditingPromptId)) {
+          currentlyEditingPromptId = null;
+          clearForm();
+        }
+        // Update details if the selected prompt still exists
+        if (selectedPromptId) {
+          const prompt = prompts.find(p => p.id === selectedPromptId);
+          if (prompt) {
+            if (promptDetails) promptDetails.hidden = false;
+            if (promptDetailName) promptDetailName.textContent = prompt.name;
+            if (promptDetailText) promptDetailText.textContent = prompt.prompt;
+            if (promptDetailRequireSearch) {
+              promptDetailRequireSearch.textContent = prompt.requireSearch ? 'Yes' : 'No';
+            }
+            if (promptDetailCreated) {
+              promptDetailCreated.textContent = formatTimestamp(prompt.createdAt);
+            }
+            if (promptDetailUpdated) {
+              promptDetailUpdated.textContent = formatTimestamp(prompt.updatedAt);
+            }
+          }
+        }
+      })();
+    });
+  }
 }
 
 initLLMPrompts();

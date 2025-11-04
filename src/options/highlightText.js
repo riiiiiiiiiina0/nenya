@@ -1,4 +1,4 @@
-/* global chrome */
+/* global chrome, URLPattern */
 
 /**
  * @typedef {Object} HighlightTextRuleSettings
@@ -750,6 +750,27 @@ async function initHighlightText() {
       });
     }
   });
+
+  // Listen for storage changes to update UI when options are restored/imported
+  if (chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(changes, HIGHLIGHT_TEXT_RULES_KEY)) {
+        return;
+      }
+      void (async () => {
+        rules = await loadRules();
+        renderRulesList();
+        // Clear selection if selected rule no longer exists
+        if (editingRuleId && !rules.find(r => r.id === editingRuleId)) {
+          editingRuleId = null;
+          clearForm();
+        }
+      })();
+    });
+  }
 }
 
 // Initialize when DOM is loaded

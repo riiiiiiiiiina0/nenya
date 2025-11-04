@@ -1239,6 +1239,40 @@ function init() {
     });
   }
 
+  // Listen for storage changes to update UI when options are restored/imported
+  if (chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) {
+        return;
+      }
+      if (syncing) {
+        return;
+      }
+      void (async () => {
+        const { rules: sanitized } = normalizeRules(
+          changes[STORAGE_KEY]?.newValue,
+        );
+        rules = sanitized;
+        // Clear selection if selected rule no longer exists
+        if (selectedRuleId && !findRule(selectedRuleId)) {
+          selectedRuleId = '';
+        }
+        // Clear editing state if editing rule no longer exists
+        if (editingRuleId && !findRule(editingRuleId)) {
+          editingRuleId = '';
+          editingPatterns = [];
+          editingProcessors = [];
+          editingApplyWhen = [];
+          resetForm();
+        }
+        render();
+      })();
+    });
+  }
+
   void loadAndRenderRules();
 }
 
