@@ -17,10 +17,17 @@
  */
 
 /**
+ * @typedef {Object} NotificationClipboardSettings
+ * @property {boolean} enabled
+ * @property {boolean} copySuccess
+ */
+
+/**
  * @typedef {Object} NotificationPreferences
  * @property {boolean} enabled
  * @property {NotificationBookmarkSettings} bookmark
  * @property {NotificationProjectSettings} project
+ * @property {NotificationClipboardSettings} clipboard
  */
 
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
@@ -39,6 +46,10 @@ const DEFAULT_NOTIFICATION_PREFERENCES = {
     addTabs: true,
     replaceItems: true,
     deleteProject: true
+  },
+  clipboard: {
+    enabled: true,
+    copySuccess: true
   }
 };
 
@@ -69,6 +80,12 @@ const projectReplaceToggle = /** @type {HTMLInputElement | null} */ (
 const projectDeleteToggle = /** @type {HTMLInputElement | null} */ (
   document.getElementById('notificationProjectDeleteToggle')
 );
+const clipboardToggle = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('notificationClipboardToggle')
+);
+const clipboardCopySuccessToggle = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('notificationClipboardCopySuccessToggle')
+);
 
 // Section elements for showing/hiding based on login status
 const bookmarkManagementSection = /** @type {HTMLElement | null} */ (
@@ -76,6 +93,9 @@ const bookmarkManagementSection = /** @type {HTMLElement | null} */ (
 );
 const projectManagementSection = /** @type {HTMLElement | null} */ (
   document.querySelector('[aria-labelledby="notifications-project-heading"]')
+);
+const clipboardManagementSection = /** @type {HTMLElement | null} */ (
+  document.querySelector('[aria-labelledby="notifications-clipboard-heading"]')
 );
 
 /** @type {NotificationPreferences} */
@@ -100,6 +120,10 @@ function clonePreferences(value) {
       addTabs: Boolean(value.project?.addTabs),
       replaceItems: Boolean(value.project?.replaceItems),
       deleteProject: Boolean(value.project?.deleteProject)
+    },
+    clipboard: {
+      enabled: Boolean(value.clipboard?.enabled),
+      copySuccess: Boolean(value.clipboard?.copySuccess)
     }
   };
 }
@@ -115,9 +139,10 @@ function normalizePreferences(value) {
     return fallback;
   }
 
-  const raw = /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings> }} */ (value);
+  const raw = /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings>, clipboard?: Partial<NotificationClipboardSettings> }} */ (value);
   const bookmark = raw.bookmark ?? {};
   const project = raw.project ?? {};
+  const clipboard = raw.clipboard ?? {};
 
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
@@ -144,6 +169,12 @@ function normalizePreferences(value) {
       deleteProject: typeof project.deleteProject === 'boolean'
         ? project.deleteProject
         : fallback.project.deleteProject
+    },
+    clipboard: {
+      enabled: typeof clipboard.enabled === 'boolean' ? clipboard.enabled : fallback.clipboard.enabled,
+      copySuccess: typeof clipboard.copySuccess === 'boolean'
+        ? clipboard.copySuccess
+        : fallback.clipboard.copySuccess
     }
   };
 }
@@ -208,6 +239,12 @@ function applyPreferencesToUI() {
   if (projectDeleteToggle) {
     projectDeleteToggle.checked = preferences.project.deleteProject;
   }
+  if (clipboardToggle) {
+    clipboardToggle.checked = preferences.clipboard.enabled;
+  }
+  if (clipboardCopySuccessToggle) {
+    clipboardCopySuccessToggle.checked = preferences.clipboard.copySuccess;
+  }
 
   updateToggleDisabledState();
 }
@@ -221,6 +258,8 @@ function updateToggleDisabledState() {
   const bookmarkChildDisabled = bookmarkDisabled || !preferences.bookmark.enabled;
   const projectDisabled = !preferences.enabled;
   const projectChildDisabled = projectDisabled || !preferences.project.enabled;
+  const clipboardDisabled = !preferences.enabled;
+  const clipboardChildDisabled = clipboardDisabled || !preferences.clipboard.enabled;
 
   if (bookmarkToggle) {
     bookmarkToggle.disabled = bookmarkDisabled;
@@ -254,6 +293,14 @@ function updateToggleDisabledState() {
     projectDeleteToggle.disabled = projectChildDisabled;
     projectDeleteToggle.setAttribute('aria-disabled', projectChildDisabled ? 'true' : 'false');
   }
+  if (clipboardToggle) {
+    clipboardToggle.disabled = clipboardDisabled;
+    clipboardToggle.setAttribute('aria-disabled', clipboardDisabled ? 'true' : 'false');
+  }
+  if (clipboardCopySuccessToggle) {
+    clipboardCopySuccessToggle.disabled = clipboardChildDisabled;
+    clipboardCopySuccessToggle.setAttribute('aria-disabled', clipboardChildDisabled ? 'true' : 'false');
+  }
 }
 
 /**
@@ -279,12 +326,12 @@ function handleBookmarkToggleChange(checked) {
 }
 
 /**
- * Handle updates triggered by the project group toggle.
+ * Handle updates triggered by the clipboard group toggle.
  * @param {boolean} checked
  * @returns {void}
  */
-function handleProjectToggleChange(checked) {
-  preferences.project.enabled = checked;
+function handleClipboardToggleChange(checked) {
+  preferences.clipboard.enabled = checked;
   updateToggleDisabledState();
   void savePreferences();
 }
@@ -362,6 +409,21 @@ function attachEventListeners() {
       void savePreferences();
     });
   }
+
+  if (clipboardToggle) {
+    clipboardToggle.addEventListener('change', (event) => {
+      const target = /** @type {HTMLInputElement} */ (event.currentTarget);
+      handleClipboardToggleChange(target.checked);
+    });
+  }
+
+  if (clipboardCopySuccessToggle) {
+    clipboardCopySuccessToggle.addEventListener('change', (event) => {
+      const target = /** @type {HTMLInputElement} */ (event.currentTarget);
+      preferences.clipboard.copySuccess = target.checked;
+      void savePreferences();
+    });
+  }
 }
 
 /**
@@ -394,7 +456,8 @@ function subscribeToStorageChanges() {
  */
 async function initializeNotificationControls() {
   if (!globalToggle || !bookmarkToggle || !bookmarkPullToggle || !bookmarkUnsortedToggle || 
-      !projectToggle || !projectSaveToggle || !projectAddToggle || !projectReplaceToggle || !projectDeleteToggle) {
+      !projectToggle || !projectSaveToggle || !projectAddToggle || !projectReplaceToggle || !projectDeleteToggle ||
+      !clipboardToggle || !clipboardCopySuccessToggle) {
     return;
   }
 
@@ -414,6 +477,7 @@ export function updateNotificationSectionsVisibility(isLoggedIn) {
   if (projectManagementSection) {
     projectManagementSection.hidden = !isLoggedIn;
   }
+  // Clipboard section is always visible, no need to hide/show based on login
 }
 
 // Reflect imported/restored preference changes live in the controls

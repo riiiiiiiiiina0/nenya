@@ -2,7 +2,7 @@
  * Clipboard context menu functionality for copying tab data.
  */
 
-import { setActionBadge, animateActionBadge } from './mirror.js';
+import { setActionBadge, animateActionBadge, getNotificationPreferences } from './mirror.js';
 import { processUrl } from '../shared/urlProcessor.js';
 
 /**
@@ -576,20 +576,29 @@ export async function handleClipboardContextMenuClick(info, tab) {
 
     // Show notification based on result
     if (success) {
-      const message =
-        menuItemId === CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT
-          ? 'Screenshot copied to clipboard'
-          : `Copied ${tabs.length} tab${
-              tabs.length > 1 ? 's' : ''
-            } to clipboard`;
+      // Check preferences before showing success notification
+      const prefs = await getNotificationPreferences();
+      const shouldShowSuccess = prefs.enabled && 
+        prefs.clipboard?.enabled && 
+        prefs.clipboard?.copySuccess;
+      
+      if (shouldShowSuccess) {
+        const message =
+          menuItemId === CLIPBOARD_CONTEXT_MENU_IDS.COPY_SCREENSHOT
+            ? 'Screenshot copied to clipboard'
+            : `Copied ${tabs.length} tab${
+                tabs.length > 1 ? 's' : ''
+              } to clipboard`;
 
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: getNotificationIconUrl(),
-        title: 'Nenya',
-        message,
-      });
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: getNotificationIconUrl(),
+          title: 'Nenya',
+          message,
+        });
+      }
     } else {
+      // Always show error notifications regardless of preferences
       chrome.notifications.create({
         type: 'basic',
         iconUrl: getNotificationIconUrl(),
@@ -665,23 +674,32 @@ export async function handleClipboardCommand(command) {
     if (success) {
       setCopySuccessBadge();
 
-      // Show notification
-      const message =
-        command === 'copy-screenshot'
-          ? 'Screenshot copied to clipboard'
-          : `Copied ${tabs.length} tab${
-              tabs.length > 1 ? 's' : ''
-            } to clipboard`;
+      // Check preferences before showing success notification
+      const prefs = await getNotificationPreferences();
+      const shouldShowSuccess = prefs.enabled && 
+        prefs.clipboard?.enabled && 
+        prefs.clipboard?.copySuccess;
+      
+      if (shouldShowSuccess) {
+        // Show notification
+        const message =
+          command === 'copy-screenshot'
+            ? 'Screenshot copied to clipboard'
+            : `Copied ${tabs.length} tab${
+                tabs.length > 1 ? 's' : ''
+              } to clipboard`;
 
-      chrome.notifications.create({
-        type: 'basic',
-        iconUrl: getNotificationIconUrl(),
-        title: 'Nenya',
-        message,
-      });
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: getNotificationIconUrl(),
+          title: 'Nenya',
+          message,
+        });
+      }
     } else {
       setCopyFailureBadge();
 
+      // Always show error notifications regardless of preferences
       chrome.notifications.create({
         type: 'basic',
         iconUrl: getNotificationIconUrl(),

@@ -1057,6 +1057,26 @@
                 </label>
               </div>
             </section>
+            <section class="rounded-lg border border-base-300 p-4 space-y-4"
+              aria-labelledby="notifications-clipboard-heading">
+              <div class="space-y-1">
+                <h3 id="notifications-clipboard-heading" class="text-lg font-semibold">Clipboard operations</h3>
+                <p class="text-sm text-base-content/70">Control notifications for copying title, URL, and screenshot.</p>
+              </div>
+              <label
+                class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+                <span class="text-base-content font-medium">Enable clipboard notifications</span>
+                <input id="notificationClipboardToggle" class="toggle toggle-primary ml-auto" type="checkbox">
+              </label>
+              <div id="notificationClipboardGroup" class="space-y-3">
+                <label
+                  class="flex items-center gap-4 rounded-lg px-4 py-3 transition-colors hover:bg-base-200 cursor-pointer">
+                  <span class="text-base-content">Successfully copied (title/URL/screenshot)</span>
+                  <input id="notificationClipboardCopySuccessToggle" class="toggle toggle-secondary ml-auto"
+                    type="checkbox">
+                </label>
+              </div>
+            </section>
           </div>
         </div>
       </section>

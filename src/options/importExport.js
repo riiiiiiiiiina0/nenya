@@ -57,10 +57,17 @@ import { loadRules as loadUrlProcessRules } from './urlProcessRules.js';
  */
 
 /**
+ * @typedef {Object} NotificationClipboardSettings
+ * @property {boolean} enabled
+ * @property {boolean} copySuccess
+ */
+
+/**
  * @typedef {Object} NotificationPreferences
  * @property {boolean} enabled
  * @property {NotificationBookmarkSettings} bookmark
  * @property {NotificationProjectSettings} project
+ * @property {NotificationClipboardSettings} clipboard
  */
 
 /**
@@ -264,6 +271,10 @@ function clonePreferences(value) {
       addTabs: Boolean(value?.project?.addTabs),
       replaceItems: Boolean(value?.project?.replaceItems),
       deleteProject: Boolean(value?.project?.deleteProject),
+    },
+    clipboard: {
+      enabled: Boolean(value?.clipboard?.enabled),
+      copySuccess: Boolean(value?.clipboard?.copySuccess),
     },
   };
 }
@@ -866,16 +877,21 @@ function normalizePreferences(value) {
       replaceItems: true,
       deleteProject: true,
     },
+    clipboard: {
+      enabled: true,
+      copySuccess: true,
+    },
   });
   if (!value || typeof value !== 'object') {
     return fallback;
   }
   const raw =
-    /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings> }} */ (
+    /** @type {{ enabled?: unknown, bookmark?: Partial<NotificationBookmarkSettings>, project?: Partial<NotificationProjectSettings>, clipboard?: Partial<NotificationClipboardSettings> }} */ (
       value
     );
   const bookmark = raw.bookmark ?? {};
   const project = raw.project ?? {};
+  const clipboard = raw.clipboard ?? {};
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fallback.enabled,
     bookmark: {
@@ -913,6 +929,16 @@ function normalizePreferences(value) {
         typeof project.deleteProject === 'boolean'
           ? project.deleteProject
           : fallback.project.deleteProject,
+    },
+    clipboard: {
+      enabled:
+        typeof clipboard.enabled === 'boolean'
+          ? clipboard.enabled
+          : fallback.clipboard.enabled,
+      copySuccess:
+        typeof clipboard.copySuccess === 'boolean'
+          ? clipboard.copySuccess
+          : fallback.clipboard.copySuccess,
     },
   };
 }
