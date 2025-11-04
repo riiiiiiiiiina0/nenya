@@ -1812,7 +1812,7 @@ function normalizeUrlProcessRules(value) {
 
       const applyWhen = Array.isArray(raw.applyWhen)
         ? raw.applyWhen.filter((aw) =>
-            ['copy-to-clipboard', 'save-to-raindrop'].includes(aw),
+            ['copy-to-clipboard', 'save-to-raindrop', 'open-in-new-tab'].includes(aw),
           )
         : [];
       if (applyWhen.length === 0) {
@@ -2475,10 +2475,29 @@ function parseHighlightTextRulesItem(item) {
   try {
     const parsed = JSON.parse(note);
     if (!parsed || typeof parsed !== 'object') {
+      console.warn(
+        '[options-backup] parseHighlightTextRulesItem: parsed is not an object',
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    if (!Array.isArray(parsed?.rules)) {
+      console.warn(
+        '[options-backup] parseHighlightTextRulesItem: parsed.rules is not an array',
+        typeof parsed?.rules,
+      );
       return { payload: null, lastModified: 0 };
     }
 
     const normalizedRules = normalizeHighlightTextRules(parsed?.rules).rules;
+
+    if (normalizedRules.length === 0 && parsed?.rules?.length > 0) {
+      console.warn(
+        '[options-backup] parseHighlightTextRulesItem: all rules were filtered out',
+        'original count:',
+        parsed?.rules?.length,
+      );
+    }
 
     const payload = /** @type {HighlightTextRulesBackupPayload} */ ({
       kind: 'highlight-text-rules',
@@ -2517,6 +2536,10 @@ function parseHighlightTextRulesItem(item) {
 
     return { payload, lastModified };
   } catch (error) {
+    console.error(
+      '[options-backup] parseHighlightTextRulesItem failed:',
+      error instanceof Error ? error.message : String(error),
+    );
     return { payload: null, lastModified: 0 };
   }
 }
@@ -2655,10 +2678,29 @@ function parseUrlProcessRulesItem(item) {
   try {
     const parsed = JSON.parse(note);
     if (!parsed || typeof parsed !== 'object') {
+      console.warn(
+        '[options-backup] parseUrlProcessRulesItem: parsed is not an object',
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    if (!Array.isArray(parsed?.rules)) {
+      console.warn(
+        '[options-backup] parseUrlProcessRulesItem: parsed.rules is not an array',
+        typeof parsed?.rules,
+      );
       return { payload: null, lastModified: 0 };
     }
 
     const normalizedRules = normalizeUrlProcessRules(parsed?.rules).rules;
+
+    if (normalizedRules.length === 0 && parsed?.rules?.length > 0) {
+      console.warn(
+        '[options-backup] parseUrlProcessRulesItem: all rules were filtered out',
+        'original count:',
+        parsed?.rules?.length,
+      );
+    }
 
     const payload = /** @type {UrlProcessRulesBackupPayload} */ ({
       kind: 'url-process-rules',
@@ -2697,6 +2739,10 @@ function parseUrlProcessRulesItem(item) {
 
     return { payload, lastModified };
   } catch (error) {
+    console.error(
+      '[options-backup] parseUrlProcessRulesItem failed:',
+      error instanceof Error ? error.message : String(error),
+    );
     return { payload: null, lastModified: 0 };
   }
 }
@@ -2715,10 +2761,29 @@ function parseLLMPromptsItem(item) {
   try {
     const parsed = JSON.parse(note);
     if (!parsed || typeof parsed !== 'object') {
+      console.warn(
+        '[options-backup] parseLLMPromptsItem: parsed is not an object',
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    if (!Array.isArray(parsed?.prompts)) {
+      console.warn(
+        '[options-backup] parseLLMPromptsItem: parsed.prompts is not an array',
+        typeof parsed?.prompts,
+      );
       return { payload: null, lastModified: 0 };
     }
 
     const normalizedPrompts = normalizeLLMPrompts(parsed?.prompts).prompts;
+
+    if (normalizedPrompts.length === 0 && parsed?.prompts?.length > 0) {
+      console.warn(
+        '[options-backup] parseLLMPromptsItem: all prompts were filtered out',
+        'original count:',
+        parsed?.prompts?.length,
+      );
+    }
 
     const payload = /** @type {LLMPromptsBackupPayload} */ ({
       kind: 'llm-prompts',
@@ -2757,6 +2822,10 @@ function parseLLMPromptsItem(item) {
 
     return { payload, lastModified };
   } catch (error) {
+    console.error(
+      '[options-backup] parseLLMPromptsItem failed:',
+      error instanceof Error ? error.message : String(error),
+    );
     return { payload: null, lastModified: 0 };
   }
 }
