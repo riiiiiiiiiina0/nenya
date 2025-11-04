@@ -15,12 +15,33 @@ export const CLIPBOARD_CONTEXT_MENU_IDS = {
   COPY_SCREENSHOT: 'nenya-copy-screenshot',
 };
 
+/**
+ * Get the notification icon URL using chrome.runtime.getURL.
+ * @returns {string} - The icon URL.
+ */
+function getNotificationIconUrl() {
+  try {
+    return chrome.runtime.getURL('assets/icons/icon-48x48.png');
+  } catch (error) {
+    console.warn('[clipboard] Failed to resolve icon URL:', error);
+    return 'assets/icons/icon-48x48.png';
+  }
+}
+
 function setCopySuccessBadge() {
-  setActionBadge('📋', '#00FF00', 2000);
+  try {
+    setActionBadge('📋', '#00FF00', 2000);
+  } catch (error) {
+    console.warn('[clipboard] Failed to set success badge:', error);
+  }
 }
 
 function setCopyFailureBadge() {
-  setActionBadge('❌', '#ffffff', 2000);
+  try {
+    setActionBadge('❌', '#ffffff', 2000);
+  } catch (error) {
+    console.warn('[clipboard] Failed to set failure badge:', error);
+  }
 }
 
 /**
@@ -152,6 +173,140 @@ async function handleMultiTabCopy(formatType, tabs) {
 }
 
 /**
+ * Check if a URL is an extension or system page that can't have scripts injected.
+ * @param {string} url - The URL to check.
+ * @returns {boolean} - True if the URL is an extension/system page.
+ */
+function isExtensionOrSystemPage(url) {
+  if (!url || typeof url !== 'string') {
+    return false;
+  }
+  return (
+    url.startsWith('chrome-extension://') ||
+    url.startsWith('chrome://') ||
+    url.startsWith('edge://') ||
+    url.startsWith('about:') ||
+    url.startsWith('moz-extension://')
+  );
+}
+
+/**
+ * Find a regular tab in the same window that can have scripts injected.
+ * @param {number} windowId - The window ID.
+ * @param {number} excludeTabId - Tab ID to exclude.
+ * @returns {Promise<number|null>} - Tab ID if found, null otherwise.
+ */
+async function findInjectableTab(windowId, excludeTabId) {
+  try {
+    const tabs = await chrome.tabs.query({ windowId });
+    for (const tab of tabs) {
+      if (
+        tab.id &&
+        tab.id !== excludeTabId &&
+        tab.url &&
+        !isExtensionOrSystemPage(tab.url)
+      ) {
+        return tab.id;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.warn('[clipboard] Failed to find injectable tab:', error);
+    return null;
+  }
+}
+
+/**
+ * Copy image to clipboard by injecting script into a tab.
+ * @param {number} tabId - The tab ID to inject into.
+ * @param {string} dataUrl - The data URL of the image.
+ * @param {number} [originalTabId] - Optional original tab ID to restore focus to after copying.
+ * @returns {Promise<boolean>} - True if successful, false otherwise.
+ */
+async function copyImageViaTab(tabId, dataUrl, originalTabId) {
+  try {
+    // Focus the tab first - clipboard API requires document focus
+    await chrome.tabs.update(tabId, { active: true });
+    
+    // Get the window ID and focus it
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.windowId) {
+      await chrome.windows.update(tab.windowId, { focused: true });
+    }
+    
+    // Wait a bit for the tab to be focused
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (dataUrlToCopy) => {
+        return new Promise((resolve) => {
+          try {
+            // Ensure window is focused
+            window.focus();
+            
+            // Convert data URL to blob
+            const byteString = atob(dataUrlToCopy.split(',')[1]);
+            const mimeString = dataUrlToCopy.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+              ia[i] = byteString.charCodeAt(i);
+            }
+            const blob = new Blob([ab], { type: mimeString });
+
+            // Write to clipboard
+            navigator.clipboard
+              .write([
+                new ClipboardItem({
+                  [blob.type]: blob,
+                }),
+              ])
+              .then(() => {
+                resolve({ success: true });
+              })
+              .catch((error) => {
+                console.error('[clipboard] Clipboard write failed:', error);
+                resolve({ success: false, error: error.message });
+              });
+          } catch (error) {
+            console.error('[clipboard] Blob conversion failed:', error);
+            resolve({ success: false, error: error.message });
+          }
+        });
+      },
+      args: [dataUrl],
+    });
+
+    // Check if the clipboard operation succeeded
+    let success = false;
+    if (results && results[0] && results[0].result) {
+      const result = results[0].result;
+      if (result.success) {
+        success = true;
+      } else {
+        const errorMsg = 'error' in result ? result.error : 'Unknown error';
+        console.warn('[clipboard] Clipboard operation failed:', errorMsg);
+      }
+    }
+
+    // Restore focus to original tab if we switched tabs
+    if (typeof originalTabId === 'number' && originalTabId !== tabId && success) {
+      try {
+        await chrome.tabs.update(originalTabId, { active: true });
+      } catch (error) {
+        console.warn('[clipboard] Failed to restore focus to original tab:', error);
+      }
+    }
+
+    return success;
+  } catch (error) {
+    console.warn('[clipboard] Failed to copy image via tab:', error);
+    return false;
+  }
+}
+
+/**
  * Handle screenshot capture for a single tab.
  * @param {number} tabId - The ID of the tab to capture.
  * @returns {Promise<boolean>} - True if successful, false otherwise.
@@ -164,23 +319,35 @@ async function handleScreenshotCopy(tabId) {
   }
 
   try {
-    // Inject script into the tab to use navigator.clipboard
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      func: (dataUrl) => {
-        fetch(dataUrl)
-          .then((response) => response.blob())
-          .then((blob) => {
-            navigator.clipboard.write([
-              new ClipboardItem({
-                [blob.type]: blob,
-              }),
-            ]);
-          });
-      },
-      args: [dataUrl],
-    });
-    return true;
+    // Get tab info to check if it's an extension page
+    const tab = await chrome.tabs.get(tabId);
+    const tabUrl = tab?.url;
+    if (!tabUrl) {
+      console.warn('[clipboard] Tab URL is unavailable');
+      return false;
+    }
+    const isExtensionPage = isExtensionOrSystemPage(tabUrl);
+
+    if (isExtensionPage) {
+      // For extension pages, find another tab in the same window to inject into
+      const injectableTabId = await findInjectableTab(
+        tab.windowId,
+        tabId,
+      );
+      if (injectableTabId) {
+        // Pass the original tab ID to restore focus after copying
+        return await copyImageViaTab(injectableTabId, dataUrl, tabId);
+      }
+
+      // If no injectable tab found, we can't copy to clipboard
+      console.warn(
+        '[clipboard] Cannot copy screenshot: extension page with no injectable tabs',
+      );
+      return false;
+    } else {
+      // For regular pages, use the standard method
+      return await copyImageViaTab(tabId, dataUrl);
+    }
   } catch (error) {
     console.warn('[clipboard] Failed to copy screenshot to clipboard:', error);
     return false;
@@ -371,14 +538,14 @@ export async function handleClipboardContextMenuClick(info, tab) {
 
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'assets/icons/icon-48x48.png',
+        iconUrl: getNotificationIconUrl(),
         title: 'Nenya',
         message,
       });
     } else {
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'assets/icons/icon-48x48.png',
+        iconUrl: getNotificationIconUrl(),
         title: 'Nenya',
         message: 'Failed to copy to clipboard',
       });
@@ -420,7 +587,7 @@ export async function handleClipboardCommand(command) {
         // Show notification for multiple tabs
         chrome.notifications.create({
           type: 'basic',
-          iconUrl: 'assets/icons/icon-48x48.png',
+          iconUrl: getNotificationIconUrl(),
           title: 'Nenya',
           message: 'Screenshot only works with single tab',
         });
@@ -461,7 +628,7 @@ export async function handleClipboardCommand(command) {
 
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'assets/icons/icon-48x48.png',
+        iconUrl: getNotificationIconUrl(),
         title: 'Nenya',
         message,
       });
@@ -470,7 +637,7 @@ export async function handleClipboardCommand(command) {
 
       chrome.notifications.create({
         type: 'basic',
-        iconUrl: 'assets/icons/icon-48x48.png',
+        iconUrl: getNotificationIconUrl(),
         title: 'Nenya',
         message: 'Failed to copy to clipboard',
       });
