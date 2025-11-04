@@ -339,11 +339,58 @@ async function handleScreenshotCopy(tabId) {
         return await copyImageViaTab(injectableTabId, dataUrl, tabId);
       }
 
-      // If no injectable tab found, we can't copy to clipboard
+      // If no injectable tab found, open google.com in a new tab as fallback
       console.warn(
-        '[clipboard] Cannot copy screenshot: extension page with no injectable tabs',
+        '[clipboard] Cannot copy screenshot: extension page with no injectable tabs, opening fallback tab',
       );
-      return false;
+      try {
+        // Create a new tab with google.com
+        const fallbackTab = await chrome.tabs.create({
+          url: 'https://www.google.com',
+          active: false, // Don't switch to it immediately
+        });
+
+        if (!fallbackTab || typeof fallbackTab.id !== 'number') {
+          console.warn('[clipboard] Failed to create fallback tab');
+          return false;
+        }
+
+        const fallbackTabId = fallbackTab.id;
+
+        // Wait for the tab to load
+        await new Promise((resolve) => {
+          /**
+           * @type {(updatedTabId: number, changeInfo: {status?: string}) => void}
+           */
+          const listener = (updatedTabId, changeInfo) => {
+            if (updatedTabId === fallbackTabId && changeInfo.status === 'complete') {
+              chrome.tabs.onUpdated.removeListener(listener);
+              resolve(undefined);
+            }
+          };
+          chrome.tabs.onUpdated.addListener(listener);
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            chrome.tabs.onUpdated.removeListener(listener);
+            resolve(undefined);
+          }, 5000);
+        });
+
+        // Perform the copy operation in the fallback tab
+        const success = await copyImageViaTab(fallbackTabId, dataUrl, tabId);
+
+        // Close the fallback tab
+        try {
+          await chrome.tabs.remove(fallbackTabId);
+        } catch (closeError) {
+          console.warn('[clipboard] Failed to close fallback tab:', closeError);
+        }
+
+        return success;
+      } catch (fallbackError) {
+        console.warn('[clipboard] Fallback tab operation failed:', fallbackError);
+        return false;
+      }
     } else {
       // For regular pages, use the standard method
       return await copyImageViaTab(tabId, dataUrl);
