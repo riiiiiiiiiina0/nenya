@@ -57,7 +57,7 @@ if (customFilterButton) {
   customFilterButton.innerHTML = icons.bolt;
 }
 if (openOptionsButton) {
-  openOptionsButton.innerHTML = icons['adjustments-horizontal'];
+  openOptionsButton.innerHTML = icons['cog'];
 }
 if (splitPageButton) {
   splitPageButton.innerHTML = icons.bars;
