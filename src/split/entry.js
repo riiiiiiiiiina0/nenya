@@ -1430,6 +1430,9 @@ function insertIframeAtEdge(position, tab) {
   const wrappers = Array.from(document.querySelectorAll('.iframe-wrapper'));
   if (wrappers.length === 0) return;
 
+  // Hide embedded picker before calculating orders to avoid order conflicts
+  hideEmbeddedTabPickerPanel();
+
   let newOrder;
   if (position === 'left' || position === 'top') {
     // Insert at the beginning
@@ -1445,8 +1448,12 @@ function insertIframeAtEdge(position, tab) {
     newOrder = 0;
   } else {
     // Insert at the end
+    // Only consider iframe-wrapper elements, not other elements like the embedded picker
+    const wrapperElements = Array.from(iframeContainer.children).filter(
+      (el) => el.classList.contains('iframe-wrapper'),
+    );
     const maxOrder = Math.max(
-      ...Array.from(iframeContainer.children).map((el) =>
+      ...wrapperElements.map((el) =>
         parseInt(/** @type {HTMLElement} */ (el).style.order),
       ),
     );
