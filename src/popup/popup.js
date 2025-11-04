@@ -765,48 +765,143 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
   }
 
   /**
+   * Counts direct children bookmarks (not folders) in a folder.
+   * @param {chrome.bookmarks.BookmarkTreeNode} folder
+   * @returns {Promise<number>}
+   */
+  function countDirectChildrenBookmarks(folder) {
+    return new Promise((resolve) => {
+      if (!folder.id) {
+        resolve(0);
+        return;
+      }
+      
+      // Get full folder details with children using getSubTree
+      chrome.bookmarks.getSubTree(folder.id, (subTree) => {
+        if (!subTree || subTree.length === 0) {
+          resolve(0);
+          return;
+        }
+        
+        const folderNode = subTree[0];
+        if (!folderNode.children || folderNode.children.length === 0) {
+          resolve(0);
+          return;
+        }
+        
+        // Count only direct children that are bookmarks (have URLs)
+        const bookmarkCount = folderNode.children.filter((child) => child.url).length;
+        resolve(bookmarkCount);
+      });
+    });
+  }
+
+  /**
    * Renders the bookmark search results.
    * @param {chrome.bookmarks.BookmarkTreeNode[]} results
    */
   function renderSearchResults(results) {
     resultsElement.innerHTML = '';
     results.forEach((bookmark, index) => {
+      const resultItem = document.createElement('div');
+      resultItem.className =
+        'p-2 hover:bg-base-300 cursor-pointer rounded-md';
+      resultItem.dataset.index = String(index);
+      
       if (bookmark.url) {
-        const resultItem = document.createElement('div');
-        resultItem.className =
-          'p-2 hover:bg-base-300 cursor-pointer rounded-md';
-        resultItem.dataset.index = String(index);
-        resultItem.textContent = bookmark.title || bookmark.url;
+        // Bookmark item
+        resultItem.textContent = '↗️ ' + (bookmark.title || bookmark.url);
         resultItem.addEventListener('click', () => {
           chrome.tabs.create({ url: bookmark.url });
           window.close();
         });
-        resultsElement.appendChild(resultItem);
+      } else {
+        // Bookmark folder
+        // Set initial text, then update with count
+        resultItem.textContent = '📂 ' + (bookmark.title || 'Untitled') + ' (0)';
+        // Count direct children bookmarks and update text
+        void countDirectChildrenBookmarks(bookmark).then((count) => {
+          resultItem.textContent = '📂 ' + (bookmark.title || 'Untitled') + ` (${count})`;
+        });
+        resultItem.addEventListener('click', () => {
+          void openFolderBookmarks(bookmark);
+        });
       }
+      
+      resultsElement.appendChild(resultItem);
     });
     // Reset highlight when results are re-rendered
     highlightedIndex = -1;
+  }
+  
+  /**
+   * Opens all direct children bookmarks of a folder in separate tabs.
+   * @param {chrome.bookmarks.BookmarkTreeNode} folder
+   * @returns {Promise<void>}
+   */
+  async function openFolderBookmarks(folder) {
+    return new Promise((resolve) => {
+      if (!folder.id) {
+        resolve();
+        return;
+      }
+      
+      // Get full folder details with children
+      chrome.bookmarks.getSubTree(folder.id, (subTree) => {
+        if (!subTree || subTree.length === 0) {
+          resolve();
+          return;
+        }
+        
+        const folderNode = subTree[0];
+        if (!folderNode.children || folderNode.children.length === 0) {
+          resolve();
+          return;
+        }
+        
+        // Filter to only direct children that are bookmarks (have URLs)
+        const bookmarkChildren = folderNode.children.filter((child) => child.url);
+        
+        // Open each bookmark in a separate tab
+        bookmarkChildren.forEach((bookmark) => {
+          if (bookmark.url) {
+            chrome.tabs.create({ url: bookmark.url });
+          }
+        });
+        
+        window.close();
+        resolve();
+      });
+    });
   }
 
   /**
    * Performs a bookmark search and renders the results.
    * Prioritizes bookmarks with title matches over URL matches.
+   * Includes both bookmarks and folders in results.
    * @param {string} query
    */
   function performSearch(query) {
     chrome.bookmarks.search(query, (results) => {
-      // Filter to only bookmarks with URLs
-      const bookmarkResults = results.filter((bookmark) => bookmark.url);
+      // Include both bookmarks (with URLs) and folders (without URLs)
+      // chrome.bookmarks.search already returns both, so we can use results directly
+      const allResults = results;
 
       // Sort to prioritize title matches over URL matches
       const lowerQuery = query.toLowerCase();
-      bookmarkResults.sort((a, b) => {
+      allResults.sort((a, b) => {
         const aTitleMatch =
           a.title?.toLowerCase().includes(lowerQuery) ?? false;
         const bTitleMatch =
           b.title?.toLowerCase().includes(lowerQuery) ?? false;
         const aUrlMatch = a.url?.toLowerCase().includes(lowerQuery) ?? false;
         const bUrlMatch = b.url?.toLowerCase().includes(lowerQuery) ?? false;
+
+        // Prioritize bookmarks over folders if both match
+        if (aTitleMatch && bTitleMatch) {
+          if (a.url && !b.url) return -1; // Bookmark comes before folder
+          if (!a.url && b.url) return 1; // Folder comes after bookmark
+        }
 
         // If both have title matches or both don't, keep original order
         if (aTitleMatch === bTitleMatch) {
@@ -823,7 +918,7 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
       });
 
       // Limit to top 10 results
-      const topResults = bookmarkResults.slice(0, 10);
+      const topResults = allResults.slice(0, 10);
       currentResults = topResults;
       renderSearchResults(topResults);
     });
@@ -851,10 +946,14 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
 
       // If there's a highlighted result, open it
       if (highlightedIndex >= 0 && highlightedIndex < currentResults.length) {
-        const highlightedBookmark = currentResults[highlightedIndex];
-        if (highlightedBookmark.url) {
-          chrome.tabs.create({ url: highlightedBookmark.url });
+        const highlightedItem = currentResults[highlightedIndex];
+        if (highlightedItem.url) {
+          // Bookmark item
+          chrome.tabs.create({ url: highlightedItem.url });
           window.close();
+        } else {
+          // Bookmark folder - open all direct children bookmarks
+          void openFolderBookmarks(highlightedItem);
         }
         return;
       }
