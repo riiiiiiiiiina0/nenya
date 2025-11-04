@@ -525,6 +525,8 @@ function handleLifecycleEvent(trigger) {
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   handleLifecycleEvent('install');
+  // Deduplicate custom titles on install/update
+  void deduplicateCustomTitlesByUrl();
   if (details.reason === 'install' || details.reason === 'update') {
     const windows = await chrome.windows.getAll({ populate: true });
     for (const window of windows) {
@@ -550,6 +552,26 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
+  // Deduplicate custom titles by URL first
+  void (async () => {
+    await deduplicateCustomTitlesByUrl();
+    // Then restore custom titles for all existing tabs on startup
+    try {
+      const tabs = await chrome.tabs.query({});
+      for (const tab of tabs) {
+        if (
+          tab.id &&
+          tab.url &&
+          typeof tab.url === 'string' &&
+          (tab.url.startsWith('http://') || tab.url.startsWith('https://'))
+        ) {
+          void restoreCustomTitleByUrl(tab.id, tab.url);
+        }
+      }
+    } catch (error) {
+      console.warn('[background] Failed to restore custom titles on startup:', error);
+    }
+  })();
 });
 
 // Ensure backup service is initialized immediately when service worker starts
@@ -574,6 +596,163 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     console.warn('Failed to get tab for context menu update:', error);
   }
 });
+
+/**
+ * Deduplicate custom title records by URL, keeping only the latest one for each URL
+ * @returns {Promise<void>}
+ */
+async function deduplicateCustomTitlesByUrl() {
+  try {
+    // Get all custom title records
+    const allStorage = await chrome.storage.local.get(null);
+    const customTitleKeys = Object.keys(allStorage).filter((key) =>
+      key.startsWith('customTitle_'),
+    );
+
+    // Group records by URL
+    /** @type {Map<string, Array<{key: string, data: any}>>} */
+    const urlGroups = new Map();
+
+    for (const storageKey of customTitleKeys) {
+      const data = allStorage[storageKey];
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        typeof data.title !== 'string' ||
+        typeof data.url !== 'string'
+      ) {
+        continue;
+      }
+
+      if (!urlGroups.has(data.url)) {
+        urlGroups.set(data.url, []);
+      }
+      urlGroups.get(data.url).push({ key: storageKey, data });
+    }
+
+    // For each URL group, keep only the latest one
+    const keysToRemove = [];
+    for (const [url, records] of urlGroups.entries()) {
+      if (records.length <= 1) {
+        // No duplicates for this URL
+        continue;
+      }
+
+      // Sort by updatedAt (latest first), fallback to keeping first if no timestamp
+      records.sort((a, b) => {
+        const aTime = a.data.updatedAt || 0;
+        const bTime = b.data.updatedAt || 0;
+        return bTime - aTime;
+      });
+
+      // Keep the first (latest) record, mark others for removal
+      for (let i = 1; i < records.length; i++) {
+        keysToRemove.push(records[i].key);
+      }
+
+      console.log(
+        `[background] Deduplicating custom titles for URL: ${url}, keeping latest (${records[0].key}), removing ${records.length - 1} duplicate(s)`,
+      );
+    }
+
+    // Remove duplicate records
+    if (keysToRemove.length > 0) {
+      await chrome.storage.local.remove(keysToRemove);
+      console.log(
+        `[background] Removed ${keysToRemove.length} duplicate custom title record(s)`,
+      );
+    }
+  } catch (error) {
+    console.warn('[background] Failed to deduplicate custom titles:', error);
+  }
+}
+
+/**
+ * Restore custom title for a tab by URL match if tab ID changed
+ * @param {number} tabId - The current tab ID
+ * @param {string} tabUrl - The current tab URL
+ * @returns {Promise<void>}
+ */
+async function restoreCustomTitleByUrl(tabId, tabUrl) {
+  if (!tabUrl || typeof tabUrl !== 'string') {
+    return;
+  }
+
+  try {
+    // Get all custom title records
+    const allStorage = await chrome.storage.local.get(null);
+    const customTitleKeys = Object.keys(allStorage).filter((key) =>
+      key.startsWith('customTitle_'),
+    );
+
+    // Find matching record by URL
+    for (const storageKey of customTitleKeys) {
+      const data = allStorage[storageKey];
+      if (
+        !data ||
+        typeof data !== 'object' ||
+        typeof data.title !== 'string' ||
+        typeof data.url !== 'string'
+      ) {
+        continue;
+      }
+
+      // Check if URLs match
+      if (data.url === tabUrl) {
+        // If tabId doesn't match, update the record
+        if (data.tabId !== tabId) {
+          console.log(
+            '[background] Restoring custom title by URL match:',
+            tabUrl,
+            'old tabId:',
+            data.tabId,
+            'new tabId:',
+            tabId,
+          );
+
+          // Create new record with new tabId and update timestamp
+          const newStorageKey = `customTitle_${tabId}`;
+          await chrome.storage.local.set({
+            [newStorageKey]: {
+              tabId: tabId,
+              url: tabUrl,
+              title: data.title,
+              updatedAt: Date.now(), // Update timestamp to mark as latest
+            },
+          });
+
+          // Remove old record if it exists and is different from new key
+          if (storageKey !== newStorageKey) {
+            await chrome.storage.local.remove(storageKey);
+          }
+
+          // Apply custom title to the tab
+          try {
+            await chrome.scripting.executeScript({
+              target: { tabId },
+              func: (title) => {
+                document.title = title;
+                const titleElement = document.querySelector('title');
+                if (titleElement) {
+                  titleElement.textContent = title;
+                }
+              },
+              args: [data.title],
+            });
+          } catch (scriptError) {
+            console.warn(
+              '[background] Failed to apply custom title to tab:',
+              scriptError,
+            );
+          }
+        }
+        break; // Found match, no need to continue
+      }
+    }
+  } catch (error) {
+    console.warn('[background] Failed to restore custom title by URL:', error);
+  }
+}
 
 // Clean up custom title records when tabs close
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -631,6 +810,10 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
   if (changeInfo.status === 'complete' && tab) {
     void updateContextMenuVisibility(tab);
+    // Restore custom title by URL match if tab was reloaded
+    if (tab.url && typeof tab.url === 'string') {
+      void restoreCustomTitleByUrl(tabId, tab.url);
+    }
   }
 });
 

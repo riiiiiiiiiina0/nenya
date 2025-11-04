@@ -676,10 +676,13 @@ async function handleSetCustomTitle() {
 
     // Save to chrome local storage
     const storageKey = `customTitle_${currentTab.id}`;
+    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
     await chrome.storage.local.set({
       [storageKey]: {
         tabId: currentTab.id,
+        url: currentUrl,
         title: trimmedTitle,
+        updatedAt: Date.now(),
       },
     });
 

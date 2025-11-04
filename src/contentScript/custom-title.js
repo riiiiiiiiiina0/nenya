@@ -32,12 +32,13 @@
   }
 
   /**
-   * Load custom title from storage
+   * Load custom title from storage by tabId or URL
    * @param {number} tabId
    * @returns {Promise<string | null>}
    */
   async function loadCustomTitle(tabId) {
     try {
+      // First try by tabId
       const storageKey = `customTitle_${tabId}`;
       const result = await chrome.storage.local.get(storageKey);
       const data = result[storageKey];
@@ -45,6 +46,46 @@
       if (data && typeof data === 'object' && typeof data.title === 'string') {
         return data.title;
       }
+
+      // Fallback: try by URL match
+      const currentUrl = window.location.href;
+      if (currentUrl && typeof currentUrl === 'string') {
+        const allStorage = await chrome.storage.local.get(null);
+        const customTitleKeys = Object.keys(allStorage).filter((key) =>
+          key.startsWith('customTitle_'),
+        );
+
+        for (const key of customTitleKeys) {
+          const urlData = allStorage[key];
+          if (
+            urlData &&
+            typeof urlData === 'object' &&
+            typeof urlData.title === 'string' &&
+            typeof urlData.url === 'string' &&
+            urlData.url === currentUrl
+          ) {
+            // Found match by URL, update the record with current tabId
+            if (urlData.tabId !== tabId) {
+              // Create new record with new tabId and update timestamp
+              const newStorageKey = `customTitle_${tabId}`;
+              await chrome.storage.local.set({
+                [newStorageKey]: {
+                  tabId: tabId,
+                  url: currentUrl,
+                  title: urlData.title,
+                  updatedAt: Date.now(), // Update timestamp to mark as latest
+                },
+              });
+              // Remove old record if it's different
+              if (key !== newStorageKey) {
+                await chrome.storage.local.remove(key);
+              }
+            }
+            return urlData.title;
+          }
+        }
+      }
+
       return null;
     } catch (error) {
       console.error('[CustomTitle] Failed to load custom title:', error);
