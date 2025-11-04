@@ -13,11 +13,28 @@ let embeddedPickerCallback = null;
 async function getFilteredWindowsWithTabs() {
   const splitPageUrlPrefix = chrome.runtime.getURL('src/split/split.html');
 
+  // Get current window ID (the window containing the split page)
+  let currentWindowId = null;
+  try {
+    currentWindowId = await new Promise((resolve) => {
+      chrome.windows.getCurrent((window) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) {
+          resolve(null);
+          return;
+        }
+        resolve(window?.id || null);
+      });
+    });
+  } catch (error) {
+    console.error('[tab-picker] Failed to get current window:', error);
+  }
+
   // Get all windows with their tabs
   const windows = await chrome.windows.getAll({ populate: true });
 
   // Filter and group tabs by window, excluding split pages
-  return windows
+  const windowsWithTabs = windows
     .filter((win) => win.id !== undefined)
     .map((win) => ({
       id: /** @type {number} */ (win.id),
@@ -30,6 +47,19 @@ async function getFilteredWindowsWithTabs() {
       ),
     }))
     .filter((win) => win.tabs.length > 0);
+
+  // Sort: current window first, then others
+  if (currentWindowId !== null) {
+    windowsWithTabs.sort((a, b) => {
+      const aIsCurrent = a.id === currentWindowId;
+      const bIsCurrent = b.id === currentWindowId;
+      if (aIsCurrent && !bIsCurrent) return -1;
+      if (!aIsCurrent && bIsCurrent) return 1;
+      return 0;
+    });
+  }
+
+  return windowsWithTabs;
 }
 
 /**
