@@ -504,7 +504,23 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   // Deduplicate custom titles on install/update
   void deduplicateCustomTitlesByUrl();
   if (details.reason === 'install' || details.reason === 'update') {
+    // Inject content scripts into existing tabs instead of reloading them
+    // This preserves user state (scroll position, form data, etc.)
     const windows = await chrome.windows.getAll({ populate: true });
+    
+    // Content scripts to inject (matching manifest.json structure)
+    // Note: iframe-monitor.js runs in all_frames and is skipped here;
+    // it will be injected automatically for new tabs/iframes
+    const contentScripts = [
+      // document_start scripts
+      ['src/contentScript/bright-mode.js', 'src/contentScript/block-elements.js', 'src/contentScript/custom-js-css.js', 'src/contentScript/custom-title.js'],
+      // document_idle scripts
+      ['src/contentScript/video-controller.js', 'src/contentScript/highlight-text.js'],
+    ];
+    
+    // CSS to inject (for video-controller)
+    const cssFiles = ['src/contentScript/video-controller.css'];
+
     for (const window of windows) {
       if (!window.tabs) {
         continue;
@@ -516,9 +532,37 @@ chrome.runtime.onInstalled.addListener(async (details) => {
           (tab.url.startsWith('http:') || tab.url.startsWith('https:'))
         ) {
           try {
-            await chrome.tabs.reload(tab.id, { bypassCache: true });
+            // Inject CSS files
+            for (const cssFile of cssFiles) {
+              try {
+                await chrome.scripting.insertCSS({
+                  target: { tabId: tab.id },
+                  files: [cssFile],
+                });
+              } catch (error) {
+                console.warn(`[background] Failed to inject CSS ${cssFile} into tab ${tab.id}:`, error);
+              }
+            }
+
+            // Inject JavaScript files (scripts handle their own initialization)
+            for (const scriptFiles of contentScripts) {
+              try {
+                await chrome.scripting.executeScript({
+                  target: { tabId: tab.id },
+                  files: scriptFiles,
+                });
+              } catch (error) {
+                console.warn(`[background] Failed to inject scripts into tab ${tab.id}:`, error);
+              }
+            }
           } catch (error) {
-            console.warn(`[background] Failed to reload tab ${tab.id}:`, error);
+            console.warn(`[background] Failed to inject content scripts into tab ${tab.id}:`, error);
+            // Fallback: reload the tab if injection fails (e.g., for restricted pages)
+            try {
+              await chrome.tabs.reload(tab.id, { bypassCache: true });
+            } catch (reloadError) {
+              console.warn(`[background] Failed to reload tab ${tab.id}:`, reloadError);
+            }
           }
         }
       }
@@ -603,7 +647,10 @@ async function deduplicateCustomTitlesByUrl() {
       if (!urlGroups.has(data.url)) {
         urlGroups.set(data.url, []);
       }
-      urlGroups.get(data.url).push({ key: storageKey, data });
+      const urlGroup = urlGroups.get(data.url);
+      if (urlGroup) {
+        urlGroup.push({ key: storageKey, data });
+      }
     }
 
     // For each URL group, keep only the latest one
