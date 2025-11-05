@@ -1153,8 +1153,10 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
       // It's our tab, let's use it.
       console.log('[background] Using preloaded tab for', providerId);
 
-      // Update its URL just in case it's not the right one (e.g. user switched provider)
-      await chrome.tabs.update(preloadedLlmTabId, { url: meta.url });
+      // Only update the URL if it's different, to avoid unnecessary reloads
+      if (tab.url !== meta.url) {
+        await chrome.tabs.update(preloadedLlmTabId, { url: meta.url });
+      }
 
       const ok = await injectLLMPageInjector(preloadedLlmTabId);
       if (ok) {
