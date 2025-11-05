@@ -1099,6 +1099,8 @@ chrome.runtime.onConnect.addListener((port) => {
 
     port.onDisconnect.addListener(() => {
       console.log('[background] Chat page disconnected:', sessionId);
+      console.log('[background] Sessions with sent content:', Array.from(sessionsWithSentContent));
+      console.log('[background] Has sent content?:', sessionsWithSentContent.has(sessionId));
       
       // Only clean up LLM tabs if content hasn't been sent yet
       // If content was sent, keep the LLM tabs open for the user to continue
@@ -1348,24 +1350,54 @@ async function switchLLMProvider(sessionId, oldProviderId, newProviderId) {
  */
 async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
   try {
+    console.log('[background] reuseLLMTabs called with sessionId:', sessionId);
+    
     if (!sessionId) {
       return { success: false, error: 'Session ID is required' };
     }
 
+    // Mark this session as having sent content IMMEDIATELY (before anything else)
+    // This prevents auto-cleanup if the popup closes while we're processing
+    sessionsWithSentContent.add(sessionId);
+    console.log('[background] Marked session as sent, sessionsWithSentContent:', Array.from(sessionsWithSentContent));
+
     const llmTabs = sessionToLLMTabs.get(sessionId);
     if (!llmTabs) {
+      console.log('[background] No LLM tabs found for session');
+      sessionsWithSentContent.delete(sessionId); // Clean up if we're failing
       return { success: false, error: 'No LLM tabs found for this chat session' };
     }
+    
+    console.log('[background] Found LLM tabs:', Array.from(llmTabs.entries()));
 
+    // Find the first valid tab and activate it immediately
     let firstTabId = null;
-
-    // Inject content into each provider's tab
     for (const providerId of selectedLLMProviders) {
       const tabId = llmTabs.get(providerId);
-      if (!tabId) continue;
+      if (tabId) {
+        try {
+          await chrome.tabs.get(tabId);
+          firstTabId = tabId;
+          break;
+        } catch (error) {
+          // Tab was closed, continue searching
+          llmTabs.delete(providerId);
+        }
+      }
+    }
+
+    // Activate the first tab immediately so user sees it right away
+    if (firstTabId) {
+      await chrome.tabs.update(firstTabId, { active: true });
+    }
+
+    // Process all tabs in parallel for better performance
+    const injectionPromises = selectedLLMProviders.map(async (providerId) => {
+      const tabId = llmTabs.get(providerId);
+      if (!tabId) return;
 
       const meta = LLM_PROVIDER_META[providerId];
-      if (!meta) continue;
+      if (!meta) return;
 
       // Check if tab still exists
       try {
@@ -1373,18 +1405,15 @@ async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
       } catch (error) {
         // Tab was closed, skip it
         llmTabs.delete(providerId);
-        continue;
+        return;
       }
 
-      // Wait for tab to be ready and inject
+      // Inject the script and wait for it to be ready
       const ok = await injectLLMPageInjector(tabId);
       if (ok) {
-        if (!firstTabId) {
-          firstTabId = tabId;
-        }
-
-        // Small delay to ensure script is settled
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        // Small delay to ensure the content script is fully initialized
+        // and message listener is set up (50ms should be enough)
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         console.log('[background] Sending data to LLM tab', tabId);
         await chrome.tabs.sendMessage(tabId, {
@@ -1395,19 +1424,16 @@ async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
           sendButtonSelector: meta.sendButtonSelector || null,
         });
       }
-    }
+    });
 
-    // Activate the first tab
-    if (firstTabId) {
-      await chrome.tabs.update(firstTabId, { active: true });
-    }
-
-    // Mark this session as having sent content (should not auto-close)
-    sessionsWithSentContent.add(sessionId);
+    // Wait for all injections to complete
+    await Promise.all(injectionPromises);
 
     return { success: true };
   } catch (error) {
     console.error('[background] Failed to reuse LLM tabs:', error);
+    // Remove from sent content tracking if we failed
+    sessionsWithSentContent.delete(sessionId);
     return { success: false, error: error.message };
   }
 }
@@ -2014,14 +2040,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Use reuseLLMTabs if requested and session ID is provided
+        console.log('[background] useReuseTabs:', useReuseTabs, 'sessionId:', sessionId);
         if (useReuseTabs && sessionId) {
+          console.log('[background] Using reuseLLMTabs');
           const result = await reuseLLMTabs(
             sessionId,
             llmProviders,
             collectedContents,
           );
+          console.log('[background] reuseLLMTabs result:', result);
           sendResponse(result);
         } else {
+          console.log('[background] Using openOrReuseLLMTabs (fallback)');
           // Fallback to old behavior for backward compatibility
           await openOrReuseLLMTabs(
             currentTab,

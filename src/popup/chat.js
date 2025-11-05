@@ -815,6 +815,8 @@ async function handleSend() {
   sendButton.classList.add('loading');
 
   try {
+    console.log('[chat] Sending to LLM, llmTabsOpened:', llmTabsOpened, 'sessionId:', sessionId);
+    
     // Send message to background script to collect content and inject into LLM pages
     const response = await chrome.runtime.sendMessage({
       type: 'collect-and-send-to-llm',
@@ -826,6 +828,8 @@ async function handleSend() {
       sessionId: sessionId,
       useReuseTabs: llmTabsOpened,
     });
+    
+    console.log('[chat] Send response:', response);
 
     if (!response?.success) {
       alert(`Failed to send to LLM: ${response?.error || 'Unknown error'}`);

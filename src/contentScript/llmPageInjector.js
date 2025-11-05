@@ -16,6 +16,15 @@
    */
   function waitForElement(selector, timeout = 10000) {
     return new Promise((resolve) => {
+      // Check immediately first
+      const el = /** @type {HTMLElement | null} */ (
+        document.querySelector(selector)
+      );
+      if (el) {
+        resolve(el);
+        return;
+      }
+
       const start = Date.now();
 
       function tryFind() {
@@ -27,12 +36,13 @@
         } else if (Date.now() - start >= timeout) {
           resolve(null);
         } else {
-          setTimeout(tryFind, 1000);
+          // Check more frequently (every 100ms instead of 1000ms)
+          setTimeout(tryFind, 100);
         }
       }
 
-      // Start checking after 1 second delay
-      setTimeout(tryFind, 1000);
+      // Start checking immediately with a short delay
+      setTimeout(tryFind, 100);
     });
   }
 
