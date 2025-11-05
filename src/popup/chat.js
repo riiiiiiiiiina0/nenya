@@ -99,6 +99,21 @@ let activeDropdownIndex = -1;
 /** @type {boolean} */
 let providerDropdownTriggeredByButton = false;
 
+/** @type {number | null} */
+let chatPageTabId = null;
+
+/** @type {string} */
+let sessionId = '';
+
+/** @type {number} */
+let currentTabIndex = 0;
+
+/** @type {boolean} */
+let llmTabsOpened = false;
+
+/** @type {chrome.runtime.Port | null} */
+let keepAlivePort = null;
+
 /**
  * Load saved selected providers from storage.
  * @returns {Promise<void>}
@@ -507,12 +522,24 @@ function toggleProvider(providerId) {
     return;
   }
 
+  // Get the old provider ID before changing
+  const oldProviderId =
+    selectedProviders.size > 0 ? Array.from(selectedProviders)[0] : null;
+
   // Single selection: clear previous selection and set new one
   selectedProviders.clear();
   selectedProviders.add(providerId);
 
   updateSelectedProvidersDisplay();
   void saveSelectedProviders();
+
+  // If LLM tabs are already opened and we're switching providers, update the tab
+  if (llmTabsOpened && oldProviderId && oldProviderId !== providerId) {
+    void switchLLMProvider(oldProviderId, providerId);
+  } else if (!llmTabsOpened && sessionId) {
+    // If tabs not opened yet, open them now
+    void openLLMTabs();
+  }
 
   // Remove the '@' character that triggered the dropdown
   const text = promptTextarea.value;
@@ -542,12 +569,24 @@ function toggleProviderFromButton(providerId) {
     return;
   }
 
+  // Get the old provider ID before changing
+  const oldProviderId =
+    selectedProviders.size > 0 ? Array.from(selectedProviders)[0] : null;
+
   // Single selection: clear previous selection and set new one
   selectedProviders.clear();
   selectedProviders.add(providerId);
 
   updateSelectedProvidersDisplay();
   void saveSelectedProviders();
+
+  // If LLM tabs are already opened and we're switching providers, update the tab
+  if (llmTabsOpened && oldProviderId && oldProviderId !== providerId) {
+    void switchLLMProvider(oldProviderId, providerId);
+  } else if (!llmTabsOpened && sessionId) {
+    // If tabs not opened yet, open them now
+    void openLLMTabs();
+  }
 
   // Close dropdown after selection
   hideAllDropdowns();
@@ -626,6 +665,129 @@ function handleDropdownKeyboard(event, dropdown) {
 }
 
 /**
+ * Get the current tab ID for the chat page and generate session ID
+ * @returns {Promise<void>}
+ */
+async function getChatPageTabId() {
+  try {
+    // Generate a unique session ID for this chat session
+    sessionId = `chat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    // Try to get tab ID if this is opened as a tab (not popup)
+    const response = await chrome.runtime.sendMessage({
+      type: 'getCurrentTabId',
+    });
+    if (response && typeof response.tabId === 'number') {
+      chatPageTabId = response.tabId;
+    }
+
+    // Establish a keep-alive connection with background script
+    // This will be used to detect when popup is closed
+    keepAlivePort = chrome.runtime.connect({ name: `chat-${sessionId}` });
+    keepAlivePort.onDisconnect.addListener(() => {
+      console.log('[chat] Port disconnected');
+    });
+  } catch (error) {
+    console.error('[chat] Failed to get chat page tab ID:', error);
+  }
+}
+
+/**
+ * Get current active tab info
+ * @returns {Promise<void>}
+ */
+async function getCurrentTabInfo() {
+  try {
+    const tabs = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (tabs && tabs[0]) {
+      currentTabIndex = tabs[0].index || 0;
+    }
+  } catch (error) {
+    console.error('[chat] Failed to get current tab info:', error);
+  }
+}
+
+/**
+ * Open LLM tabs for selected providers
+ * @returns {Promise<void>}
+ */
+async function openLLMTabs() {
+  if (llmTabsOpened || selectedProviders.size === 0 || !sessionId) {
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'open-llm-tabs',
+      sessionId,
+      chatPageTabId,
+      providers: Array.from(selectedProviders),
+      currentTabIndex,
+    });
+
+    if (response?.success) {
+      llmTabsOpened = true;
+      console.log('[chat] LLM tabs opened successfully');
+    } else {
+      console.error('[chat] Failed to open LLM tabs:', response?.error);
+    }
+  } catch (error) {
+    console.error('[chat] Failed to open LLM tabs:', error);
+  }
+}
+
+/**
+ * Close LLM tabs
+ * @returns {Promise<void>}
+ */
+async function closeLLMTabs() {
+  if (!llmTabsOpened || !sessionId) {
+    return;
+  }
+
+  try {
+    await chrome.runtime.sendMessage({
+      type: 'close-llm-tabs',
+      sessionId,
+    });
+    llmTabsOpened = false;
+    console.log('[chat] LLM tabs closed');
+  } catch (error) {
+    console.error('[chat] Failed to close LLM tabs:', error);
+  }
+}
+
+/**
+ * Switch LLM provider
+ * @param {string} oldProviderId
+ * @param {string} newProviderId
+ * @returns {Promise<void>}
+ */
+async function switchLLMProvider(oldProviderId, newProviderId) {
+  if (!sessionId) {
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'switch-llm-provider',
+      sessionId,
+      oldProviderId,
+      newProviderId,
+    });
+
+    if (!response?.success) {
+      console.error('[chat] Failed to switch LLM provider:', response?.error);
+    }
+  } catch (error) {
+    console.error('[chat] Failed to switch LLM provider:', error);
+  }
+}
+
+/**
  * Handle sending the prompt to LLM providers.
  * @returns {Promise<void>}
  */
@@ -661,6 +823,8 @@ async function handleSend() {
         .filter((id) => typeof id === 'number'),
       llmProviders: Array.from(selectedProviders),
       promptContent: promptText,
+      sessionId: sessionId,
+      useReuseTabs: llmTabsOpened,
     });
 
     if (!response?.success) {
@@ -671,8 +835,10 @@ async function handleSend() {
       return;
     }
 
-    // Close the popup - the LLM tabs have been opened/reused with content injected
-    window.close();
+    // Don't close the popup - let user continue working
+    // Re-enable button
+    sendButton.disabled = false;
+    sendButton.classList.remove('loading');
   } catch (error) {
     console.error('[chat] Failed to send:', error);
     alert('Failed to send prompt. Please try again.');
@@ -765,7 +931,9 @@ async function handleDownload() {
 // ============================================================================
 
 if (backButton) {
-  backButton.addEventListener('click', () => {
+  backButton.addEventListener('click', async () => {
+    // Close LLM tabs before navigating away
+    await closeLLMTabs();
     // Navigate back to the main popup page
     window.location.href = 'index.html';
   });
@@ -903,9 +1071,18 @@ document.addEventListener('click', (event) => {
  * @returns {Promise<void>}
  */
 async function initChatPage() {
+  // Get chat page tab ID and current tab info first
+  await getChatPageTabId();
+  await getCurrentTabInfo();
+
   await loadSelectedProviders();
   updateSelectedProvidersDisplay();
   await updateTabsInfoDisplay();
+
+  // Open LLM tabs if providers are already selected
+  if (selectedProviders.size > 0 && sessionId) {
+    await openLLMTabs();
+  }
 
   // Set SVG icons for buttons
   const editPromptsButton = document.getElementById('editPromptsButton');

@@ -64,6 +64,9 @@ const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 const COLLECT_PAGE_CONTENT_MESSAGE = 'collect-page-content-as-markdown';
 const COLLECT_AND_SEND_TO_LLM_MESSAGE = 'collect-and-send-to-llm';
+const OPEN_LLM_TABS_MESSAGE = 'open-llm-tabs';
+const CLOSE_LLM_TABS_MESSAGE = 'close-llm-tabs';
+const SWITCH_LLM_PROVIDER_MESSAGE = 'switch-llm-provider';
 
 // ============================================================================
 // KEYBOARD SHORTCUTS (COMMANDS)
@@ -1043,6 +1046,90 @@ let selectedPromptContent = null;
 let selectedLocalFiles = [];
 
 /**
+ * Map of session IDs to their opened LLM tabs
+ * @type {Map<string, Map<string, number>>}
+ */
+const sessionToLLMTabs = new Map();
+
+/**
+ * Map of chat page tab IDs to session IDs (for cleanup when tab is closed)
+ * @type {Map<number, string>}
+ */
+const tabIdToSessionId = new Map();
+
+/**
+ * Track which sessions have sent content to LLM tabs (should not auto-close)
+ * @type {Set<string>}
+ */
+const sessionsWithSentContent = new Set();
+
+/**
+ * Track when chat pages are closed to cleanup their LLM tabs
+ */
+chrome.tabs.onRemoved.addListener((tabId) => {
+  const sessionId = tabIdToSessionId.get(tabId);
+  if (sessionId) {
+    // Chat page tab was closed, cleanup its LLM tabs only if content wasn't sent
+    if (!sessionsWithSentContent.has(sessionId)) {
+      const llmTabs = sessionToLLMTabs.get(sessionId);
+      if (llmTabs) {
+        for (const llmTabId of llmTabs.values()) {
+          chrome.tabs.remove(llmTabId).catch(() => {
+            // Tab might already be closed
+          });
+        }
+      }
+      sessionToLLMTabs.delete(sessionId);
+    } else {
+      // Clean up the sent content flag as it's no longer needed
+      sessionsWithSentContent.delete(sessionId);
+    }
+    tabIdToSessionId.delete(tabId);
+  }
+});
+
+/**
+ * Handle port connections from chat pages to detect when they close
+ */
+chrome.runtime.onConnect.addListener((port) => {
+  // Check if this is a chat page connection
+  if (port.name && port.name.startsWith('chat-')) {
+    const sessionId = port.name.substring(5); // Remove 'chat-' prefix
+    console.log('[background] Chat page connected:', sessionId);
+
+    port.onDisconnect.addListener(() => {
+      console.log('[background] Chat page disconnected:', sessionId);
+      
+      // Only clean up LLM tabs if content hasn't been sent yet
+      // If content was sent, keep the LLM tabs open for the user to continue
+      if (!sessionsWithSentContent.has(sessionId)) {
+        const llmTabs = sessionToLLMTabs.get(sessionId);
+        if (llmTabs) {
+          console.log('[background] Cleaning up unused LLM tabs for session:', sessionId);
+          for (const llmTabId of llmTabs.values()) {
+            chrome.tabs.remove(llmTabId).catch(() => {
+              // Tab might already be closed
+            });
+          }
+          sessionToLLMTabs.delete(sessionId);
+        }
+      } else {
+        console.log('[background] Content was sent, keeping LLM tabs open for session:', sessionId);
+        // Clean up the sent content flag as it's no longer needed
+        sessionsWithSentContent.delete(sessionId);
+      }
+
+      // Clean up tab ID mapping
+      for (const [tabId, sid] of tabIdToSessionId.entries()) {
+        if (sid === sessionId) {
+          tabIdToSessionId.delete(tabId);
+        }
+      }
+    });
+  }
+});
+
+/**
  * Inject the LLM page injector content script and wait for tab to be ready
  * @param {number} tabId
  * @returns {Promise<boolean>}
@@ -1110,6 +1197,219 @@ async function waitForTabReady(tabId, timeout = 30000) {
       resolve(false);
     }, timeout);
   });
+}
+
+/**
+ * Open LLM provider tabs for the chat page (positioned right next to current tab)
+ * @param {string} sessionId - The session ID for this chat session
+ * @param {number | null} chatPageTabId - The tab ID of the chat page (if opened as tab)
+ * @param {string[]} providers - Array of provider IDs to open
+ * @param {number} currentTabIndex - The index of the current active tab
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function openLLMTabs(sessionId, chatPageTabId, providers, currentTabIndex) {
+  try {
+    if (!sessionId) {
+      return { success: false, error: 'Session ID is required' };
+    }
+
+    if (!sessionToLLMTabs.has(sessionId)) {
+      sessionToLLMTabs.set(sessionId, new Map());
+    }
+
+    // Track tab ID to session ID mapping for cleanup
+    if (chatPageTabId !== null && typeof chatPageTabId === 'number') {
+      tabIdToSessionId.set(chatPageTabId, sessionId);
+    }
+
+    const llmTabsMap = sessionToLLMTabs.get(sessionId);
+    if (!llmTabsMap) {
+      return { success: false, error: 'Failed to create LLM tabs map' };
+    }
+
+    const insertIndex = currentTabIndex + 1;
+
+    // Open tabs for each provider
+    for (let i = 0; i < providers.length; i++) {
+      const providerId = providers[i];
+      const meta = LLM_PROVIDER_META[providerId];
+      if (!meta) continue;
+
+      // Check if we already have a tab for this provider
+      if (llmTabsMap.has(providerId)) {
+        continue;
+      }
+
+      // Create new tab positioned right next to current tab
+      const newTab = await chrome.tabs.create({
+        url: meta.url,
+        active: false,
+        index: insertIndex + i,
+      });
+
+      if (newTab.id) {
+        llmTabsMap.set(providerId, newTab.id);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[background] Failed to open LLM tabs:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Close LLM tabs associated with a chat session
+ * @param {string} sessionId - The session ID for this chat session
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function closeLLMTabs(sessionId) {
+  try {
+    if (!sessionId) {
+      return { success: false, error: 'Session ID is required' };
+    }
+
+    const llmTabs = sessionToLLMTabs.get(sessionId);
+    if (llmTabs) {
+      for (const llmTabId of llmTabs.values()) {
+        await chrome.tabs.remove(llmTabId).catch(() => {
+          // Tab might already be closed
+        });
+      }
+      sessionToLLMTabs.delete(sessionId);
+
+      // Clean up tab ID mapping
+      for (const [tabId, sid] of tabIdToSessionId.entries()) {
+        if (sid === sessionId) {
+          tabIdToSessionId.delete(tabId);
+        }
+      }
+    }
+
+    // Clean up sent content flag
+    sessionsWithSentContent.delete(sessionId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[background] Failed to close LLM tabs:', error);
+    return { success: true }; // Return success even on error to not block
+  }
+}
+
+/**
+ * Switch an LLM provider by updating the tab URL
+ * @param {string} sessionId - The session ID for this chat session
+ * @param {string} oldProviderId - The provider to replace
+ * @param {string} newProviderId - The new provider to load
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function switchLLMProvider(sessionId, oldProviderId, newProviderId) {
+  try {
+    if (!sessionId) {
+      return { success: false, error: 'Session ID is required' };
+    }
+
+    const llmTabs = sessionToLLMTabs.get(sessionId);
+    if (!llmTabs) {
+      return { success: false, error: 'No LLM tabs found for this chat session' };
+    }
+
+    const oldTabId = llmTabs.get(oldProviderId);
+    if (!oldTabId) {
+      return { success: false, error: 'Old provider tab not found' };
+    }
+
+    const newMeta = LLM_PROVIDER_META[newProviderId];
+    if (!newMeta) {
+      return { success: false, error: 'Invalid new provider' };
+    }
+
+    // Update the tab to load the new provider URL
+    await chrome.tabs.update(oldTabId, { url: newMeta.url });
+
+    // Update the mapping
+    llmTabs.delete(oldProviderId);
+    llmTabs.set(newProviderId, oldTabId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[background] Failed to switch LLM provider:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Reuse LLM tabs to send content and prompt
+ * @param {string} sessionId - The session ID for this chat session
+ * @param {string[]} selectedLLMProviders - Array of provider IDs to send to
+ * @param {Array<{tabId: number, title: string, url: string, content: string}>} contents - Content to send
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
+  try {
+    if (!sessionId) {
+      return { success: false, error: 'Session ID is required' };
+    }
+
+    const llmTabs = sessionToLLMTabs.get(sessionId);
+    if (!llmTabs) {
+      return { success: false, error: 'No LLM tabs found for this chat session' };
+    }
+
+    let firstTabId = null;
+
+    // Inject content into each provider's tab
+    for (const providerId of selectedLLMProviders) {
+      const tabId = llmTabs.get(providerId);
+      if (!tabId) continue;
+
+      const meta = LLM_PROVIDER_META[providerId];
+      if (!meta) continue;
+
+      // Check if tab still exists
+      try {
+        await chrome.tabs.get(tabId);
+      } catch (error) {
+        // Tab was closed, skip it
+        llmTabs.delete(providerId);
+        continue;
+      }
+
+      // Wait for tab to be ready and inject
+      const ok = await injectLLMPageInjector(tabId);
+      if (ok) {
+        if (!firstTabId) {
+          firstTabId = tabId;
+        }
+
+        // Small delay to ensure script is settled
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        console.log('[background] Sending data to LLM tab', tabId);
+        await chrome.tabs.sendMessage(tabId, {
+          type: 'inject-llm-data',
+          tabs: contents,
+          promptContent: selectedPromptContent,
+          files: selectedLocalFiles,
+          sendButtonSelector: meta.sendButtonSelector || null,
+        });
+      }
+    }
+
+    // Activate the first tab
+    if (firstTabId) {
+      await chrome.tabs.update(firstTabId, { active: true });
+    }
+
+    // Mark this session as having sent content (should not auto-close)
+    sessionsWithSentContent.add(sessionId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('[background] Failed to reuse LLM tabs:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 /**
@@ -1525,6 +1825,108 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === OPEN_LLM_TABS_MESSAGE) {
+    void (async () => {
+      try {
+        const sessionId =
+          typeof message.sessionId === 'string' ? message.sessionId : '';
+        const chatPageTabId =
+          typeof message.chatPageTabId === 'number'
+            ? message.chatPageTabId
+            : null;
+        const providers = Array.isArray(message.providers)
+          ? message.providers
+          : [];
+        const currentTabIndex =
+          typeof message.currentTabIndex === 'number'
+            ? message.currentTabIndex
+            : 0;
+
+        if (!sessionId) {
+          sendResponse({
+            success: false,
+            error: 'Invalid session ID',
+          });
+          return;
+        }
+
+        const result = await openLLMTabs(
+          sessionId,
+          chatPageTabId,
+          providers,
+          currentTabIndex,
+        );
+        sendResponse(result);
+      } catch (error) {
+        console.error('[background] Error opening LLM tabs:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === CLOSE_LLM_TABS_MESSAGE) {
+    void (async () => {
+      try {
+        const sessionId =
+          typeof message.sessionId === 'string' ? message.sessionId : '';
+
+        if (!sessionId) {
+          sendResponse({ success: false, error: 'Invalid session ID' });
+          return;
+        }
+
+        const result = await closeLLMTabs(sessionId);
+        sendResponse(result);
+      } catch (error) {
+        console.error('[background] Error closing LLM tabs:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === SWITCH_LLM_PROVIDER_MESSAGE) {
+    void (async () => {
+      try {
+        const sessionId =
+          typeof message.sessionId === 'string' ? message.sessionId : '';
+        const oldProviderId =
+          typeof message.oldProviderId === 'string'
+            ? message.oldProviderId
+            : '';
+        const newProviderId =
+          typeof message.newProviderId === 'string'
+            ? message.newProviderId
+            : '';
+
+        if (!sessionId) {
+          sendResponse({ success: false, error: 'Invalid session ID' });
+          return;
+        }
+
+        if (!oldProviderId || !newProviderId) {
+          sendResponse({
+            success: false,
+            error: 'Invalid provider IDs',
+          });
+          return;
+        }
+
+        const result = await switchLLMProvider(
+          sessionId,
+          oldProviderId,
+          newProviderId,
+        );
+        sendResponse(result);
+      } catch (error) {
+        console.error('[background] Error switching LLM provider:', error);
+        sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
   if (message.type === COLLECT_AND_SEND_TO_LLM_MESSAGE) {
     void (async () => {
       try {
@@ -1537,6 +1939,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           typeof message.promptContent === 'string'
             ? message.promptContent
             : '';
+        const sessionId =
+          typeof message.sessionId === 'string' ? message.sessionId : '';
+        const useReuseTabs = message.useReuseTabs === true;
 
         if (tabIds.length === 0) {
           // Get highlighted tabs or active tab
@@ -1608,10 +2013,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
 
-        // Open/reuse LLM tabs and inject content
-        await openOrReuseLLMTabs(currentTab, llmProviders, collectedContents);
-
-        sendResponse({ success: true });
+        // Use reuseLLMTabs if requested and session ID is provided
+        if (useReuseTabs && sessionId) {
+          const result = await reuseLLMTabs(
+            sessionId,
+            llmProviders,
+            collectedContents,
+          );
+          sendResponse(result);
+        } else {
+          // Fallback to old behavior for backward compatibility
+          await openOrReuseLLMTabs(
+            currentTab,
+            llmProviders,
+            collectedContents,
+          );
+          sendResponse({ success: true });
+        }
       } catch (error) {
         console.error('[background] Error in collect-and-send-to-llm:', error);
         sendResponse({ success: false, error: error.message });
