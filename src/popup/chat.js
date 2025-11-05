@@ -1,5 +1,7 @@
 /* global chrome */
 
+const port = chrome.runtime.connect({ name: 'chat-popup' });
+
 import '../options/theme.js';
 import { loadLLMPrompts } from '../options/llmPrompts.js';
 import { icons } from '../shared/icons.js';
@@ -511,6 +513,11 @@ function toggleProvider(providerId) {
   selectedProviders.clear();
   selectedProviders.add(providerId);
 
+  void chrome.runtime.sendMessage({
+    type: 'llm-provider-page-switch',
+    llmProvider: providerId,
+  });
+
   updateSelectedProvidersDisplay();
   void saveSelectedProviders();
 
@@ -545,6 +552,11 @@ function toggleProviderFromButton(providerId) {
   // Single selection: clear previous selection and set new one
   selectedProviders.clear();
   selectedProviders.add(providerId);
+
+  void chrome.runtime.sendMessage({
+    type: 'llm-provider-page-switch',
+    llmProvider: providerId,
+  });
 
   updateSelectedProvidersDisplay();
   void saveSelectedProviders();
@@ -906,6 +918,14 @@ async function initChatPage() {
   await loadSelectedProviders();
   updateSelectedProvidersDisplay();
   await updateTabsInfoDisplay();
+
+  if (selectedProviders.size > 0) {
+    const [firstProvider] = selectedProviders;
+    void chrome.runtime.sendMessage({
+      type: 'llm-provider-page-open',
+      llmProvider: firstProvider,
+    });
+  }
 
   // Set SVG icons for buttons
   const editPromptsButton = document.getElementById('editPromptsButton');

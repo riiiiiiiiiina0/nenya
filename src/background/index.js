@@ -64,6 +64,26 @@ const GET_AUTO_RELOAD_STATUS_MESSAGE = 'autoReload:getStatus';
 const AUTO_RELOAD_RE_EVALUATE_MESSAGE = 'autoReload:reEvaluate';
 const COLLECT_PAGE_CONTENT_MESSAGE = 'collect-page-content-as-markdown';
 const COLLECT_AND_SEND_TO_LLM_MESSAGE = 'collect-and-send-to-llm';
+const LLM_PROVIDER_PAGE_OPEN_MESSAGE = 'llm-provider-page-open';
+const LLM_PROVIDER_PAGE_SWITCH_MESSAGE = 'llm-provider-page-switch';
+
+let preloadedLlmTabId = null;
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'chat-popup') {
+    port.onDisconnect.addListener(() => {
+      if (preloadedLlmTabId !== null) {
+        chrome.tabs.remove(preloadedLlmTabId, () => {
+          // Ignore errors, the tab might have been closed by the user
+          if (chrome.runtime.lastError) {
+            // console.warn('Error closing preloaded LLM tab:', chrome.runtime.lastError.message);
+          }
+          preloadedLlmTabId = null;
+        });
+      }
+    });
+  }
+});
 
 // ============================================================================
 // KEYBOARD SHORTCUTS (COMMANDS)
@@ -1124,6 +1144,41 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
   const providersToOpen = [...selectedLLMProviders];
   let firstTabToActivateId = null;
 
+  // Use the preloaded tab if it exists for the first provider
+  if (preloadedLlmTabId !== null && providersToOpen.length > 0) {
+    const providerId = providersToOpen[0];
+    const meta = LLM_PROVIDER_META[providerId];
+    try {
+      const tab = await chrome.tabs.get(preloadedLlmTabId);
+      // It's our tab, let's use it.
+      console.log('[background] Using preloaded tab for', providerId);
+
+      // Update its URL just in case it's not the right one (e.g. user switched provider)
+      await chrome.tabs.update(preloadedLlmTabId, { url: meta.url });
+
+      const ok = await injectLLMPageInjector(preloadedLlmTabId);
+      if (ok) {
+        llmTabIds.push(preloadedLlmTabId);
+        if (!firstTabToActivateId) {
+          firstTabToActivateId = preloadedLlmTabId;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await chrome.tabs.sendMessage(preloadedLlmTabId, {
+          type: 'inject-llm-data',
+          tabs: contents,
+          promptContent: selectedPromptContent,
+          files: selectedLocalFiles,
+          sendButtonSelector: meta.sendButtonSelector || null,
+        });
+        providersToOpen.shift(); // remove the provider we just handled
+      }
+    } catch (e) {
+      console.warn('[background] Preloaded tab not found, will create a new one.');
+    } finally {
+      preloadedLlmTabId = null; // Consume the preloaded tab
+    }
+  }
+
   // Check if current tab can be reused
   if (currentTab && currentTab.url && isLLMPage(currentTab.url)) {
     for (const providerId of selectedLLMProviders) {
@@ -1215,6 +1270,8 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
   if (firstTabToActivateId) {
     await chrome.tabs.update(firstTabToActivateId, { active: true });
   }
+
+  preloadedLlmTabId = null;
 }
 
 // ============================================================================
@@ -1227,6 +1284,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (handleOptionsBackupMessage(message, sendResponse)) {
+    return true;
+  }
+
+  if (message.type === LLM_PROVIDER_PAGE_OPEN_MESSAGE) {
+    void (async () => {
+      const llmProvider = message.llmProvider;
+      const meta = LLM_PROVIDER_META[llmProvider];
+      if (meta) {
+        if (preloadedLlmTabId !== null) {
+          try {
+            await chrome.tabs.update(preloadedLlmTabId, { url: meta.url });
+          } catch (e) {
+            // Tab might have been closed
+            const tab = await chrome.tabs.create({ url: meta.url, active: false });
+            preloadedLlmTabId = tab.id;
+          }
+        } else {
+            const tab = await chrome.tabs.create({ url: meta.url, active: false });
+            preloadedLlmTabId = tab.id;
+        }
+      }
+    })();
+    return true; // No need to send a response
+  }
+
+  if (message.type === LLM_PROVIDER_PAGE_SWITCH_MESSAGE) {
+    void (async () => {
+        const llmProvider = message.llmProvider;
+        const meta = LLM_PROVIDER_META[llmProvider];
+        if (meta && preloadedLlmTabId !== null) {
+            try {
+                await chrome.tabs.update(preloadedLlmTabId, { url: meta.url });
+            } catch (e) {
+                // Tab was likely closed, let's open a new one
+                const tab = await chrome.tabs.create({ url: meta.url, active: false });
+                preloadedLlmTabId = tab.id;
+            }
+        } else if (meta) {
+            // No preloaded tab, create one
+            const tab = await chrome.tabs.create({ url: meta.url, active: false });
+            preloadedLlmTabId = tab.id;
+        }
+    })();
     return true;
   }
 
