@@ -647,20 +647,30 @@ async function handleSetCustomTitle() {
     }
 
     // Get current title as default
-    const currentTitle = typeof currentTab.title === 'string' ? currentTab.title : '';
+    const currentTitle =
+      typeof currentTab.title === 'string' ? currentTab.title : '';
 
     // Get Prompts object (loaded via script tag)
     // @ts-ignore - Prompts is loaded globally via script tag
-    const Prompts = typeof window !== 'undefined' && window.Prompts ? window.Prompts : null;
+    const Prompts =
+      typeof window !== 'undefined' && window.Prompts ? window.Prompts : null;
     if (!Prompts) {
       if (statusMessage) {
-        concludeStatus('Prompt library not loaded.', 'error', 3000, statusMessage);
+        concludeStatus(
+          'Prompt library not loaded.',
+          'error',
+          3000,
+          statusMessage,
+        );
       }
       return;
     }
 
     // Prompt user for custom title
-    const customTitle = await Prompts.prompt('Enter custom title for this tab:', currentTitle);
+    const customTitle = await Prompts.prompt(
+      'Enter custom title for this tab:',
+      currentTitle,
+    );
     if (customTitle === null) {
       // User cancelled
       return;
@@ -702,7 +712,10 @@ async function handleSetCustomTitle() {
         args: [trimmedTitle],
       });
     } catch (updateError) {
-      console.warn('[popup] Failed to update tab title immediately:', updateError);
+      console.warn(
+        '[popup] Failed to update tab title immediately:',
+        updateError,
+      );
       // Continue anyway - content script will handle it via storage listener
     }
 
@@ -775,23 +788,35 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
         resolve(0);
         return;
       }
-      
+
       // Get full folder details with children using getSubTree
       chrome.bookmarks.getSubTree(folder.id, (subTree) => {
         if (!subTree || subTree.length === 0) {
           resolve(0);
           return;
         }
-        
+
         const folderNode = subTree[0];
         if (!folderNode.children || folderNode.children.length === 0) {
           resolve(0);
           return;
         }
-        
+
         // Count only direct children that are bookmarks (have URLs)
-        const bookmarkCount = folderNode.children.filter((child) => child.url).length;
-        resolve(bookmarkCount);
+        // Deduplicate by URL to ensure accurate count
+        const seenUrls = new Set();
+        const uniqueBookmarks = folderNode.children.filter((child) => {
+          if (!child.url) {
+            return false;
+          }
+          if (seenUrls.has(child.url)) {
+            return false;
+          }
+          seenUrls.add(child.url);
+          return true;
+        });
+
+        resolve(uniqueBookmarks.length);
       });
     });
   }
@@ -804,10 +829,9 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
     resultsElement.innerHTML = '';
     results.forEach((bookmark, index) => {
       const resultItem = document.createElement('div');
-      resultItem.className =
-        'p-2 hover:bg-base-300 cursor-pointer rounded-md';
+      resultItem.className = 'p-2 hover:bg-base-300 cursor-pointer rounded-md';
       resultItem.dataset.index = String(index);
-      
+
       if (bookmark.url) {
         // Bookmark item
         resultItem.textContent = '↗️ ' + (bookmark.title || bookmark.url);
@@ -818,22 +842,24 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
       } else {
         // Bookmark folder
         // Set initial text, then update with count
-        resultItem.textContent = '📂 ' + (bookmark.title || 'Untitled') + ' (0)';
+        resultItem.textContent =
+          '📂 ' + (bookmark.title || 'Untitled') + ' (0)';
         // Count direct children bookmarks and update text
         void countDirectChildrenBookmarks(bookmark).then((count) => {
-          resultItem.textContent = '📂 ' + (bookmark.title || 'Untitled') + ` (${count})`;
+          resultItem.textContent =
+            '📂 ' + (bookmark.title || 'Untitled') + ` (${count})`;
         });
         resultItem.addEventListener('click', () => {
           void openFolderBookmarks(bookmark);
         });
       }
-      
+
       resultsElement.appendChild(resultItem);
     });
     // Reset highlight when results are re-rendered
     highlightedIndex = -1;
   }
-  
+
   /**
    * Opens all direct children bookmarks of a folder in separate tabs.
    * @param {chrome.bookmarks.BookmarkTreeNode} folder
@@ -845,30 +871,45 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
         resolve();
         return;
       }
-      
+
       // Get full folder details with children
       chrome.bookmarks.getSubTree(folder.id, (subTree) => {
         if (!subTree || subTree.length === 0) {
           resolve();
           return;
         }
-        
+
         const folderNode = subTree[0];
         if (!folderNode.children || folderNode.children.length === 0) {
           resolve();
           return;
         }
-        
+
         // Filter to only direct children that are bookmarks (have URLs)
-        const bookmarkChildren = folderNode.children.filter((child) => child.url);
-        
+        const bookmarkChildren = folderNode.children.filter(
+          (child) => child.url,
+        );
+
+        // Deduplicate by URL to prevent opening the same bookmark multiple times
+        const seenUrls = new Set();
+        const uniqueBookmarks = bookmarkChildren.filter((bookmark) => {
+          if (!bookmark.url) {
+            return false;
+          }
+          if (seenUrls.has(bookmark.url)) {
+            return false;
+          }
+          seenUrls.add(bookmark.url);
+          return true;
+        });
+
         // Open each bookmark in a separate tab
-        bookmarkChildren.forEach((bookmark) => {
+        uniqueBookmarks.forEach((bookmark) => {
           if (bookmark.url) {
             chrome.tabs.create({ url: bookmark.url });
           }
         });
-        
+
         window.close();
         resolve();
       });
@@ -883,13 +924,22 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
    */
   function performSearch(query) {
     chrome.bookmarks.search(query, (results) => {
-      // Include both bookmarks (with URLs) and folders (without URLs)
-      // chrome.bookmarks.search already returns both, so we can use results directly
-      const allResults = results;
+      // Deduplicate results by ID to prevent duplicates
+      const seenIds = new Set();
+      const uniqueResults = results.filter((item) => {
+        if (!item.id) {
+          return false;
+        }
+        if (seenIds.has(item.id)) {
+          return false;
+        }
+        seenIds.add(item.id);
+        return true;
+      });
 
       // Sort to prioritize title matches over URL matches
       const lowerQuery = query.toLowerCase();
-      allResults.sort((a, b) => {
+      uniqueResults.sort((a, b) => {
         const aTitleMatch =
           a.title?.toLowerCase().includes(lowerQuery) ?? false;
         const bTitleMatch =
@@ -918,7 +968,7 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
       });
 
       // Limit to top 10 results
-      const topResults = allResults.slice(0, 10);
+      const topResults = uniqueResults.slice(0, 10);
       currentResults = topResults;
       renderSearchResults(topResults);
     });
