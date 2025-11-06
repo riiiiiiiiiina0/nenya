@@ -52,4 +52,4 @@ You are advised to review this Privacy Policy periodically for any changes. Chan
 
 If you have any questions about this Privacy Policy, You can contact us:
 
-- By visiting this page on our website: [Contact Us](#)
+- By creating an issue on our GitHub page: [https://github.com/riiiiiiiiiina0/nenya/issues](https://github.com/riiiiiiiiiina0/nenya/issues)
