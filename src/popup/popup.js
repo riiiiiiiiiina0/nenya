@@ -927,8 +927,10 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
       // Deduplicate results by title and URL
       const seen = new Set();
       const uniqueResults = results.filter((item) => {
-        // Create a unique key based on title and URL
-        const key = `${item.title?.trim()}|${item.url?.trim()}`;
+        // Create a unique key based on title and URL, case-insensitive
+        const key = `${item.title?.trim().toLowerCase()}|${item.url
+          ?.trim()
+          .toLowerCase()}`;
         if (seen.has(key)) {
           return false; // Already seen, filter out
         }
