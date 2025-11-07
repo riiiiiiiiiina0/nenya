@@ -822,6 +822,30 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
   }
 
   /**
+   * Escapes HTML special characters to prevent XSS.
+   * @param {string} text
+   * @returns {string}
+   */
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /**
+   * Truncates a URL to a maximum length, adding ellipsis if needed.
+   * @param {string} url
+   * @param {number} maxLength
+   * @returns {string}
+   */
+  function truncateUrl(url, maxLength = 60) {
+    if (url.length <= maxLength) {
+      return url;
+    }
+    return url.substring(0, maxLength - 3) + '...';
+  }
+
+  /**
    * Renders the bookmark search results.
    * @param {chrome.bookmarks.BookmarkTreeNode[]} results
    */
@@ -833,22 +857,44 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
       resultItem.dataset.index = String(index);
 
       if (bookmark.url) {
-        // Bookmark item
-        resultItem.textContent = '↗️ ' + (bookmark.title || bookmark.url);
+        // Bookmark item - show title and URL on separate lines
+        const titleText = bookmark.title || bookmark.url;
+        const truncatedUrl = truncateUrl(bookmark.url);
+
+        resultItem.innerHTML = `
+          <div class="flex items-center gap-1">
+            <span>↗️</span>
+            <span class="flex-1 truncate">${escapeHtml(titleText)}</span>
+          </div>
+          <div class="text-[10px] text-base-content/60 truncate mt-1 ml-4">
+            ${escapeHtml(truncatedUrl)}
+          </div>
+        `;
+
         resultItem.addEventListener('click', () => {
           chrome.tabs.create({ url: bookmark.url });
           window.close();
         });
       } else {
         // Bookmark folder
-        // Set initial text, then update with count
-        resultItem.textContent =
-          '📂 ' + (bookmark.title || 'Untitled') + ' (0)';
+        const folderTitle = bookmark.title || 'Untitled';
+
+        resultItem.innerHTML = `
+          <div class="flex items-center gap-1">
+            <span>📂</span>
+            <span>${escapeHtml(folderTitle)}</span>
+            <span class="count-display">(0)</span>
+          </div>
+        `;
+
         // Count direct children bookmarks and update text
         void countDirectChildrenBookmarks(bookmark).then((count) => {
-          resultItem.textContent =
-            '📂 ' + (bookmark.title || 'Untitled') + ` (${count})`;
+          const countSpan = resultItem.querySelector('.count-display');
+          if (countSpan) {
+            countSpan.textContent = `(${count})`;
+          }
         });
+
         resultItem.addEventListener('click', () => {
           void openFolderBookmarks(bookmark);
         });
@@ -924,16 +970,22 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
    */
   function performSearch(query) {
     chrome.bookmarks.search(query, (results) => {
-      // Deduplicate results by ID to prevent duplicates
-      const seenIds = new Set();
+      // Deduplicate results by title and URL (case insensitive) to prevent duplicates
+      // Keep only the first occurrence of items with the same title and URL
+      const seenKeys = new Set();
       const uniqueResults = results.filter((item) => {
         if (!item.id) {
           return false;
         }
-        if (seenIds.has(item.id)) {
+        // Create a key from title and URL (case insensitive)
+        const title = (item.title || '').toLowerCase();
+        const url = (item.url || '').toLowerCase();
+        const key = `${title}|${url}`;
+
+        if (seenKeys.has(key)) {
           return false;
         }
-        seenIds.add(item.id);
+        seenKeys.add(key);
         return true;
       });
 
