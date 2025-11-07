@@ -363,7 +363,7 @@ function renderProjectRow(project) {
   const addButton = createTooltip(
     'Add highlighted tabs to project',
     'left',
-    createButton(icons['arrow-up-tray'], (event) => {
+    createButton(icons.plus, (event) => {
       void handleAddTabsToProject(
         id,
         title,
