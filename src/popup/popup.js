@@ -924,16 +924,15 @@ function initializeBookmarksSearch(inputElement, resultsElement) {
    */
   function performSearch(query) {
     chrome.bookmarks.search(query, (results) => {
-      // Deduplicate results by ID to prevent duplicates
-      const seenIds = new Set();
+      // Deduplicate results by title and URL
+      const seen = new Set();
       const uniqueResults = results.filter((item) => {
-        if (!item.id) {
-          return false;
+        // Create a unique key based on title and URL
+        const key = `${item.title?.trim()}|${item.url?.trim()}`;
+        if (seen.has(key)) {
+          return false; // Already seen, filter out
         }
-        if (seenIds.has(item.id)) {
-          return false;
-        }
-        seenIds.add(item.id);
+        seen.add(key);
         return true;
       });
 
