@@ -773,9 +773,60 @@ async function initHighlightText() {
   }
 }
 
+/**
+ * Check for prefilled URL from popup and set it in the pattern input.
+ * Also navigates to the highlight text section if needed.
+ * @returns {Promise<void>}
+ */
+async function checkForPrefillUrl() {
+  try {
+    const stored = await chrome.storage.local.get('highlightTextPrefillUrl');
+    const prefillUrl = stored?.highlightTextPrefillUrl;
+    if (!prefillUrl || typeof prefillUrl !== 'string') {
+      return;
+    }
+
+    // Clear the prefilled URL from storage
+    await chrome.storage.local.remove('highlightTextPrefillUrl');
+
+    // Wait for navigation manager to be available
+    let attempts = 0;
+    while (!window.navigationManager && attempts < 50) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      attempts++;
+    }
+
+    // Navigate to highlight text section
+    if (window.location.hash !== '#highlight-text-heading') {
+      window.location.hash = '#highlight-text-heading';
+    }
+
+    // Show the highlight text section if navigation manager is available
+    if (window.navigationManager) {
+      window.navigationManager.showSection('highlight-text-heading');
+    }
+
+    // Wait a bit more for the section to be visible
+    await new Promise((resolve) => {
+      setTimeout(resolve, 150);
+    });
+
+    // Set the pattern input value
+    if (patternInput) {
+      patternInput.value = prefillUrl;
+      patternInput.focus();
+    }
+  } catch (error) {
+    console.warn('[highlightText] Failed to check for prefill URL:', error);
+  }
+}
+
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
   void initHighlightText();
+  void checkForPrefillUrl();
 });
 
 // Export for use in other modules

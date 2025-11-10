@@ -23,6 +23,10 @@
     #importCustomCodeButton,
     #customFilterButton,
     #splitPageButton,
+    #autoReloadButton,
+    #brightModeButton,
+    #highlightTextButton,
+    #customCodeButton,
     #openOptionsButton,
     #saveProjectButton,
     #setCustomTitleButton {
@@ -35,6 +39,10 @@
     [data-theme="dark"] #importCustomCodeButton,
     [data-theme="dark"] #customFilterButton,
     [data-theme="dark"] #splitPageButton,
+    [data-theme="dark"] #autoReloadButton,
+    [data-theme="dark"] #brightModeButton,
+    [data-theme="dark"] #highlightTextButton,
+    [data-theme="dark"] #customCodeButton,
     [data-theme="dark"] #openOptionsButton,
     [data-theme="dark"] #saveProjectButton,
     [data-theme="dark"] #setCustomTitleButton {
@@ -60,40 +68,8 @@
         Nenya
       </a>
     </div>
-    <div class="flex-none gap-2">
-      <div class="tooltip tooltip-left" data-tip="Chat with llm">
-        <button id="getMarkdownButton" class="btn btn-square btn-sm btn-ghost" type="button">
-          💬
-        </button>
-      </div>
-      <div class="tooltip tooltip-left" data-tip="Pull from raindrop">
-        <button id="pullButton" class="btn btn-square btn-sm btn-ghost" type="button">
-          🌧️
-        </button>
-      </div>
-      <div class="tooltip tooltip-left" data-tip="Save to unsorted">
-        <button id="saveUnsortedButton" class="btn btn-square btn-sm btn-ghost" type="button">
-          📤
-        </button>
-      </div>
-      <div class="tooltip tooltip-left" data-tip="Import custom JS/CSS rule">
-        <button id="importCustomCodeButton" class="btn btn-square btn-sm btn-ghost" type="button">
-          💾
-        </button>
-      </div>
-      <div class="tooltip tooltip-left" data-tip="Hide elements in page">
-        <button id="customFilterButton" class="btn btn-square btn-sm btn-ghost" type="button">
-          ⚡️
-        </button>
-      </div>
-      <div class="tooltip tooltip-left" data-tip="Split page">
-        <button id="splitPageButton" class="btn btn-square btn-sm btn-ghost" type="button">
-          🈹
-        </button>
-      </div>
-      <button id="openOptionsButton" class="btn btn-square btn-sm btn-ghost" type="button">
-        ⚙️
-      </button>
+    <div class="flex-none gap-2" id="shortcutsContainer">
+      <!-- Buttons will be dynamically inserted here -->
     </div>
   </div>
   <div class="w-full bg-base-100 text-center pt-2">

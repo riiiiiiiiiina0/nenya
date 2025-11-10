@@ -11,29 +11,117 @@ import {
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
 
-const getMarkdownButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('getMarkdownButton')
+/**
+ * Available shortcut buttons configuration
+ * @type {Record<string, { emoji: string, tooltip: string, handler: () => void | Promise<void> }>}
+ */
+const SHORTCUT_CONFIG = {
+  getMarkdown: {
+    emoji: '💬',
+    tooltip: 'Chat with llm',
+    handler: () => handleGetMarkdown(),
+  },
+  pull: {
+    emoji: '🌧️',
+    tooltip: 'Pull from raindrop',
+    handler: () => {},
+  },
+  saveUnsorted: {
+    emoji: '📤',
+    tooltip: 'Save to unsorted',
+    handler: () => {},
+  },
+  importCustomCode: {
+    emoji: '💾',
+    tooltip: 'Import custom JS/CSS rule',
+    handler: () => {
+      if (importCustomCodeFileInput) {
+        importCustomCodeFileInput.click();
+      }
+    },
+  },
+  customFilter: {
+    emoji: '⚡️',
+    tooltip: 'Hide elements in page',
+    handler: () => void handleCustomFilter(),
+  },
+  splitPage: {
+    emoji: '🈹',
+    tooltip: 'Split page',
+    handler: () => void handleSplitPage(),
+  },
+  autoReload: {
+    emoji: '🔁',
+    tooltip: 'Auto reload this page',
+    handler: () => void handleAutoReload(),
+  },
+  brightMode: {
+    emoji: '🔆',
+    tooltip: 'Render this page in bright mode',
+    handler: () => void handleBrightMode(),
+  },
+  highlightText: {
+    emoji: '🟨',
+    tooltip: 'Highlight text in this page',
+    handler: () => void handleHighlightText(),
+  },
+  customCode: {
+    emoji: '📑',
+    tooltip: 'Inject js/css into this page',
+    handler: () => void handleCustomCode(),
+  },
+  openOptions: {
+    emoji: '⚙️',
+    tooltip: 'Open options',
+    handler: () => {
+      chrome.runtime.openOptionsPage(() => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          console.error('[popup] Unable to open options page.', error);
+          if (statusMessage) {
+            concludeStatus(
+              'Unable to open options page.',
+              'error',
+              3000,
+              statusMessage,
+            );
+          }
+        }
+      });
+    },
+  },
+};
+
+const STORAGE_KEY = 'pinnedShortcuts';
+
+/** @type {string[]} Default pinned shortcuts */
+const DEFAULT_PINNED_SHORTCUTS = [
+  'getMarkdown',      // Chat with llm
+  'pull',             // Pull from raindrop
+  'saveUnsorted',     // Save to unsorted
+  'customFilter',     // Hide elements in page
+  'splitPage',        // Split page
+];
+
+const shortcutsContainer = /** @type {HTMLDivElement | null} */ (
+  document.getElementById('shortcutsContainer')
 );
-const pullButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('pullButton')
-);
-const saveUnsortedButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('saveUnsortedButton')
-);
+
+// Keep references to buttons for backward compatibility
+let getMarkdownButton = null;
+let pullButton = null;
+let saveUnsortedButton = null;
+let openOptionsButton = null;
+let customFilterButton = null;
+let importCustomCodeButton = null;
+let splitPageButton = null;
+let autoReloadButton = null;
+let brightModeButton = null;
+let highlightTextButton = null;
+let customCodeButton = null;
+
 const saveProjectButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('saveProjectButton')
-);
-const openOptionsButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('openOptionsButton')
-);
-const customFilterButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('customFilterButton')
-);
-const importCustomCodeButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('importCustomCodeButton')
-);
-const splitPageButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('splitPageButton')
 );
 const setCustomTitleButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('setCustomTitleButton')
@@ -61,9 +149,158 @@ const mirrorSection = /** @type {HTMLElement | null} */ (
   document.querySelector('article[aria-labelledby="mirror-heading"]')
 );
 
-// Initialize mirror functionality
-if (pullButton && saveUnsortedButton && statusMessage) {
-  initializeMirror(pullButton, saveUnsortedButton, statusMessage);
+/**
+ * Load pinned shortcuts from storage and render buttons
+ * @returns {Promise<void>}
+ */
+async function loadAndRenderShortcuts() {
+  if (!shortcutsContainer) {
+    return;
+  }
+
+  try {
+    const stored = await chrome.storage.sync.get(STORAGE_KEY);
+    const pinnedIds = Array.isArray(stored?.[STORAGE_KEY]) ? stored[STORAGE_KEY] : [];
+
+    // If no shortcuts are pinned, use defaults
+    const shortcutsToRender = pinnedIds.length > 0 
+      ? pinnedIds 
+      : DEFAULT_PINNED_SHORTCUTS;
+
+    // Filter out openOptions - it's always shown separately at the end
+    const filteredShortcuts = shortcutsToRender.filter(id => id !== 'openOptions');
+
+    // Clear container
+    shortcutsContainer.innerHTML = '';
+
+    // Reset button references
+    getMarkdownButton = null;
+    pullButton = null;
+    saveUnsortedButton = null;
+    openOptionsButton = null;
+    customFilterButton = null;
+    importCustomCodeButton = null;
+    splitPageButton = null;
+    autoReloadButton = null;
+    brightModeButton = null;
+    highlightTextButton = null;
+    customCodeButton = null;
+
+    // Render buttons based on pinned shortcuts
+    filteredShortcuts.forEach((shortcutId) => {
+      const config = SHORTCUT_CONFIG[shortcutId];
+      if (!config) {
+        return;
+      }
+
+      const tooltipDiv = document.createElement('div');
+      tooltipDiv.className = 'tooltip tooltip-left';
+      tooltipDiv.setAttribute('data-tip', config.tooltip);
+
+      const button = document.createElement('button');
+      button.id = `${shortcutId}Button`;
+      button.className = 'btn btn-square btn-sm btn-ghost';
+      button.type = 'button';
+      button.textContent = config.emoji;
+      button.addEventListener('click', () => {
+        void config.handler();
+      });
+
+      tooltipDiv.appendChild(button);
+      shortcutsContainer.appendChild(tooltipDiv);
+
+      // Store button reference for backward compatibility
+      switch (shortcutId) {
+        case 'getMarkdown':
+          getMarkdownButton = button;
+          break;
+        case 'pull':
+          pullButton = button;
+          break;
+        case 'saveUnsorted':
+          saveUnsortedButton = button;
+          break;
+        case 'openOptions':
+          openOptionsButton = button;
+          break;
+        case 'customFilter':
+          customFilterButton = button;
+          break;
+        case 'importCustomCode':
+          importCustomCodeButton = button;
+          break;
+        case 'splitPage':
+          splitPageButton = button;
+          break;
+        case 'autoReload':
+          autoReloadButton = button;
+          break;
+        case 'brightMode':
+          brightModeButton = button;
+          break;
+        case 'highlightText':
+          highlightTextButton = button;
+          break;
+        case 'customCode':
+          customCodeButton = button;
+          break;
+      }
+    });
+
+    // Always render options button at the end
+    const optionsTooltipDiv = document.createElement('div');
+    optionsTooltipDiv.className = 'tooltip tooltip-left';
+    optionsTooltipDiv.setAttribute('data-tip', 'Open options');
+
+    const optionsButton = document.createElement('button');
+    optionsButton.id = 'openOptionsButton';
+    optionsButton.className = 'btn btn-square btn-sm btn-ghost';
+    optionsButton.type = 'button';
+    optionsButton.textContent = '⚙️';
+    optionsButton.addEventListener('click', () => {
+      chrome.runtime.openOptionsPage(() => {
+        const error = chrome.runtime.lastError;
+        if (error) {
+          console.error('[popup] Unable to open options page.', error);
+          if (statusMessage) {
+            concludeStatus(
+              'Unable to open options page.',
+              'error',
+              3000,
+              statusMessage,
+            );
+          }
+        }
+      });
+    });
+
+    optionsTooltipDiv.appendChild(optionsButton);
+    shortcutsContainer.appendChild(optionsTooltipDiv);
+    openOptionsButton = optionsButton;
+
+    // Initialize mirror functionality after buttons are rendered
+    if (pullButton && saveUnsortedButton && statusMessage) {
+      initializeMirror(pullButton, saveUnsortedButton, statusMessage);
+    }
+
+    // Setup import custom code file input handler
+    if (importCustomCodeButton && importCustomCodeFileInput) {
+      importCustomCodeFileInput.addEventListener('change', (event) => {
+        const target = /** @type {HTMLInputElement | null} */ (event.target);
+        if (!target) {
+          return;
+        }
+        const file = target.files?.[0];
+        if (file) {
+          void handleImportCustomCode(file);
+        }
+        // Reset the input so the same file can be selected again
+        target.value = '';
+      });
+    }
+  } catch (error) {
+    console.error('[popup] Failed to load pinned shortcuts:', error);
+  }
 }
 
 // Initialize projects functionality
@@ -80,78 +317,16 @@ if (!statusMessage) {
   console.error('[popup] Status element not found.');
 }
 
-if (getMarkdownButton) {
-  getMarkdownButton.addEventListener('click', () => {
-    void handleGetMarkdown();
-  });
-} else {
-  console.error('[popup] Get markdown button not found.');
-}
+// Initialize shortcuts on page load
+void loadAndRenderShortcuts();
 
-if (openOptionsButton) {
-  openOptionsButton.addEventListener('click', () => {
-    chrome.runtime.openOptionsPage(() => {
-      const error = chrome.runtime.lastError;
-      if (error) {
-        console.error('[popup] Unable to open options page.', error);
-        if (statusMessage) {
-          concludeStatus(
-            'Unable to open options page.',
-            'error',
-            3000,
-            statusMessage,
-          );
-        }
-      }
-    });
-  });
-} else {
-  console.error('[popup] Options button not found.');
-}
-
-if (customFilterButton) {
-  customFilterButton.addEventListener('click', () => {
-    void handleCustomFilter();
-  });
-} else {
-  console.error('[popup] Custom filter button not found.');
-}
-
-if (importCustomCodeButton && importCustomCodeFileInput) {
-  importCustomCodeButton.addEventListener('click', () => {
-    importCustomCodeFileInput.click();
-  });
-
-  importCustomCodeFileInput.addEventListener('change', (event) => {
-    const target = /** @type {HTMLInputElement | null} */ (event.target);
-    if (!target) {
-      return;
+// Listen for storage changes to update buttons dynamically
+if (chrome?.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'sync' && changes[STORAGE_KEY]) {
+      void loadAndRenderShortcuts();
     }
-    const file = target.files?.[0];
-    if (file) {
-      void handleImportCustomCode(file);
-    }
-    // Reset the input so the same file can be selected again
-    target.value = '';
   });
-} else {
-  console.error('[popup] Import custom code elements not found.');
-}
-
-if (splitPageButton) {
-  splitPageButton.addEventListener('click', () => {
-    void handleSplitPage();
-  });
-} else {
-  console.error('[popup] Split page button not found.');
-}
-
-if (setCustomTitleButton) {
-  setCustomTitleButton.addEventListener('click', () => {
-    void handleSetCustomTitle();
-  });
-} else {
-  console.error('[popup] Set custom title button not found.');
 }
 
 /**
@@ -584,6 +759,250 @@ async function handleSplitPage() {
     if (statusMessage) {
       concludeStatus(
         'Unable to trigger split/unsplit page.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * Handle opening auto reload options with current tab URL prefilled.
+ * @returns {Promise<void>}
+ */
+async function handleAutoReload() {
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    const currentTab = tabs[0];
+    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
+
+    if (!currentUrl) {
+      if (statusMessage) {
+        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Store the URL to prefill in options page
+    await chrome.storage.local.set({
+      autoReloadPrefillUrl: currentUrl,
+    });
+
+    // Open options page with auto reload section hash
+    chrome.runtime.openOptionsPage(() => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        console.error('[popup] Unable to open options page.', error);
+        if (statusMessage) {
+          concludeStatus(
+            'Unable to open options page.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
+      } else {
+        // Close the popup
+        window.close();
+      }
+    });
+  } catch (error) {
+    console.error('[popup] Error opening auto reload options:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to open auto reload options.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * Handle opening bright mode options with current tab URL prefilled in whitelist.
+ * @returns {Promise<void>}
+ */
+async function handleBrightMode() {
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    const currentTab = tabs[0];
+    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
+
+    if (!currentUrl) {
+      if (statusMessage) {
+        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Store the URL to prefill in options page
+    await chrome.storage.local.set({
+      brightModePrefillUrl: currentUrl,
+    });
+
+    // Open options page with bright mode section hash
+    chrome.runtime.openOptionsPage(() => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        console.error('[popup] Unable to open options page.', error);
+        if (statusMessage) {
+          concludeStatus(
+            'Unable to open options page.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
+      } else {
+        // Close the popup
+        window.close();
+      }
+    });
+  } catch (error) {
+    console.error('[popup] Error opening bright mode options:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to open bright mode options.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * Handle opening highlight text options with current tab URL prefilled.
+ * @returns {Promise<void>}
+ */
+async function handleHighlightText() {
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    const currentTab = tabs[0];
+    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
+
+    if (!currentUrl) {
+      if (statusMessage) {
+        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Store the URL to prefill in options page
+    await chrome.storage.local.set({
+      highlightTextPrefillUrl: currentUrl,
+    });
+
+    // Open options page with highlight text section hash
+    chrome.runtime.openOptionsPage(() => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        console.error('[popup] Unable to open options page.', error);
+        if (statusMessage) {
+          concludeStatus(
+            'Unable to open options page.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
+      } else {
+        // Close the popup
+        window.close();
+      }
+    });
+  } catch (error) {
+    console.error('[popup] Error opening highlight text options:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to open highlight text options.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * Handle opening custom JS/CSS options with current tab URL prefilled.
+ * @returns {Promise<void>}
+ */
+async function handleCustomCode() {
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    const currentTab = tabs[0];
+    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
+
+    if (!currentUrl) {
+      if (statusMessage) {
+        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Store the URL to prefill in options page
+    await chrome.storage.local.set({
+      customCodePrefillUrl: currentUrl,
+    });
+
+    // Open options page with custom code section hash
+    chrome.runtime.openOptionsPage(() => {
+      const error = chrome.runtime.lastError;
+      if (error) {
+        console.error('[popup] Unable to open options page.', error);
+        if (statusMessage) {
+          concludeStatus(
+            'Unable to open options page.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
+      } else {
+        // Close the popup
+        window.close();
+      }
+    });
+  } catch (error) {
+    console.error('[popup] Error opening custom code options:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to open custom code options.',
         'error',
         3000,
         statusMessage,

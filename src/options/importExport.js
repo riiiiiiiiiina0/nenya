@@ -198,6 +198,7 @@ const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
+const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
@@ -862,6 +863,35 @@ function normalizeUrlProcessRules(value) {
 }
 
 /**
+ * Normalize pinned shortcuts array.
+ * @param {unknown} value
+ * @returns {string[]}
+ */
+function normalizePinnedShortcuts(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  // Valid shortcut IDs (excluding openOptions which is always shown)
+  const validIds = [
+    'getMarkdown',
+    'pull',
+    'saveUnsorted',
+    'importCustomCode',
+    'customFilter',
+    'splitPage',
+    'autoReload',
+    'brightMode',
+    'highlightText',
+    'customCode',
+  ];
+
+  return value.filter(
+    (id) => typeof id === 'string' && validIds.includes(id),
+  ).slice(0, 6); // Limit to max 6 shortcuts
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -959,6 +989,7 @@ async function readCurrentOptions() {
     customCodeResp,
     llmPromptsResp,
     urlProcessRulesResp,
+    pinnedShortcutsResp,
   ] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
@@ -970,6 +1001,7 @@ async function readCurrentOptions() {
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
     loadLLMPrompts(),
     loadUrlProcessRules(),
+    chrome.storage.sync.get(PINNED_SHORTCUTS_KEY),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -1030,6 +1062,10 @@ async function readCurrentOptions() {
   
   const urlProcessRules = normalizeUrlProcessRules(urlProcessRulesResp);
 
+  const pinnedShortcuts = normalizePinnedShortcuts(
+    pinnedShortcutsResp?.[PINNED_SHORTCUTS_KEY],
+  );
+
   return {
     rootFolder,
     notifications,
@@ -1040,6 +1076,7 @@ async function readCurrentOptions() {
     customCodeRules,
     llmPrompts,
     urlProcessRules,
+    pinnedShortcuts,
   };
 }
 
@@ -1080,6 +1117,7 @@ async function handleExportClick() {
       customCodeRules,
       llmPrompts,
       urlProcessRules,
+      pinnedShortcuts,
     } = await readCurrentOptions();
     /** @type {ExportFile} */
     const payload = {
@@ -1095,6 +1133,7 @@ async function handleExportClick() {
         customCodeRules,
         llmPrompts,
         urlProcessRules,
+        pinnedShortcuts,
       },
     };
     const now = new Date();
@@ -1124,6 +1163,7 @@ async function handleExportClick() {
  * @param {CustomCodeRuleSettings[]} customCodeRules
  * @param {LLMPromptSettings[]} llmPrompts
  * @param {UrlProcessRuleSettings[]} urlProcessRules
+ * @param {string[]} pinnedShortcuts
  * @returns {Promise<void>}
  */
 async function applyImportedOptions(
@@ -1136,6 +1176,7 @@ async function applyImportedOptions(
   customCodeRules,
   llmPrompts,
   urlProcessRules,
+  pinnedShortcuts,
 ) {
   let parentFolderId = '';
   const desiredPath =
@@ -1195,6 +1236,8 @@ async function applyImportedOptions(
   
   const sanitizedUrlProcessRules = normalizeUrlProcessRules(urlProcessRules || []);
 
+  const sanitizedPinnedShortcuts = normalizePinnedShortcuts(pinnedShortcuts || []);
+
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
   let sanitizedBlacklist = [];
@@ -1231,6 +1274,7 @@ async function applyImportedOptions(
       [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
       [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
       [URL_PROCESS_RULES_KEY]: sanitizedUrlProcessRules,
+      [PINNED_SHORTCUTS_KEY]: sanitizedPinnedShortcuts,
     }),
     chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
@@ -1286,6 +1330,9 @@ async function handleFileChosen() {
     const urlProcessRules = /** @type {UrlProcessRuleSettings[]} */ (
       data.urlProcessRules || []
     );
+    const pinnedShortcuts = /** @type {string[]} */ (
+      data.pinnedShortcuts || []
+    );
 
     // Handle bright mode settings - support both old and new format
     let brightModeSettings = data.brightModeSettings;
@@ -1311,6 +1358,7 @@ async function handleFileChosen() {
       customCodeRules,
       llmPrompts,
       urlProcessRules,
+      pinnedShortcuts,
     );
     showToast('Options imported successfully.', 'success');
   } catch (error) {

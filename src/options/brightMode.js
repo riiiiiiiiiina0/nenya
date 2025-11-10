@@ -604,6 +604,59 @@ function init() {
     blacklistPatterns = patterns;
     renderBlacklist();
   });
+
+  // Check for prefilled URL from popup
+  void checkForPrefillUrl();
+}
+
+/**
+ * Check for prefilled URL from popup and set it in the whitelist pattern input.
+ * Also navigates to the bright mode section if needed.
+ * @returns {Promise<void>}
+ */
+async function checkForPrefillUrl() {
+  try {
+    const stored = await chrome.storage.local.get('brightModePrefillUrl');
+    const prefillUrl = stored?.brightModePrefillUrl;
+    if (!prefillUrl || typeof prefillUrl !== 'string') {
+      return;
+    }
+
+    // Clear the prefilled URL from storage
+    await chrome.storage.local.remove('brightModePrefillUrl');
+
+    // Wait for navigation manager to be available
+    let attempts = 0;
+    while (!window.navigationManager && attempts < 50) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      attempts++;
+    }
+
+    // Navigate to bright mode section
+    if (window.location.hash !== '#bright-mode-heading') {
+      window.location.hash = '#bright-mode-heading';
+    }
+
+    // Show the bright mode section if navigation manager is available
+    if (window.navigationManager) {
+      window.navigationManager.showSection('bright-mode-heading');
+    }
+
+    // Wait a bit more for the section to be visible
+    await new Promise((resolve) => {
+      setTimeout(resolve, 150);
+    });
+
+    // Set the whitelist pattern input value
+    if (whitelistPatternInput) {
+      whitelistPatternInput.value = prefillUrl;
+      whitelistPatternInput.focus();
+    }
+  } catch (error) {
+    console.warn('[options:brightMode] Failed to check for prefill URL:', error);
+  }
 }
 
 init();

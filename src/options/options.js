@@ -2,6 +2,7 @@ import './theme.js';
 import '../shared/iconUrl.js';
 import './bookmarks.js';
 import './backup.js';
+import './pinnedShortcuts.js';
 import './notifications.js';
 import './importExport.js';
 import './autoReload.js';

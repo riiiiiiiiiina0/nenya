@@ -205,6 +205,13 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} PinnedShortcutsBackupPayload
+ * @property {'pinned-shortcuts'} kind
+ * @property {string[]} shortcuts
+ * @property {BackupMetadata} metadata
+ */
+
+/**
  * @typedef {Object} BackupCategoryState
  * @property {number | undefined} lastBackupAt
  * @property {string | undefined} lastBackupTrigger
@@ -242,6 +249,7 @@ const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
+const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -291,6 +299,7 @@ const CATEGORY_IDS = [
   'custom-code-rules',
   'llm-prompts',
   'url-process-rules',
+  'pinned-shortcuts',
 ];
 
 /**
@@ -876,6 +885,37 @@ async function applyRootFolderSettings(settings) {
   suppressBackup('auth-provider-settings');
   await chrome.storage.sync.set({
     [ROOT_FOLDER_SETTINGS_KEY]: nextMap,
+  });
+}
+
+/**
+ * Apply pinned shortcuts to storage.
+ * @param {string[]} shortcuts
+ * @returns {Promise<void>}
+ */
+async function applyPinnedShortcuts(shortcuts) {
+  if (!Array.isArray(shortcuts)) {
+    return;
+  }
+  // Valid shortcut IDs (excluding openOptions which is always shown)
+  const validIds = [
+    'getMarkdown',
+    'pull',
+    'saveUnsorted',
+    'importCustomCode',
+    'customFilter',
+    'splitPage',
+    'autoReload',
+    'brightMode',
+    'highlightText',
+    'customCode',
+  ];
+  const sanitized = shortcuts.filter(
+    (id) => typeof id === 'string' && validIds.includes(id),
+  ).slice(0, 6);
+  suppressBackup('pinned-shortcuts');
+  await chrome.storage.sync.set({
+    [PINNED_SHORTCUTS_KEY]: sanitized,
   });
 }
 
@@ -1957,6 +1997,49 @@ async function buildUrlProcessRulesPayload(trigger) {
 }
 
 /**
+ * Collect pinned shortcuts from storage.
+ * @returns {Promise<string[]>}
+ */
+async function collectPinnedShortcuts() {
+  const result = await chrome.storage.sync.get(PINNED_SHORTCUTS_KEY);
+  const shortcuts = result?.[PINNED_SHORTCUTS_KEY];
+  if (!Array.isArray(shortcuts)) {
+    return [];
+  }
+  // Valid shortcut IDs (excluding openOptions which is always shown)
+  const validIds = [
+    'getMarkdown',
+    'pull',
+    'saveUnsorted',
+    'importCustomCode',
+    'customFilter',
+    'splitPage',
+    'autoReload',
+    'brightMode',
+    'highlightText',
+    'customCode',
+  ];
+  return shortcuts.filter(
+    (id) => typeof id === 'string' && validIds.includes(id),
+  ).slice(0, 6);
+}
+
+/**
+ * Build pinned shortcuts payload.
+ * @param {string} trigger
+ * @returns {Promise<PinnedShortcutsBackupPayload>}
+ */
+async function buildPinnedShortcutsPayload(trigger) {
+  const shortcuts = await collectPinnedShortcuts();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'pinned-shortcuts',
+    shortcuts,
+    metadata,
+  };
+}
+
+/**
  * Build LLM prompts payload.
  * @param {string} trigger
  * @returns {Promise<LLMPromptsBackupPayload>}
@@ -2853,6 +2936,97 @@ function parseLLMPromptsItem(item) {
 }
 
 /**
+ * Attempt to parse pinned shortcuts payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: PinnedShortcutsBackupPayload | null, lastModified: number }}
+ */
+function parsePinnedShortcutsItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      console.warn(
+        '[options-backup] parsePinnedShortcutsItem: parsed is not an object',
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    if (!Array.isArray(parsed?.shortcuts)) {
+      console.warn(
+        '[options-backup] parsePinnedShortcutsItem: parsed.shortcuts is not an array',
+        typeof parsed?.shortcuts,
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    // Valid shortcut IDs (excluding openOptions which is always shown)
+    const validIds = [
+      'getMarkdown',
+      'pull',
+      'saveUnsorted',
+      'importCustomCode',
+      'customFilter',
+      'splitPage',
+      'autoReload',
+      'brightMode',
+      'highlightText',
+      'customCode',
+    ];
+
+    const normalizedShortcuts = parsed.shortcuts.filter(
+      (id) => typeof id === 'string' && validIds.includes(id),
+    ).slice(0, 6);
+
+    const payload = /** @type {PinnedShortcutsBackupPayload} */ ({
+      kind: 'pinned-shortcuts',
+      shortcuts: normalizedShortcuts,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    console.error(
+      '[options-backup] parsePinnedShortcutsItem failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Configuration for each backup category.
  */
 const CATEGORY_CONFIG = {
@@ -2918,6 +3092,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildUrlProcessRulesPayload,
     parseItem: parseUrlProcessRulesItem,
     applyPayload: applyUrlProcessRules,
+  },
+  'pinned-shortcuts': {
+    title: 'pinned-shortcuts',
+    link: 'https://nenya.local/options/pinned-shortcuts',
+    buildPayload: buildPinnedShortcutsPayload,
+    parseItem: parsePinnedShortcutsItem,
+    applyPayload: applyPinnedShortcuts,
   },
 };
 
@@ -3302,6 +3483,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.prompts;
         } else if (payload.kind === 'url-process-rules') {
           payloadToApply = payload.rules;
+        } else if (payload.kind === 'pinned-shortcuts') {
+          payloadToApply = payload.shortcuts;
         } else {
           payloadToApply = payload.preferences;
         }
@@ -3415,6 +3598,9 @@ function handleStorageChanges(changes, areaName) {
     }
     if (URL_PROCESS_RULES_KEY in changes) {
       queueCategoryBackup('url-process-rules', 'storage');
+    }
+    if (PINNED_SHORTCUTS_KEY in changes) {
+      queueCategoryBackup('pinned-shortcuts', 'storage');
     }
   }
 

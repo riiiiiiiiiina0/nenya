@@ -64,6 +64,13 @@
           </a>
         </li>
         <li>
+          <a href="#pinned-shortcuts-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">📌</span>
+            <span class="text-sm">Pinned Shortcuts</span>
+          </a>
+        </li>
+        <li>
           <a href="#auto-reload-heading"
             class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔁</span>
@@ -241,6 +248,38 @@
             <button id="optionsImportButton" class="btn btn-outline" type="button">
               Import options
             </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pinned shortcuts section -->
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="pinned-shortcuts-heading"
+        data-section="pinned-shortcuts-heading" hidden>
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="pinned-shortcuts-heading" class="card-title text-3xl">📌 Pinned Shortcuts</h2>
+            <p class="text-base-content/70">Choose which buttons are shown in the popup page header and in what order. You can enable at most 6 shortcuts.</p>
+          </div>
+          <div class="space-y-6">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h3 class="text-lg font-semibold">Pinned shortcuts</h3>
+                  <p class="text-sm text-base-content/70">Drag or use arrows to reorder. Click ❌ to remove.</p>
+                </div>
+                <button id="pinnedShortcutsResetButton" class="btn btn-outline btn-sm" type="button">
+                  Reset to defaults
+                </button>
+              </div>
+              <div id="pinnedShortcutsList" class="space-y-2" role="list"></div>
+            </div>
+            <div class="space-y-3 border-t border-base-200 pt-6">
+              <div>
+                <h3 class="text-lg font-semibold">Available shortcuts</h3>
+                <p class="text-sm text-base-content/70">Click ➕ or click the item to add to pinned shortcuts.</p>
+              </div>
+              <div id="pinnedShortcutsAvailableList" class="space-y-2" role="list"></div>
+            </div>
           </div>
         </div>
       </section>

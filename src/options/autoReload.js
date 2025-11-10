@@ -539,6 +539,57 @@ function init() {
   }
 
   void loadRules();
+  void checkForPrefillUrl();
+}
+
+/**
+ * Check for prefilled URL from popup and set it in the pattern input.
+ * Also navigates to the auto-reload section if needed.
+ * @returns {Promise<void>}
+ */
+async function checkForPrefillUrl() {
+  try {
+    const stored = await chrome.storage.local.get('autoReloadPrefillUrl');
+    const prefillUrl = stored?.autoReloadPrefillUrl;
+    if (!prefillUrl || typeof prefillUrl !== 'string') {
+      return;
+    }
+
+    // Clear the prefilled URL from storage
+    await chrome.storage.local.remove('autoReloadPrefillUrl');
+
+    // Wait for navigation manager to be available
+    let attempts = 0;
+    while (!window.navigationManager && attempts < 50) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      attempts++;
+    }
+
+    // Navigate to auto-reload section
+    if (window.location.hash !== '#auto-reload-heading') {
+      window.location.hash = '#auto-reload-heading';
+    }
+
+    // Show the auto-reload section if navigation manager is available
+    if (window.navigationManager) {
+      window.navigationManager.showSection('auto-reload-heading');
+    }
+
+    // Wait a bit more for the section to be visible
+    await new Promise((resolve) => {
+      setTimeout(resolve, 150);
+    });
+
+    // Set the pattern input value
+    if (patternInput) {
+      patternInput.value = prefillUrl;
+      patternInput.focus();
+    }
+  } catch (error) {
+    console.warn('[options:autoReload] Failed to check for prefill URL:', error);
+  }
 }
 
 init();

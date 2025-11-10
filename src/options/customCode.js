@@ -921,6 +921,57 @@ function init() {
   }
 
   void loadRules();
+  void checkForPrefillUrl();
+}
+
+/**
+ * Check for prefilled URL from popup and set it in the pattern input.
+ * Also navigates to the custom code section if needed.
+ * @returns {Promise<void>}
+ */
+async function checkForPrefillUrl() {
+  try {
+    const stored = await chrome.storage.local.get('customCodePrefillUrl');
+    const prefillUrl = stored?.customCodePrefillUrl;
+    if (!prefillUrl || typeof prefillUrl !== 'string') {
+      return;
+    }
+
+    // Clear the prefilled URL from storage
+    await chrome.storage.local.remove('customCodePrefillUrl');
+
+    // Wait for navigation manager to be available
+    let attempts = 0;
+    while (!window.navigationManager && attempts < 50) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50);
+      });
+      attempts++;
+    }
+
+    // Navigate to custom code section
+    if (window.location.hash !== '#custom-code-heading') {
+      window.location.hash = '#custom-code-heading';
+    }
+
+    // Show the custom code section if navigation manager is available
+    if (window.navigationManager) {
+      window.navigationManager.showSection('custom-code-heading');
+    }
+
+    // Wait a bit more for the section to be visible and editors to be initialized
+    await new Promise((resolve) => {
+      setTimeout(resolve, 300);
+    });
+
+    // Set the pattern input value
+    if (patternInput) {
+      patternInput.value = prefillUrl;
+      patternInput.focus();
+    }
+  } catch (error) {
+    console.warn('[options:customCode] Failed to check for prefill URL:', error);
+  }
 }
 
 init();
