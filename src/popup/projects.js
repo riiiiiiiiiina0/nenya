@@ -8,7 +8,6 @@ import {
   normalizeUrlForSave,
   collectSavableTabs,
 } from './shared.js';
-import { icons } from '../shared/icons.js';
 import {
   convertSplitUrlForRestore,
   convertSplitUrlForSave,
@@ -1266,7 +1265,6 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
     });
 
     // Always show the icon, enable/disable based on tab count
-    saveProjectButton.innerHTML = icons['rectangle-group'];
     if (validCount > 0) {
       saveProjectButton.disabled = false;
     } else {
@@ -1274,7 +1272,6 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
     }
   } catch (error) {
     console.error('[popup] Unable to update save project button label.', error);
-    saveProjectButton.innerHTML = icons['rectangle-group'];
     saveProjectButton.disabled = true;
   }
 }

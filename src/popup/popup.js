@@ -10,7 +10,6 @@ import {
 } from './mirror.js';
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
-import { icons } from '../shared/icons.js';
 
 const getMarkdownButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('getMarkdownButton')
