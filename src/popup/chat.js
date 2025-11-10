@@ -2,7 +2,6 @@
 
 import '../options/theme.js';
 import { loadLLMPrompts } from '../options/llmPrompts.js';
-import { icons } from '../shared/icons.js';
 
 const promptTextarea = /** @type {HTMLTextAreaElement | null} */ (
   document.getElementById('promptTextarea')
@@ -81,6 +80,19 @@ const LLM_PROVIDERS = [
 ];
 
 const STORAGE_KEY_SELECTED_PROVIDERS = 'chatLLMSelectedProviders';
+
+/**
+ * Get icon image HTML for LLM provider
+ * @param {LLMProvider} provider
+ * @returns {string}
+ */
+function getProviderIconHtml(provider) {
+  // Extract domain from URL (e.g., "https://chat.openai.com" -> "chat.openai.com")
+  const urlObj = new URL(provider.url);
+  const domain = urlObj.hostname;
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+  return `<img src="${faviconUrl}" alt="${provider.name}" class="provider-icon" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;" />`;
+}
 
 /** @type {Set<string>} */
 let selectedProviders = new Set();
@@ -181,7 +193,7 @@ function updateSelectedProvidersDisplay() {
     const badge = document.createElement('div');
     badge.className = 'llm-provider-badge';
     badge.style.cursor = 'pointer';
-    badge.innerHTML = `<span>${provider.name}</span>`;
+    badge.innerHTML = `${getProviderIconHtml(provider)}<span>${provider.name}</span>`;
 
     // Add click handler to show dropdown when clicking on badge
     badge.addEventListener('click', (event) => {
@@ -396,17 +408,18 @@ function showProvidersDropdown(referenceElement, searchQuery = '') {
       item.setAttribute('data-provider-id', provider.id);
       item.setAttribute('data-index', String(index));
 
+      const providerIconHtml = getProviderIconHtml(provider);
       if (selectedProviders.has(provider.id)) {
         item.classList.add('selected');
-        item.innerHTML = `<span>● ${provider.name}</span>`;
+        item.innerHTML = `● ${providerIconHtml} ${provider.name}`;
       } else {
-        item.innerHTML = `<span>○ ${provider.name}</span>`;
+        item.innerHTML = `○ ${providerIconHtml} ${provider.name}`;
       }
 
       // Disable ChatGPT if prompt requires search
       if (currentPromptRequiresSearch && provider.id === 'chatgpt') {
         item.classList.add('opacity-50', 'cursor-not-allowed');
-        item.innerHTML = `<span>○ ${provider.name} (disabled - prompt requires search)</span>`;
+        item.innerHTML = `○ ${providerIconHtml} ${provider.name} (disabled - prompt requires search)`;
         return;
       }
 
@@ -1088,20 +1101,20 @@ async function initChatPage() {
     await openLLMTabs();
   }
 
-  // Set SVG icons for buttons
+  // Set emoji icons for buttons
   const editPromptsButton = document.getElementById('editPromptsButton');
   if (editPromptsButton) {
-    editPromptsButton.innerHTML = icons['pencil-square'];
+    editPromptsButton.innerHTML = '✏️';
   }
 
   const downloadBtn = document.getElementById('downloadButton');
   if (downloadBtn) {
-    downloadBtn.innerHTML = icons['arrow-down-tray'];
+    downloadBtn.innerHTML = '📥';
   }
 
   const sendBtn = document.getElementById('sendButton');
   if (sendBtn) {
-    sendBtn.innerHTML = icons['chat-bubble-oval-left-ellipsis'];
+    sendBtn.innerHTML = '💬';
   }
 
   // Focus the textarea
