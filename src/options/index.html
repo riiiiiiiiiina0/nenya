@@ -668,7 +668,17 @@
               </div>
               <div class="flex flex-col gap-2">
                 <dt class="text-base-content/70 uppercase tracking-wide text-xs">CSS Selectors</dt>
-                <dd id="blockElementsRuleSelectorsList" class="space-y-2"></dd>
+                <dd class="space-y-2">
+                  <div class="flex gap-2">
+                    <input id="blockElementsRuleAddSelectorInput"
+                      class="input input-sm input-bordered flex-1 font-mono text-xs" type="text"
+                      autocomplete="off" placeholder="Enter CSS selector (e.g., .ad-banner, #sidebar)">
+                    <button id="blockElementsRuleAddSelectorButton" class="btn btn-sm btn-success" type="button">
+                      ➕ Add
+                    </button>
+                  </div>
+                  <div id="blockElementsRuleSelectorsList" class="space-y-2"></div>
+                </dd>
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="flex flex-col gap-1">

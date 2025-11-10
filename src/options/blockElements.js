@@ -41,6 +41,12 @@ const detailSelectorCount = /** @type {HTMLElement | null} */ (
 const detailSelectorsList = /** @type {HTMLElement | null} */ (
   document.getElementById('blockElementsRuleSelectorsList')
 );
+const detailAddSelectorInput = /** @type {HTMLInputElement | null} */ (
+  document.getElementById('blockElementsRuleAddSelectorInput')
+);
+const detailAddSelectorButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('blockElementsRuleAddSelectorButton')
+);
 const deleteButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('blockElementsRuleDeleteButton')
 );
@@ -284,6 +290,84 @@ async function savePatternEdit() {
 }
 
 /**
+ * Validate a CSS selector by attempting to use it with querySelector.
+ * Note: This is a basic check - querySelector doesn't throw for invalid selectors,
+ * but it will return null. We check if the selector can be parsed.
+ * @param {string} selector
+ * @returns {boolean}
+ */
+function isValidSelector(selector) {
+  if (!selector || !selector.trim()) {
+    return false;
+  }
+  try {
+    // Try to use the selector with querySelector
+    // If it's invalid, querySelector may throw in some browsers
+    const temp = document.createElement('div');
+    temp.innerHTML = '<p></p>';
+    // This will throw if selector is malformed in some cases
+    // eslint-disable-next-line no-unused-expressions
+    temp.querySelector(selector);
+    // Even if result is null, the selector might be valid (just no match)
+    // So we consider it valid if no exception was thrown
+    return true;
+  } catch (error) {
+    // If querySelector throws, the selector is definitely invalid
+    return false;
+  }
+}
+
+/**
+ * Add a new selector to the current rule.
+ * @returns {Promise<void>}
+ */
+async function addSelector() {
+  if (!detailAddSelectorInput) {
+    return;
+  }
+
+  const newSelector = detailAddSelectorInput.value.trim();
+  if (!newSelector) {
+    alert('Please enter a CSS selector.');
+    return;
+  }
+
+  // Basic validation - check if it's a non-empty string
+  // Note: Full CSS selector validation is complex, so we do a basic check
+  if (!isValidSelector(newSelector)) {
+    // eslint-disable-next-line no-alert
+    const confirmed = window.confirm(
+      'The selector might be invalid. Do you want to add it anyway?',
+    );
+    if (!confirmed) {
+      return;
+    }
+  }
+
+  const rule = findRule(selectedRuleId);
+  if (!rule) {
+    return;
+  }
+
+  // Check if selector already exists
+  if (rule.selectors.includes(newSelector)) {
+    alert('This selector already exists in the rule.');
+    detailAddSelectorInput.focus();
+    detailAddSelectorInput.select();
+    return;
+  }
+
+  rule.selectors.push(newSelector);
+  rule.updatedAt = new Date().toISOString();
+
+  // Clear input
+  detailAddSelectorInput.value = '';
+
+  await saveRules(rules);
+  render();
+}
+
+/**
  * Delete a selector from the current rule.
  * @param {string} selector
  * @returns {void}
@@ -335,7 +419,16 @@ function renderDetails() {
     detailCreated.textContent = '';
     detailUpdated.textContent = '';
     detailSelectorCount.textContent = '';
-    detailSelectorsList.textContent = '';
+    if (detailSelectorsList) {
+      detailSelectorsList.textContent = '';
+    }
+    if (detailAddSelectorInput) {
+      detailAddSelectorInput.value = '';
+      detailAddSelectorInput.disabled = true;
+    }
+    if (detailAddSelectorButton) {
+      detailAddSelectorButton.disabled = true;
+    }
     return;
   }
 
@@ -349,28 +442,39 @@ function renderDetails() {
     ' selector' +
     (rule.selectors.length === 1 ? '' : 's');
 
+  // Clear and reset add selector input
+  if (detailAddSelectorInput) {
+    detailAddSelectorInput.value = '';
+    detailAddSelectorInput.disabled = false;
+  }
+  if (detailAddSelectorButton) {
+    detailAddSelectorButton.disabled = false;
+  }
+
   // Render selectors list
-  detailSelectorsList.textContent = '';
-  rule.selectors.forEach((selector) => {
-    const item = document.createElement('div');
-    item.className = 'flex items-center gap-2 p-2 rounded-lg bg-base-200';
+  if (detailSelectorsList) {
+    detailSelectorsList.textContent = '';
+    rule.selectors.forEach((selector) => {
+      const item = document.createElement('div');
+      item.className = 'flex items-center gap-2 p-2 rounded-lg bg-base-200';
 
-    const text = document.createElement('code');
-    text.className = 'flex-1 text-xs break-all';
-    text.textContent = selector;
-    item.appendChild(text);
+      const text = document.createElement('code');
+      text.className = 'flex-1 text-xs break-all';
+      text.textContent = selector;
+      item.appendChild(text);
 
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'btn btn-xs btn-error btn-outline';
-    deleteBtn.textContent = '✕';
-    deleteBtn.addEventListener('click', () => {
-      void deleteSelector(selector);
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'btn btn-xs btn-error btn-outline';
+      deleteBtn.textContent = '✕';
+      deleteBtn.addEventListener('click', () => {
+        void deleteSelector(selector);
+      });
+      item.appendChild(deleteBtn);
+
+      detailSelectorsList.appendChild(item);
     });
-    item.appendChild(deleteBtn);
-
-    detailSelectorsList.appendChild(item);
-  });
+  }
 }
 
 /**
@@ -503,6 +607,21 @@ function init() {
   if (detailPatternCancelButton) {
     detailPatternCancelButton.addEventListener('click', cancelPatternEdit);
   }
+  if (detailAddSelectorButton) {
+    detailAddSelectorButton.addEventListener('click', () => {
+      void addSelector();
+    });
+  }
+
+  if (detailAddSelectorInput) {
+    detailAddSelectorInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void addSelector();
+      }
+    });
+  }
+
   if (deleteButton) {
     deleteButton.addEventListener('click', () => {
       const rule = findRule(selectedRuleId);
