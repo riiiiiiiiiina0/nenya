@@ -9,7 +9,10 @@ import {
   collectSavableTabs,
 } from './shared.js';
 import { icons } from '../shared/icons.js';
-import { convertSplitUrlForRestore, convertSplitUrlForSave } from '../shared/splitUrl.js';
+import {
+  convertSplitUrlForRestore,
+  convertSplitUrlForSave,
+} from '../shared/splitUrl.js';
 
 /**
  * @typedef {Object} SavedProject
@@ -51,7 +54,7 @@ import { convertSplitUrlForRestore, convertSplitUrlForSave } from '../shared/spl
 function createButton(label, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'btn btn-ghost btn-sm btn-square flex-shrink-0';
+  button.className = 'btn btn-ghost btn-xs btn-square flex-shrink-0';
   // Check if label contains SVG (starts with <svg)
   if (label.trim().startsWith('<svg')) {
     button.innerHTML = label;
@@ -107,9 +110,7 @@ function setProjectsContainerDisabled(projectsContainer, disabled) {
  * @param {HTMLElement} projectsContainer
  * @returns {Promise<void>}
  */
-export async function refreshProjectList(
-  projectsContainer,
-) {
+export async function refreshProjectList(projectsContainer) {
   if (!projectsContainer) {
     return;
   }
@@ -251,7 +252,7 @@ function renderProjectRow(project) {
   const openButton = document.createElement('button');
   openButton.type = 'button';
   openButton.className =
-    'btn btn-ghost btn-sm flex-1 justify-between gap-3 min-w-0 py-2';
+    'btn btn-ghost btn-sm flex-1 justify-between gap-3 min-w-0 py-2 mr-1';
 
   // Create icon element with hover affordance for Raindrop link
   const iconElement = document.createElement('div');
@@ -363,7 +364,7 @@ function renderProjectRow(project) {
   const addButton = createTooltip(
     'Add highlighted tabs to project',
     'left',
-    createButton(icons.plus, (event) => {
+    createButton('🔼', (event) => {
       void handleAddTabsToProject(
         id,
         title,
@@ -371,13 +372,17 @@ function renderProjectRow(project) {
       );
     }),
   );
-  addButton.classList.add('project-action-button', 'hidden', 'group-hover:flex');
+  addButton.classList.add(
+    'project-action-button',
+    'hidden',
+    'group-hover:flex',
+  );
 
   // replace project items with highlighted/active tabs button
   const replaceButton = createTooltip(
     'Replace with highlighted tabs',
     'left',
-    createButton(icons['arrow-up-on-square'], (event) => {
+    createButton('⏏️', (event) => {
       void handleReplaceProjectItems(
         id,
         title,
@@ -385,13 +390,17 @@ function renderProjectRow(project) {
       );
     }),
   );
-  replaceButton.classList.add('project-action-button', 'hidden', 'group-hover:flex');
+  replaceButton.classList.add(
+    'project-action-button',
+    'hidden',
+    'group-hover:flex',
+  );
 
   // replace project items with all tabs in current window button
   const replaceWindowButton = createTooltip(
     'Replace with current window tabs',
     'left',
-    createButton(icons['arrow-up-on-square-stack'], (event) => {
+    createButton('⏫️', (event) => {
       void handleReplaceProjectItemsWithWindowTabs(
         id,
         title,
@@ -399,7 +408,11 @@ function renderProjectRow(project) {
       );
     }),
   );
-  replaceWindowButton.classList.add('project-action-button', 'hidden', 'group-hover:flex');
+  replaceWindowButton.classList.add(
+    'project-action-button',
+    'hidden',
+    'group-hover:flex',
+  );
 
   container.append(
     openButton,
@@ -1232,7 +1245,11 @@ export async function updateSaveProjectButtonLabel(saveProjectButton) {
 
     // Combine highlighted and active tabs, deduplicating by tab id
     /** @type {chrome.tabs.Tab[]} */
-    const tabs = [...new Map([...highlighted, ...active].map(tab => [tab.id, tab])).values()];
+    const tabs = [
+      ...new Map(
+        [...highlighted, ...active].map((tab) => [tab.id, tab]),
+      ).values(),
+    ];
     console.log(tabs);
 
     let validCount = 0;

@@ -40,34 +40,6 @@ const setCustomTitleButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('setCustomTitleButton')
 );
 
-// Set icon SVGs for header buttons
-if (getMarkdownButton) {
-  getMarkdownButton.innerHTML = icons['chat-bubble-oval-left-ellipsis'];
-}
-if (pullButton) {
-  pullButton.innerHTML = icons['cloud-arrow-down'];
-}
-if (saveUnsortedButton) {
-  saveUnsortedButton.innerHTML = icons['document-arrow-up'];
-}
-if (importCustomCodeButton) {
-  importCustomCodeButton.innerHTML = icons['code-bracket-square'];
-}
-if (customFilterButton) {
-  customFilterButton.innerHTML = icons.bolt;
-}
-if (openOptionsButton) {
-  openOptionsButton.innerHTML = icons['cog'];
-}
-if (splitPageButton) {
-  splitPageButton.innerHTML = icons.bars;
-}
-if (saveProjectButton) {
-  saveProjectButton.innerHTML = icons['rectangle-group'];
-}
-if (setCustomTitleButton) {
-  setCustomTitleButton.innerHTML = icons['pencil-square'];
-}
 const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('importCustomCodeFileInput')
 );
