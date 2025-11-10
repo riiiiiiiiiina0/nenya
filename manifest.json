@@ -110,6 +110,9 @@
     "bookmarks-save-project": {
       "description": "💧 Save as project"
     },
+    "copy-title": {
+      "description": "📋 Copy Title"
+    },
     "copy-title-url": {
       "description": "📋 Copy Title\\nURL"
     },

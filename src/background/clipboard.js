@@ -9,6 +9,7 @@ import { processUrl } from '../shared/urlProcessor.js';
  * Context menu IDs for clipboard operations.
  */
 export const CLIPBOARD_CONTEXT_MENU_IDS = {
+  COPY_TITLE: 'nenya-copy-title',
   COPY_TITLE_URL: 'nenya-copy-title-url',
   COPY_TITLE_DASH_URL: 'nenya-copy-title-dash-url',
   COPY_MARKDOWN_LINK: 'nenya-copy-markdown-link',
@@ -114,6 +115,15 @@ async function getTabData(tabs) {
 }
 
 /**
+ * Format tab data as titles only.
+ * @param {Array<{title: string, url: string}>} tabData - Array of tab data.
+ * @returns {string} - Formatted text.
+ */
+function formatTitle(tabData) {
+  return tabData.map((tab) => tab.title).join('\n');
+}
+
+/**
  * Format tab data as "Title\nURL".
  * @param {Array<{title: string, url: string}>} tabData - Array of tab data.
  * @returns {string} - Formatted text.
@@ -156,6 +166,9 @@ async function handleMultiTabCopy(formatType, tabs) {
   let formattedText = '';
 
   switch (formatType) {
+    case 'title':
+      formattedText = formatTitle(tabData);
+      break;
     case 'title-url':
       formattedText = formatTitleUrl(tabData);
       break;
@@ -411,6 +424,31 @@ export function setupClipboardContextMenus() {
     return;
   }
 
+  // Title only format
+  chrome.contextMenus.create(
+    {
+      id: CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE,
+      title: 'Copy Title',
+      contexts: [
+        'page',
+        'frame',
+        'selection',
+        'editable',
+        'link',
+        'image',
+        'all',
+      ],
+    },
+    (error) => {
+      if (error) {
+        console.warn(
+          '[clipboard] Failed to create Title context menu:',
+          error,
+        );
+      }
+    },
+  );
+
   // Title\nURL format
   chrome.contextMenus.create(
     {
@@ -551,6 +589,9 @@ export async function handleClipboardContextMenuClick(info, tab) {
       // Handle text formats
       let formatType = '';
       switch (menuItemId) {
+        case CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE:
+          formatType = 'title';
+          break;
         case CLIPBOARD_CONTEXT_MENU_IDS.COPY_TITLE_URL:
           formatType = 'title-url';
           break;
@@ -654,6 +695,9 @@ export async function handleClipboardCommand(command) {
       // Handle text formats
       let formatType = '';
       switch (command) {
+        case 'copy-title':
+          formatType = 'title';
+          break;
         case 'copy-title-url':
           formatType = 'title-url';
           break;

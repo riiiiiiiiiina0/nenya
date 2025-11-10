@@ -295,6 +295,7 @@ chrome.commands.onCommand.addListener((command) => {
 
   // Handle clipboard commands
   if (
+    command === 'copy-title' ||
     command === 'copy-title-url' ||
     command === 'copy-title-dash-url' ||
     command === 'copy-markdown-link' ||
