@@ -13,6 +13,7 @@ import {
 import { loadRules as loadHighlightTextRules } from './highlightText.js';
 import { loadLLMPrompts } from './llmPrompts.js';
 import { loadRules as loadUrlProcessRules } from './urlProcessRules.js';
+import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
 
 /**
  * @typedef {Object} RootFolderSettings
@@ -167,6 +168,15 @@ import { loadRules as loadUrlProcessRules } from './urlProcessRules.js';
  */
 
 /**
+ * @typedef {Object} AutoGoogleLoginRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string} [email]
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
@@ -178,6 +188,8 @@ import { loadRules as loadUrlProcessRules } from './urlProcessRules.js';
  * @property {CustomCodeRuleSettings[]} customCodeRules
  * @property {LLMPromptSettings[]} llmPrompts
  * @property {UrlProcessRuleSettings[]} urlProcessRules
+ * @property {AutoGoogleLoginRuleSettings[]} autoGoogleLoginRules
+ * @property {string[]} pinnedShortcuts
  */
 
 /**
@@ -198,6 +210,7 @@ const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
+const AUTO_GOOGLE_LOGIN_RULES_KEY = 'autoGoogleLoginRules';
 const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -629,8 +642,7 @@ function normalizeCustomCodeRules(value) {
       /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
         entry
       );
-    const pattern =
-      typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
     if (!pattern) {
       return;
     }
@@ -693,19 +705,20 @@ function normalizeLLMPrompts(value) {
       /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, requireSearch?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
         entry
       );
-    
+
     const name = typeof raw.name === 'string' ? raw.name.trim() : '';
     if (!name) {
       return;
     }
-    
+
     const prompt = typeof raw.prompt === 'string' ? raw.prompt : '';
     if (!prompt) {
       return;
     }
-    
-    const requireSearch = typeof raw.requireSearch === 'boolean' ? raw.requireSearch : false;
-    
+
+    const requireSearch =
+      typeof raw.requireSearch === 'boolean' ? raw.requireSearch : false;
+
     const id =
       typeof raw.id === 'string' && raw.id.trim()
         ? raw.id.trim()
@@ -863,6 +876,88 @@ function normalizeUrlProcessRules(value) {
 }
 
 /**
+ * Normalize auto Google login rules from storage or input.
+ * @param {unknown} value
+ * @returns {AutoGoogleLoginRuleSettings[]}
+ */
+function normalizeAutoGoogleLoginRules(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {AutoGoogleLoginRuleSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw =
+      /** @type {{ id?: unknown, pattern?: unknown, email?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        entry
+      );
+    const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    if (!pattern) {
+      return;
+    }
+
+    if (!isValidUrlPattern(pattern)) {
+      console.warn(
+        '[importExport:autoGoogleLogin] Ignoring invalid pattern:',
+        pattern,
+      );
+      return;
+    }
+
+    const email = typeof raw.email === 'string' ? raw.email.trim() : undefined;
+    if (email) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        console.warn(
+          '[importExport:autoGoogleLogin] Ignoring invalid email:',
+          email,
+        );
+        return;
+      }
+    }
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {AutoGoogleLoginRuleSettings} */
+    const normalized = {
+      id,
+      pattern,
+    };
+
+    if (email) {
+      normalized.email = email;
+    }
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => {
+    const patternCompare = a.pattern.localeCompare(b.pattern);
+    if (patternCompare !== 0) {
+      return patternCompare;
+    }
+    const emailA = a.email || '';
+    const emailB = b.email || '';
+    return emailA.localeCompare(emailB);
+  });
+}
+
+/**
  * Normalize pinned shortcuts array.
  * @param {unknown} value
  * @returns {string[]}
@@ -886,9 +981,9 @@ function normalizePinnedShortcuts(value) {
     'customCode',
   ];
 
-  return value.filter(
-    (id) => typeof id === 'string' && validIds.includes(id),
-  ).slice(0, 6); // Limit to max 6 shortcuts
+  return value
+    .filter((id) => typeof id === 'string' && validIds.includes(id))
+    .slice(0, 6); // Limit to max 6 shortcuts
 }
 
 /**
@@ -975,7 +1070,7 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[], urlProcessRules: UrlProcessRuleSettings[] }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[], urlProcessRules: UrlProcessRuleSettings[], autoGoogleLoginRules: AutoGoogleLoginRuleSettings[], pinnedShortcuts: string[] }>}
  */
 async function readCurrentOptions() {
   const [
@@ -989,6 +1084,7 @@ async function readCurrentOptions() {
     customCodeResp,
     llmPromptsResp,
     urlProcessRulesResp,
+    autoGoogleLoginRulesResp,
     pinnedShortcutsResp,
   ] = await Promise.all([
     chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
@@ -1001,6 +1097,7 @@ async function readCurrentOptions() {
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
     loadLLMPrompts(),
     loadUrlProcessRules(),
+    loadAutoGoogleLoginRules(),
     chrome.storage.sync.get(PINNED_SHORTCUTS_KEY),
   ]);
 
@@ -1057,10 +1154,14 @@ async function readCurrentOptions() {
   const customCodeRules = normalizeCustomCodeRules(
     customCodeResp?.[CUSTOM_CODE_RULES_KEY],
   );
-  
+
   const llmPrompts = normalizeLLMPrompts(llmPromptsResp);
-  
+
   const urlProcessRules = normalizeUrlProcessRules(urlProcessRulesResp);
+
+  const autoGoogleLoginRules = normalizeAutoGoogleLoginRules(
+    autoGoogleLoginRulesResp,
+  );
 
   const pinnedShortcuts = normalizePinnedShortcuts(
     pinnedShortcutsResp?.[PINNED_SHORTCUTS_KEY],
@@ -1076,6 +1177,7 @@ async function readCurrentOptions() {
     customCodeRules,
     llmPrompts,
     urlProcessRules,
+    autoGoogleLoginRules,
     pinnedShortcuts,
   };
 }
@@ -1117,6 +1219,7 @@ async function handleExportClick() {
       customCodeRules,
       llmPrompts,
       urlProcessRules,
+      autoGoogleLoginRules,
       pinnedShortcuts,
     } = await readCurrentOptions();
     /** @type {ExportFile} */
@@ -1133,6 +1236,7 @@ async function handleExportClick() {
         customCodeRules,
         llmPrompts,
         urlProcessRules,
+        autoGoogleLoginRules,
         pinnedShortcuts,
       },
     };
@@ -1163,6 +1267,7 @@ async function handleExportClick() {
  * @param {CustomCodeRuleSettings[]} customCodeRules
  * @param {LLMPromptSettings[]} llmPrompts
  * @param {UrlProcessRuleSettings[]} urlProcessRules
+ * @param {AutoGoogleLoginRuleSettings[]} autoGoogleLoginRules
  * @param {string[]} pinnedShortcuts
  * @returns {Promise<void>}
  */
@@ -1176,6 +1281,7 @@ async function applyImportedOptions(
   customCodeRules,
   llmPrompts,
   urlProcessRules,
+  autoGoogleLoginRules,
   pinnedShortcuts,
 ) {
   let parentFolderId = '';
@@ -1231,12 +1337,20 @@ async function applyImportedOptions(
   const sanitizedCustomCodeRules = normalizeCustomCodeRules(
     customCodeRules || [],
   );
-  
-  const sanitizedLLMPrompts = normalizeLLMPrompts(llmPrompts || []);
-  
-  const sanitizedUrlProcessRules = normalizeUrlProcessRules(urlProcessRules || []);
 
-  const sanitizedPinnedShortcuts = normalizePinnedShortcuts(pinnedShortcuts || []);
+  const sanitizedLLMPrompts = normalizeLLMPrompts(llmPrompts || []);
+
+  const sanitizedUrlProcessRules = normalizeUrlProcessRules(
+    urlProcessRules || [],
+  );
+
+  const sanitizedAutoGoogleLoginRules = normalizeAutoGoogleLoginRules(
+    autoGoogleLoginRules || [],
+  );
+
+  const sanitizedPinnedShortcuts = normalizePinnedShortcuts(
+    pinnedShortcuts || [],
+  );
 
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
@@ -1274,6 +1388,7 @@ async function applyImportedOptions(
       [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
       [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
       [URL_PROCESS_RULES_KEY]: sanitizedUrlProcessRules,
+      [AUTO_GOOGLE_LOGIN_RULES_KEY]: sanitizedAutoGoogleLoginRules,
       [PINNED_SHORTCUTS_KEY]: sanitizedPinnedShortcuts,
     }),
     chrome.storage.local.set({
@@ -1330,6 +1445,9 @@ async function handleFileChosen() {
     const urlProcessRules = /** @type {UrlProcessRuleSettings[]} */ (
       data.urlProcessRules || []
     );
+    const autoGoogleLoginRules = /** @type {AutoGoogleLoginRuleSettings[]} */ (
+      data.autoGoogleLoginRules || []
+    );
     const pinnedShortcuts = /** @type {string[]} */ (
       data.pinnedShortcuts || []
     );
@@ -1358,6 +1476,7 @@ async function handleFileChosen() {
       customCodeRules,
       llmPrompts,
       urlProcessRules,
+      autoGoogleLoginRules,
       pinnedShortcuts,
     );
     showToast('Options imported successfully.', 'success');
