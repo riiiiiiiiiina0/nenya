@@ -910,9 +910,9 @@ async function applyPinnedShortcuts(shortcuts) {
     'highlightText',
     'customCode',
   ];
-  const sanitized = shortcuts.filter(
-    (id) => typeof id === 'string' && validIds.includes(id),
-  ).slice(0, 6);
+  const sanitized = shortcuts
+    .filter((id) => typeof id === 'string' && validIds.includes(id))
+    .slice(0, 6);
   suppressBackup('pinned-shortcuts');
   await chrome.storage.sync.set({
     [PINNED_SHORTCUTS_KEY]: sanitized,
@@ -1874,7 +1874,11 @@ function normalizeUrlProcessRules(value) {
 
       const applyWhen = Array.isArray(raw.applyWhen)
         ? raw.applyWhen.filter((aw) =>
-            ['copy-to-clipboard', 'save-to-raindrop', 'open-in-new-tab'].includes(aw),
+            [
+              'copy-to-clipboard',
+              'save-to-raindrop',
+              'open-in-new-tab',
+            ].includes(aw),
           )
         : [];
       if (applyWhen.length === 0) {
@@ -2019,9 +2023,9 @@ async function collectPinnedShortcuts() {
     'highlightText',
     'customCode',
   ];
-  return shortcuts.filter(
-    (id) => typeof id === 'string' && validIds.includes(id),
-  ).slice(0, 6);
+  return shortcuts
+    .filter((id) => typeof id === 'string' && validIds.includes(id))
+    .slice(0, 6);
 }
 
 /**
@@ -2977,9 +2981,9 @@ function parsePinnedShortcutsItem(item) {
       'customCode',
     ];
 
-    const normalizedShortcuts = parsed.shortcuts.filter(
-      (id) => typeof id === 'string' && validIds.includes(id),
-    ).slice(0, 6);
+    const normalizedShortcuts = parsed.shortcuts
+      .filter((id) => typeof id === 'string' && validIds.includes(id))
+      .slice(0, 6);
 
     const payload = /** @type {PinnedShortcutsBackupPayload} */ ({
       kind: 'pinned-shortcuts',
@@ -3388,6 +3392,9 @@ async function performFullBackup(trigger) {
  * @returns {number}
  */
 function getLatestLocalTimestamp(state) {
+  if (!state || typeof state !== 'object') {
+    return 0;
+  }
   return Math.max(
     Number(state.lastBackupAt ?? 0),
     Number(state.lastRestoreAt ?? 0),
@@ -3437,6 +3444,18 @@ async function performRestore(trigger, notifyOnError) {
         itemsMap,
       );
 
+      console.log(
+        '[options-backup] Restore result for',
+        categoryId,
+        ': payload=',
+        payload ? 'present' : 'null',
+        ', lastModified=',
+        lastModified,
+        '(',
+        lastModified > 0 ? new Date(lastModified).toISOString() : 'invalid',
+        ')',
+      );
+
       if (!payload) {
         // Only add error if the category exists but data is invalid
         const titleKey = config.title.trim().toLowerCase();
@@ -3452,17 +3471,62 @@ async function performRestore(trigger, notifyOnError) {
       const remoteTimestamp = Number(lastModified);
       const localTimestamp = getLatestLocalTimestamp(categoryState);
 
+      console.log(
+        '[options-backup] Restore check for',
+        categoryId,
+        ': remoteTimestamp=',
+        remoteTimestamp,
+        '(',
+        remoteTimestamp > 0
+          ? new Date(remoteTimestamp).toISOString()
+          : 'invalid',
+        '), localTimestamp=',
+        localTimestamp,
+        '(',
+        localTimestamp > 0 ? new Date(localTimestamp).toISOString() : 'invalid',
+        '), trigger=',
+        trigger,
+        ', categoryState=',
+        categoryState,
+      );
+
       if (!remoteTimestamp || remoteTimestamp < 1) {
+        console.log(
+          '[options-backup] Skipping',
+          categoryId,
+          ': invalid remoteTimestamp',
+        );
         continue;
       }
 
       if (remoteTimestamp < localTimestamp) {
-        continue;
+        // For manual restore, allow restoring even if remote is older
+        if (trigger === 'manual') {
+          console.log(
+            '[options-backup] Proceeding with manual restore for',
+            categoryId,
+            'even though remoteTimestamp < localTimestamp',
+          );
+        } else {
+          console.log(
+            '[options-backup] Skipping',
+            categoryId,
+            ': remoteTimestamp < localTimestamp (remote is older)',
+          );
+          continue;
+        }
       }
 
       if (remoteTimestamp === localTimestamp && trigger !== 'manual') {
+        console.log(
+          '[options-backup] Skipping',
+          categoryId,
+          ': remoteTimestamp === localTimestamp and trigger !== manual',
+        );
         continue;
       }
+
+      console.log('[options-backup] Proceeding with restore for', categoryId);
 
       try {
         // Handle different payload types correctly
