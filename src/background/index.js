@@ -5,6 +5,7 @@ import {
   runMirrorPull,
   saveUrlsToUnsorted,
   normalizeHttpUrl,
+  pushNotification,
 } from './mirror.js';
 import {
   SAVE_PROJECT_MESSAGE,
@@ -2135,6 +2136,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: error.message });
       }
     })();
+    return true;
+  }
+
+  if (message.type === 'auto-google-login-notification') {
+    const title =
+      typeof message.title === 'string' ? message.title : 'Auto Google Login';
+    const notificationMessage =
+      typeof message.message === 'string' ? message.message : '';
+    const targetUrl =
+      typeof message.targetUrl === 'string' ? message.targetUrl : undefined;
+
+    if (notificationMessage) {
+      void pushNotification(
+        'auto-google-login',
+        title,
+        notificationMessage,
+        targetUrl,
+      );
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'Missing message' });
+    }
     return true;
   }
 
