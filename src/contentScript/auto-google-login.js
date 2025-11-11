@@ -393,11 +393,6 @@
       console.log(
         '[auto-google-login] Successfully clicked Continue button immediately',
       );
-      await sendNotification(
-        'Auto Google Login',
-        'Clicked Continue button. Completing OAuth...',
-        window.location.href,
-      );
       return;
     }
 
@@ -475,13 +470,7 @@
       }
     }
 
-    if (clicked) {
-      await sendNotification(
-        'Auto Google Login',
-        'Clicked Continue button. Completing OAuth...',
-        window.location.href,
-      );
-    } else {
+    if (!clicked) {
       await sendNotification(
         'Auto Google Login',
         'Please manually click Continue to complete login',
@@ -923,11 +912,6 @@
       console.log(
         '[auto-google-login] Successfully clicked account immediately',
       );
-      await sendNotification(
-        'Auto Google Login',
-        `Account ${email} selected. Completing login...`,
-        window.location.href,
-      );
       setTimeout(() => {
         loginInProgress = false;
       }, 5000);
@@ -1013,15 +997,7 @@
     const results = await Promise.all([pollingPromise, observerPromise]);
     accountSelected = results[0] || results[1];
 
-    if (accountSelected) {
-      // Wait a bit and check if we're proceeding
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      await sendNotification(
-        'Auto Google Login',
-        `Account ${email} selected. Completing login...`,
-        window.location.href,
-      );
-    } else {
+    if (!accountSelected) {
       await sendNotification(
         'Auto Google Login',
         `Please manually select account: ${email}`,
@@ -1240,7 +1216,9 @@
         // Try to get email from chrome.storage.local (stored when login was initiated)
         try {
           if (chrome?.storage?.local) {
-            const result = await chrome.storage.local.get(TEMP_EMAIL_STORAGE_KEY);
+            const result = await chrome.storage.local.get(
+              TEMP_EMAIL_STORAGE_KEY,
+            );
             const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
             if (storedEmail) {
               console.log(
