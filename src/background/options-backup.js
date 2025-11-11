@@ -205,6 +205,22 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} AutoGoogleLoginRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {string} [email]
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
+ * @typedef {Object} AutoGoogleLoginRulesBackupPayload
+ * @property {'auto-google-login-rules'} kind
+ * @property {AutoGoogleLoginRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
  * @typedef {Object} PinnedShortcutsBackupPayload
  * @property {'pinned-shortcuts'} kind
  * @property {string[]} shortcuts
@@ -249,6 +265,7 @@ const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
+const AUTO_GOOGLE_LOGIN_RULES_KEY = 'autoGoogleLoginRules';
 const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
@@ -299,6 +316,7 @@ const CATEGORY_IDS = [
   'custom-code-rules',
   'llm-prompts',
   'url-process-rules',
+  'auto-google-login-rules',
   'pinned-shortcuts',
 ];
 
@@ -2001,6 +2019,138 @@ async function buildUrlProcessRulesPayload(trigger) {
 }
 
 /**
+ * Normalize auto Google login rules from storage or input.
+ * @param {unknown} value
+ * @returns {{ rules: AutoGoogleLoginRuleSettings[], mutated: boolean }}
+ */
+function normalizeAutoGoogleLoginRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, email?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!pattern) {
+        return;
+      }
+
+      try {
+        // eslint-disable-next-line no-new
+        new URLPattern(pattern);
+      } catch {
+        return;
+      }
+
+      const email = typeof raw.email === 'string' ? raw.email.trim() : undefined;
+      if (email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return;
+        }
+      }
+
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {AutoGoogleLoginRuleSettings} */
+      const rule = {
+        id,
+        pattern,
+      };
+
+      if (email) {
+        rule.email = email;
+      }
+
+      if (typeof raw.createdAt === 'string') {
+        rule.createdAt = raw.createdAt;
+      }
+      if (typeof raw.updatedAt === 'string') {
+        rule.updatedAt = raw.updatedAt;
+      }
+
+      sanitized.push(rule);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) => {
+    const patternCompare = a.pattern.localeCompare(b.pattern);
+    if (patternCompare !== 0) {
+      return patternCompare;
+    }
+    const emailA = a.email || '';
+    const emailB = b.email || '';
+    return emailA.localeCompare(emailB);
+  });
+
+  return {
+    rules: sorted,
+    mutated: mutated || sorted.length !== originalLength,
+  };
+}
+
+/**
+ * Collect auto Google login rules from storage.
+ * @returns {Promise<AutoGoogleLoginRuleSettings[]>}
+ */
+async function collectAutoGoogleLoginRules() {
+  const result = await chrome.storage.sync.get(AUTO_GOOGLE_LOGIN_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeAutoGoogleLoginRules(
+    result?.[AUTO_GOOGLE_LOGIN_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('auto-google-login-rules');
+    await chrome.storage.sync.set({
+      [AUTO_GOOGLE_LOGIN_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply auto Google login rules to storage.
+ * @param {AutoGoogleLoginRuleSettings[]} rules
+ * @returns {Promise<void>}
+ */
+async function applyAutoGoogleLoginRules(rules) {
+  if (!Array.isArray(rules)) {
+    return;
+  }
+  const { rules: sanitized } = normalizeAutoGoogleLoginRules(rules);
+  suppressBackup('auto-google-login-rules');
+  await chrome.storage.sync.set({
+    [AUTO_GOOGLE_LOGIN_RULES_KEY]: sanitized,
+  });
+}
+
+/**
+ * Build auto Google login rules payload.
+ * @param {string} trigger
+ * @returns {Promise<AutoGoogleLoginRulesBackupPayload>}
+ */
+async function buildAutoGoogleLoginRulesPayload(trigger) {
+  const rules = await collectAutoGoogleLoginRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'auto-google-login-rules',
+    rules,
+    metadata,
+  };
+}
+
+/**
  * Collect pinned shortcuts from storage.
  * @returns {Promise<string[]>}
  */
@@ -2940,6 +3090,89 @@ function parseLLMPromptsItem(item) {
 }
 
 /**
+ * Attempt to parse auto Google login rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: AutoGoogleLoginRulesBackupPayload | null, lastModified: number }}
+ */
+function parseAutoGoogleLoginRulesItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      console.warn(
+        '[options-backup] parseAutoGoogleLoginRulesItem: parsed is not an object',
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    if (!Array.isArray(parsed?.rules)) {
+      console.warn(
+        '[options-backup] parseAutoGoogleLoginRulesItem: parsed.rules is not an array',
+        typeof parsed?.rules,
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedRules = normalizeAutoGoogleLoginRules(parsed?.rules).rules;
+
+    if (normalizedRules.length === 0 && parsed?.rules?.length > 0) {
+      console.warn(
+        '[options-backup] parseAutoGoogleLoginRulesItem: all rules were filtered out',
+        'original count:',
+        parsed?.rules?.length,
+      );
+    }
+
+    const payload = /** @type {AutoGoogleLoginRulesBackupPayload} */ ({
+      kind: 'auto-google-login-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : '',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : '',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    console.error(
+      '[options-backup] parseAutoGoogleLoginRulesItem failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Attempt to parse pinned shortcuts payload from Raindrop.
  * @param {any} item
  * @returns {{ payload: PinnedShortcutsBackupPayload | null, lastModified: number }}
@@ -3096,6 +3329,13 @@ const CATEGORY_CONFIG = {
     buildPayload: buildUrlProcessRulesPayload,
     parseItem: parseUrlProcessRulesItem,
     applyPayload: applyUrlProcessRules,
+  },
+  'auto-google-login-rules': {
+    title: 'auto-google-login-rules',
+    link: 'https://nenya.local/options/auto-google-login',
+    buildPayload: buildAutoGoogleLoginRulesPayload,
+    parseItem: parseAutoGoogleLoginRulesItem,
+    applyPayload: applyAutoGoogleLoginRules,
   },
   'pinned-shortcuts': {
     title: 'pinned-shortcuts',
@@ -3547,6 +3787,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.prompts;
         } else if (payload.kind === 'url-process-rules') {
           payloadToApply = payload.rules;
+        } else if (payload.kind === 'auto-google-login-rules') {
+          payloadToApply = payload.rules;
         } else if (payload.kind === 'pinned-shortcuts') {
           payloadToApply = payload.shortcuts;
         } else {
@@ -3662,6 +3904,9 @@ function handleStorageChanges(changes, areaName) {
     }
     if (URL_PROCESS_RULES_KEY in changes) {
       queueCategoryBackup('url-process-rules', 'storage');
+    }
+    if (AUTO_GOOGLE_LOGIN_RULES_KEY in changes) {
+      queueCategoryBackup('auto-google-login-rules', 'storage');
     }
     if (PINNED_SHORTCUTS_KEY in changes) {
       queueCategoryBackup('pinned-shortcuts', 'storage');

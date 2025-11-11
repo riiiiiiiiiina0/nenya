@@ -12,6 +12,7 @@ import './blockElements.js';
 import './customCode.js';
 import './llmPrompts.js';
 import './urlProcessRules.js';
+import './autoGoogleLogin.js';
 import './debug.js';
 
 /**

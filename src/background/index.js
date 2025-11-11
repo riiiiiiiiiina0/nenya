@@ -5,6 +5,7 @@ import {
   runMirrorPull,
   saveUrlsToUnsorted,
   normalizeHttpUrl,
+  pushNotification,
 } from './mirror.js';
 import {
   SAVE_PROJECT_MESSAGE,
@@ -2133,6 +2134,77 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       } catch (error) {
         console.error('[background] Failed to inject custom JS:', error);
         sendResponse({ success: false, error: error.message });
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === 'auto-google-login-notification') {
+    const title =
+      typeof message.title === 'string' ? message.title : 'Auto Google Login';
+    const notificationMessage =
+      typeof message.message === 'string' ? message.message : '';
+    const targetUrl =
+      typeof message.targetUrl === 'string' ? message.targetUrl : undefined;
+
+    if (notificationMessage) {
+      void pushNotification(
+        'auto-google-login',
+        title,
+        notificationMessage,
+        targetUrl,
+      );
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'Missing message' });
+    }
+    return true;
+  }
+
+  if (message.type === 'auto-google-login:checkTabActive') {
+    void (async () => {
+      try {
+        if (!sender.tab || typeof sender.tab.id !== 'number') {
+          sendResponse({ isActive: false });
+          return;
+        }
+
+        const tabId = sender.tab.id;
+        const windowId =
+          typeof sender.tab.windowId === 'number'
+            ? sender.tab.windowId
+            : null;
+
+        if (windowId === null) {
+          sendResponse({ isActive: false });
+          return;
+        }
+
+        // Get the window to check if it's focused
+        const window = await chrome.windows.get(windowId);
+        if (!window || !window.focused) {
+          sendResponse({ isActive: false });
+          return;
+        }
+
+        // Check if this tab is active in its window
+        const tabs = await chrome.tabs.query({
+          active: true,
+          windowId: windowId,
+        });
+
+        const isActive =
+          tabs.length > 0 &&
+          typeof tabs[0]?.id === 'number' &&
+          tabs[0].id === tabId;
+
+        sendResponse({ isActive });
+      } catch (error) {
+        console.warn(
+          '[background] Failed to check tab active status:',
+          error,
+        );
+        sendResponse({ isActive: false });
       }
     })();
     return true;

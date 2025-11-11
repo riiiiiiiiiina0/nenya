@@ -13,7 +13,7 @@
    */
   function injectYouTubeFixes() {
     const styleId = 'nenya-youtube-fixes';
-    
+
     // Remove existing style if present
     const existingStyle = document.getElementById(styleId);
     if (existingStyle) {
@@ -31,7 +31,7 @@
         pointer-events: none !important;
       }
     `;
-    
+
     // Inject at the end of head to ensure highest priority
     if (document.head) {
       document.head.appendChild(styleElement);
@@ -60,4 +60,3 @@
   // Inject CSS fixes immediately
   injectYouTubeFixes();
 })();
-

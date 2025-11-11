@@ -70,6 +70,11 @@ const SHORTCUT_CONFIG = {
     tooltip: 'Inject js/css into this page',
     handler: () => void handleCustomCode(),
   },
+  pictureInPicture: {
+    emoji: '🖼️',
+    tooltip: 'Picture in Picture',
+    handler: () => void handlePictureInPicture(),
+  },
   openOptions: {
     emoji: '⚙️',
     tooltip: 'Open options',
@@ -96,11 +101,11 @@ const STORAGE_KEY = 'pinnedShortcuts';
 
 /** @type {string[]} Default pinned shortcuts */
 const DEFAULT_PINNED_SHORTCUTS = [
-  'getMarkdown',      // Chat with llm
-  'pull',             // Pull from raindrop
-  'saveUnsorted',     // Save to unsorted
-  'customFilter',     // Hide elements in page
-  'splitPage',        // Split page
+  'getMarkdown', // Chat with llm
+  'pull', // Pull from raindrop
+  'saveUnsorted', // Save to unsorted
+  'customFilter', // Hide elements in page
+  'splitPage', // Split page
 ];
 
 const shortcutsContainer = /** @type {HTMLDivElement | null} */ (
@@ -119,6 +124,7 @@ let autoReloadButton = null;
 let brightModeButton = null;
 let highlightTextButton = null;
 let customCodeButton = null;
+let pictureInPictureButton = null;
 
 const saveProjectButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('saveProjectButton')
@@ -160,15 +166,18 @@ async function loadAndRenderShortcuts() {
 
   try {
     const stored = await chrome.storage.sync.get(STORAGE_KEY);
-    const pinnedIds = Array.isArray(stored?.[STORAGE_KEY]) ? stored[STORAGE_KEY] : [];
+    const pinnedIds = Array.isArray(stored?.[STORAGE_KEY])
+      ? stored[STORAGE_KEY]
+      : [];
 
     // If no shortcuts are pinned, use defaults
-    const shortcutsToRender = pinnedIds.length > 0 
-      ? pinnedIds 
-      : DEFAULT_PINNED_SHORTCUTS;
+    const shortcutsToRender =
+      pinnedIds.length > 0 ? pinnedIds : DEFAULT_PINNED_SHORTCUTS;
 
     // Filter out openOptions - it's always shown separately at the end
-    const filteredShortcuts = shortcutsToRender.filter(id => id !== 'openOptions');
+    const filteredShortcuts = shortcutsToRender.filter(
+      (id) => id !== 'openOptions',
+    );
 
     // Clear container
     shortcutsContainer.innerHTML = '';
@@ -185,6 +194,7 @@ async function loadAndRenderShortcuts() {
     brightModeButton = null;
     highlightTextButton = null;
     customCodeButton = null;
+    pictureInPictureButton = null;
 
     // Render buttons based on pinned shortcuts
     filteredShortcuts.forEach((shortcutId) => {
@@ -243,6 +253,9 @@ async function loadAndRenderShortcuts() {
           break;
         case 'customCode':
           customCodeButton = button;
+          break;
+        case 'pictureInPicture':
+          pictureInPictureButton = button;
           break;
       }
     });
@@ -787,7 +800,12 @@ async function handleAutoReload() {
 
     if (!currentUrl) {
       if (statusMessage) {
-        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+        concludeStatus(
+          'No URL found for current tab.',
+          'error',
+          3000,
+          statusMessage,
+        );
       }
       return;
     }
@@ -848,7 +866,12 @@ async function handleBrightMode() {
 
     if (!currentUrl) {
       if (statusMessage) {
-        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+        concludeStatus(
+          'No URL found for current tab.',
+          'error',
+          3000,
+          statusMessage,
+        );
       }
       return;
     }
@@ -909,7 +932,12 @@ async function handleHighlightText() {
 
     if (!currentUrl) {
       if (statusMessage) {
-        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+        concludeStatus(
+          'No URL found for current tab.',
+          'error',
+          3000,
+          statusMessage,
+        );
       }
       return;
     }
@@ -970,7 +998,12 @@ async function handleCustomCode() {
 
     if (!currentUrl) {
       if (statusMessage) {
-        concludeStatus('No URL found for current tab.', 'error', 3000, statusMessage);
+        concludeStatus(
+          'No URL found for current tab.',
+          'error',
+          3000,
+          statusMessage,
+        );
       }
       return;
     }
@@ -1003,6 +1036,167 @@ async function handleCustomCode() {
     if (statusMessage) {
       concludeStatus(
         'Unable to open custom code options.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
+}
+
+/**
+ * Handle Picture-in-Picture mode for the largest video in the current tab.
+ * @returns {Promise<void>}
+ */
+async function handlePictureInPicture() {
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    const currentTab = tabs[0];
+
+    // Check if tab has a valid ID
+    if (typeof currentTab.id !== 'number') {
+      if (statusMessage) {
+        concludeStatus('Invalid tab ID.', 'error', 3000, statusMessage);
+      }
+      return;
+    }
+
+    // Inject script to find largest video and trigger PiP
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: currentTab.id },
+        func: async () => {
+          // Find all video elements
+          const videos = Array.from(document.querySelectorAll('video'));
+
+          if (videos.length === 0) {
+            return {
+              success: false,
+              error: 'No video elements found on this page.',
+            };
+          }
+
+          // Wait for videos to load metadata if needed
+          await Promise.all(
+            videos.map((video) => {
+              if (video.readyState >= 1) {
+                return Promise.resolve();
+              }
+              return new Promise((resolve) => {
+                video.addEventListener('loadedmetadata', resolve, {
+                  once: true,
+                });
+                // Timeout after 2 seconds
+                setTimeout(resolve, 2000);
+              });
+            }),
+          );
+
+          // Find the largest video by area (width * height)
+          let largestVideo = null;
+          let largestArea = 0;
+
+          for (const video of videos) {
+            // Get video dimensions, prefer actual video dimensions over display size
+            const width = video.videoWidth || video.clientWidth || 0;
+            const height = video.videoHeight || video.clientHeight || 0;
+            const area = width * height;
+
+            if (area > largestArea) {
+              largestArea = area;
+              largestVideo = video;
+            }
+          }
+
+          if (!largestVideo) {
+            return { success: false, error: 'No valid video element found.' };
+          }
+
+          try {
+            // Check if Picture-in-Picture is already active
+            if (document.pictureInPictureElement) {
+              // Exit PiP if same video
+              if (document.pictureInPictureElement === largestVideo) {
+                await document.exitPictureInPicture();
+                return { success: true, action: 'exited' };
+              }
+              // Exit current PiP first, then enter new one
+              await document.exitPictureInPicture();
+              await largestVideo.requestPictureInPicture();
+              return { success: true, action: 'entered' };
+            }
+
+            // Request Picture-in-Picture
+            await largestVideo.requestPictureInPicture();
+            return { success: true, action: 'entered' };
+          } catch (error) {
+            return { success: false, error: error.message || String(error) };
+          }
+        },
+      });
+
+      const result = results?.[0]?.result;
+      if (!result) {
+        if (statusMessage) {
+          concludeStatus(
+            'Failed to trigger Picture-in-Picture.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
+        return;
+      }
+
+      if (!result.success) {
+        if (statusMessage) {
+          concludeStatus(
+            result.error || 'Failed to trigger Picture-in-Picture.',
+            'error',
+            3000,
+            statusMessage,
+          );
+        }
+        return;
+      }
+
+      // Success message
+      if (statusMessage) {
+        const actionText = result.action === 'entered' ? 'entered' : 'exited';
+        concludeStatus(
+          `Picture-in-Picture ${actionText} successfully.`,
+          'success',
+          2000,
+          statusMessage,
+        );
+      }
+
+      // Close the popup
+      window.close();
+    } catch (injectError) {
+      console.error('[popup] Error injecting PiP script:', injectError);
+      if (statusMessage) {
+        concludeStatus(
+          'Unable to trigger Picture-in-Picture. Make sure the page has loaded.',
+          'error',
+          3000,
+          statusMessage,
+        );
+      }
+    }
+  } catch (error) {
+    console.error('[popup] Error triggering Picture-in-Picture:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to trigger Picture-in-Picture.',
         'error',
         3000,
         statusMessage,

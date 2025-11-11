@@ -89,7 +89,8 @@
       ],
       "js": [
         "src/contentScript/video-controller.js",
-        "src/contentScript/highlight-text.js"
+        "src/contentScript/highlight-text.js",
+        "src/contentScript/auto-google-login.js"
       ],
       "css": [
         "src/contentScript/video-controller.css"
