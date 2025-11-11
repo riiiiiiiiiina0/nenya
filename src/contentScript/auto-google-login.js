@@ -496,10 +496,6 @@
    * @returns {void}
    */
   function monitorGoogleOAuthFlow(rule) {
-    const email = rule.email || '';
-    const emailDomain = email.split('@')[1] || '';
-    const emailLocalPart = email.split('@')[0] || '';
-
     // Check if we're on a Google OAuth page
     const currentUrl = getCurrentUrl();
     const isGoogleOAuthPage =
@@ -516,6 +512,37 @@
       void handleOAuthConfirmation();
       return;
     }
+
+    // Helper function to attempt account selection with email from storage
+    const attemptAccountSelection = async () => {
+      try {
+        if (chrome?.storage?.local) {
+          const result = await chrome.storage.local.get(TEMP_EMAIL_STORAGE_KEY);
+          const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
+          if (storedEmail) {
+            console.log(
+              '[auto-google-login] Found stored email in monitorGoogleOAuthFlow, attempting account selection:',
+              storedEmail,
+            );
+            void handleGoogleAccountSelection(storedEmail);
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn(
+          '[auto-google-login] Failed to read email from storage in monitorGoogleOAuthFlow:',
+          error,
+        );
+      }
+      // Fallback to rule email if storage doesn't have it
+      if (rule && rule.email) {
+        console.log(
+          '[auto-google-login] Using rule email as fallback:',
+          rule.email,
+        );
+        void handleGoogleAccountSelection(rule);
+      }
+    };
 
     if (!isGoogleOAuthPage) {
       // Monitor URL changes
@@ -534,7 +561,10 @@
             newUrl.includes('signin')
           ) {
             clearInterval(urlCheckInterval);
-            handleGoogleAccountSelection(rule);
+            // Wait a bit for page to load, then attempt account selection
+            setTimeout(() => {
+              void attemptAccountSelection();
+            }, 1000);
           }
         }
       }, 500);
@@ -545,7 +575,10 @@
         loginInProgress = false;
       }, 30000);
     } else {
-      handleGoogleAccountSelection(rule);
+      // Already on Google OAuth page - wait a bit for it to load, then attempt account selection
+      setTimeout(() => {
+        void attemptAccountSelection();
+      }, 1000);
     }
   }
 
@@ -1148,43 +1181,48 @@
       console.log(
         '[auto-google-login] Already on Google account selection page',
       );
-      // Try to get email from chrome.storage.local (stored when login was initiated)
-      try {
-        if (chrome?.storage?.local) {
-          const result = await chrome.storage.local.get(TEMP_EMAIL_STORAGE_KEY);
-          const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
-          if (storedEmail) {
-            console.log(
-              '[auto-google-login] Found stored email, attempting account selection:',
-              storedEmail,
-            );
-            void handleGoogleAccountSelection(storedEmail);
-            // Clear the stored email after using it
-            void chrome.storage.local.remove(TEMP_EMAIL_STORAGE_KEY);
-          } else {
-            console.log(
-              '[auto-google-login] No stored email found in chrome.storage.local',
-            );
-            // Fallback: try to find matching rule (won't work for Google URLs, but try anyway)
-            const matchingRule = findMatchingRule(currentUrl);
-            if (matchingRule && matchingRule.email) {
+      // Wait a bit for the page to load before attempting account selection
+      setTimeout(async () => {
+        // Try to get email from chrome.storage.local (stored when login was initiated)
+        try {
+          if (chrome?.storage?.local) {
+            const result = await chrome.storage.local.get(TEMP_EMAIL_STORAGE_KEY);
+            const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
+            if (storedEmail) {
               console.log(
-                '[auto-google-login] Found matching rule, attempting account selection',
+                '[auto-google-login] Found stored email, attempting account selection:',
+                storedEmail,
               );
-              void handleGoogleAccountSelection(matchingRule);
+              void handleGoogleAccountSelection(storedEmail);
+              // Clear the stored email after using it (with delay to allow retries)
+              setTimeout(() => {
+                void chrome.storage.local.remove(TEMP_EMAIL_STORAGE_KEY);
+              }, 15000);
             } else {
               console.log(
-                '[auto-google-login] No matching rule found for Google URL',
+                '[auto-google-login] No stored email found in chrome.storage.local',
               );
+              // Fallback: try to find matching rule (won't work for Google URLs, but try anyway)
+              const matchingRule = findMatchingRule(currentUrl);
+              if (matchingRule && matchingRule.email) {
+                console.log(
+                  '[auto-google-login] Found matching rule, attempting account selection',
+                );
+                void handleGoogleAccountSelection(matchingRule);
+              } else {
+                console.log(
+                  '[auto-google-login] No matching rule found for Google URL',
+                );
+              }
             }
           }
+        } catch (error) {
+          console.warn(
+            '[auto-google-login] Failed to read email from chrome.storage.local:',
+            error,
+          );
         }
-      } catch (error) {
-        console.warn(
-          '[auto-google-login] Failed to read email from chrome.storage.local:',
-          error,
-        );
-      }
+      }, 1000);
     }
 
     // Schedule multiple checks with increasing delays to catch async-loaded buttons
@@ -1288,8 +1326,8 @@
             currentUrl.includes('signin')) &&
           !currentUrl.includes('accounts.google.com/signin/oauth/id')
         ) {
-          // Try to get email from chrome.storage.local
-          void (async () => {
+          // Wait a bit for the page to load, then try to get email from chrome.storage.local
+          setTimeout(async () => {
             try {
               if (chrome?.storage?.local) {
                 const result = await chrome.storage.local.get(
@@ -1310,7 +1348,7 @@
                 error,
               );
             }
-          })();
+          }, 1000);
         }
 
         lastAlertedRuleId = null;

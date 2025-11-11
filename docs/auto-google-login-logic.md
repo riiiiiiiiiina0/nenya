@@ -7,14 +7,17 @@ The `auto-google-login.js` content script automatically detects Google login but
 ## Core Concepts
 
 ### Storage Keys
+
 - `autoGoogleLoginRules`: Stores URL pattern rules with associated email addresses
 - `autoGoogleLoginTempEmail`: Temporary storage for email during OAuth flow (stored in `chrome.storage.local`)
 
 ### Constants
+
 - `DEBOUNCE_DELAY`: 2000ms - Debounce delay for DOM mutations
 - `MIN_CHECK_INTERVAL`: 3000ms - Minimum time between checks
 
 ### State Variables
+
 - `cachedRules`: Array of configured rules
 - `debounceTimer`: Timer for debounced checks
 - `mutationObserver`: Watches for DOM changes
@@ -45,13 +48,16 @@ The `auto-google-login.js` content script automatically detects Google login but
 Searches for Google login buttons using `isGoogleLoginButton()` which checks:
 
 **Text Content:**
+
 - Contains both "login"/"log in"/"sign in" AND "google" (case-insensitive)
 - Checks `textContent`, `value` attribute (for input buttons), `aria-label`, and `title`
 
 **Class/ID Patterns:**
+
 - Common patterns: `login-with-google`, `google-login`, `google-signin`, `signin-google`, `btn-google`, `google-btn`
 
 **Element Types:**
+
 - `button`, `a[href]`, `[role="button"]`, `input[type="button"]`, `input[type="submit"]`
 
 ### 4. Login Initiation (`clickGoogleLoginButton()`)
@@ -68,9 +74,11 @@ Searches for Google login buttons using `isGoogleLoginButton()` which checks:
 Monitors the page for Google OAuth flow:
 
 1. **OAuth Confirmation Page** (`accounts.google.com/signin/oauth/id`):
+
    - Calls `handleOAuthConfirmation()` to click Continue button
 
 2. **Account Selection Page** (`accounts.google.com` with `oauth`/`signin`):
+
    - Calls `handleGoogleAccountSelection()` to select account
 
 3. **URL Change Monitoring**:
@@ -82,9 +90,11 @@ Monitors the page for Google OAuth flow:
 Attempts to automatically select the configured Google account:
 
 **Immediate Attempt:**
+
 - Tries `tryClickAccount()` immediately if elements are loaded
 
 **Retry Strategies:**
+
 - **Polling**: Retries up to 15 times with 500ms delay (2s delay on first attempt)
 - **MutationObserver**: Watches for `data-email` and `data-identifier` attributes appearing
 
@@ -100,6 +110,7 @@ Attempts to automatically select the configured Google account:
 8. **Text Content**: Searches `li` elements with email in text content
 
 **Click Handling:**
+
 - Scrolls element into view
 - Tries multiple click methods: direct `click()`, `MouseEvent`, `PointerEvent`
 - Prefers clicking parent `div[role="link"]` or `li` elements when found
@@ -109,9 +120,11 @@ Attempts to automatically select the configured Google account:
 Attempts to click the "Continue" button on Google's OAuth confirmation page:
 
 **Immediate Attempt:**
+
 - Tries `tryClickContinueButton()` immediately
 
 **Retry Strategies:**
+
 - **Polling**: Retries up to 10 times with 500ms delay
 - **MutationObserver**: Watches for Continue button appearing (10s timeout)
 
@@ -123,6 +136,7 @@ Attempts to click the "Continue" button on Google's OAuth confirmation page:
 4. **Span Text**: Button containing a `span` with text "continue"
 
 **Click Handling:**
+
 - Checks element is visible (`offsetParent !== null`) and not disabled
 - Uses `clickElement()` helper
 
@@ -145,6 +159,7 @@ Main check function called periodically:
 ## Storage Change Listener
 
 Listens for changes to `autoGoogleLoginRules` in `chrome.storage.sync`:
+
 - Reloads rules when changed
 - Resets alert state
 - Triggers debounced check
@@ -159,6 +174,7 @@ Listens for changes to `autoGoogleLoginRules` in `chrome.storage.sync`:
 ## Notifications
 
 Sends notifications via `chrome.runtime.sendMessage()` to background script:
+
 - Login initiation
 - Account selection success/failure
 - OAuth confirmation progress
@@ -184,4 +200,3 @@ Sends notifications via `chrome.runtime.sendMessage()` to background script:
 - Depends on Google's DOM structure (may break if Google changes UI)
 - Requires exact or partial email match for account selection
 - Timeout-based (may miss slow-loading elements)
-
