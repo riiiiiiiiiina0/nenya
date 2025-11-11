@@ -22,6 +22,7 @@ const AVAILABLE_SHORTCUTS = [
   { id: 'brightMode', emoji: '🔆', tooltip: 'Render this page in bright mode' },
   { id: 'highlightText', emoji: '🟨', tooltip: 'Highlight text in this page' },
   { id: 'customCode', emoji: '📑', tooltip: 'Inject js/css into this page' },
+  { id: 'pictureInPicture', emoji: '🖼️', tooltip: 'Picture in Picture' },
   // Note: openOptions is always shown at the end and cannot be pinned
 ];
 
