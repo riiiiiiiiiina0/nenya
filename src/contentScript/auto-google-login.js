@@ -11,6 +11,7 @@
 
   const STORAGE_KEY = 'autoGoogleLoginRules';
   const TEMP_EMAIL_STORAGE_KEY = 'autoGoogleLoginTempEmail';
+  const AUTO_LOGIN_INITIATED_KEY = 'autoGoogleLoginInitiated';
   const DEBOUNCE_DELAY = 2000; // ms - debounce for DOM mutations
   const MIN_CHECK_INTERVAL = 3000; // ms - minimum time between checks
 
@@ -238,6 +239,24 @@
 
       if (href && !hasPopup) {
         // Redirect-based login - navigate to the URL
+        // Store email and flag before redirecting
+        try {
+          if (chrome?.storage?.local) {
+            await chrome.storage.local.set({
+              [TEMP_EMAIL_STORAGE_KEY]: email,
+              [AUTO_LOGIN_INITIATED_KEY]: true,
+            });
+            console.log(
+              '[auto-google-login] Stored email and auto login flag before redirect:',
+              email,
+            );
+          }
+        } catch (error) {
+          console.warn(
+            '[auto-google-login] Failed to store email before redirect:',
+            error,
+          );
+        }
         window.location.href = href;
         await sendNotification(
           'Auto Google Login',
@@ -247,15 +266,17 @@
         return;
       }
 
-      // Store email in chrome.storage.local so we can retrieve it on Google's page
+      // Store email and flag in chrome.storage.local so we can retrieve it on Google's page
       // (sessionStorage won't work across different origins)
+      // The flag indicates that auto login was initiated by a matching rule
       try {
         if (chrome?.storage?.local) {
           await chrome.storage.local.set({
             [TEMP_EMAIL_STORAGE_KEY]: email,
+            [AUTO_LOGIN_INITIATED_KEY]: true,
           });
           console.log(
-            '[auto-google-login] Stored email in chrome.storage.local:',
+            '[auto-google-login] Stored email and auto login flag in chrome.storage.local:',
             email,
           );
         }
@@ -379,10 +400,57 @@
   }
 
   /**
+   * Check if auto login was initiated by a matching rule
+   * @returns {Promise<boolean>}
+   */
+  async function wasAutoLoginInitiated() {
+    try {
+      if (!chrome?.storage?.local) {
+        return false;
+      }
+      const result = await chrome.storage.local.get(AUTO_LOGIN_INITIATED_KEY);
+      return result?.[AUTO_LOGIN_INITIATED_KEY] === true;
+    } catch (error) {
+      console.warn(
+        '[auto-google-login] Failed to check auto login initiated flag:',
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Clear the auto login initiated flag
+   * @returns {Promise<void>}
+   */
+  async function clearAutoLoginFlag() {
+    try {
+      if (chrome?.storage?.local) {
+        await chrome.storage.local.remove(AUTO_LOGIN_INITIATED_KEY);
+        console.log('[auto-google-login] Cleared auto login initiated flag');
+      }
+    } catch (error) {
+      console.warn(
+        '[auto-google-login] Failed to clear auto login flag:',
+        error,
+      );
+    }
+  }
+
+  /**
    * Handle OAuth confirmation page - click Continue button
    * @returns {Promise<void>}
    */
   async function handleOAuthConfirmation() {
+    // Only proceed if auto login was initiated by a matching rule
+    const initiated = await wasAutoLoginInitiated();
+    if (!initiated) {
+      console.log(
+        '[auto-google-login] Skipping OAuth confirmation - auto login was not initiated by a matching rule',
+      );
+      return;
+    }
+
     console.log(
       '[auto-google-login] On OAuth confirmation page, attempting to click Continue',
     );
@@ -476,6 +544,11 @@
         'Please manually click Continue to complete login',
         window.location.href,
       );
+    } else {
+      // Clear the flag after successful Continue click
+      setTimeout(() => {
+        void clearAutoLoginFlag();
+      }, 5000);
     }
   }
 
@@ -498,12 +571,29 @@
     );
 
     if (isOAuthConfirmationPage) {
-      void handleOAuthConfirmation();
+      // Only handle if auto login was initiated by a matching rule
+      const initiated = await wasAutoLoginInitiated();
+      if (initiated) {
+        void handleOAuthConfirmation();
+      } else {
+        console.log(
+          '[auto-google-login] Skipping OAuth confirmation in monitorGoogleOAuthFlow - auto login was not initiated by a matching rule',
+        );
+      }
       return;
     }
 
     // Helper function to attempt account selection with email from storage
     const attemptAccountSelection = async () => {
+      // Only proceed if auto login was initiated by a matching rule
+      const initiated = await wasAutoLoginInitiated();
+      if (!initiated) {
+        console.log(
+          '[auto-google-login] Skipping account selection - auto login was not initiated by a matching rule',
+        );
+        return;
+      }
+
       try {
         if (chrome?.storage?.local) {
           const result = await chrome.storage.local.get(TEMP_EMAIL_STORAGE_KEY);
@@ -523,7 +613,7 @@
           error,
         );
       }
-      // Fallback to rule email if storage doesn't have it
+      // Fallback to rule email if storage doesn't have it (only if we have a rule)
       if (rule && rule.email) {
         console.log(
           '[auto-google-login] Using rule email as fallback:',
@@ -543,7 +633,17 @@
           // Check for OAuth confirmation page
           if (newUrl.includes('accounts.google.com/signin/oauth/id')) {
             clearInterval(urlCheckInterval);
-            void handleOAuthConfirmation();
+            // Only handle if auto login was initiated by a matching rule
+            void (async () => {
+              const initiated = await wasAutoLoginInitiated();
+              if (initiated) {
+                void handleOAuthConfirmation();
+              } else {
+                console.log(
+                  '[auto-google-login] Skipping OAuth confirmation in monitorGoogleOAuthFlow URL check - auto login was not initiated by a matching rule',
+                );
+              }
+            })();
           } else if (
             newUrl.includes('accounts.google.com') ||
             newUrl.includes('oauth') ||
@@ -1003,6 +1103,11 @@
         `Please manually select account: ${email}`,
         window.location.href,
       );
+    } else {
+      // Clear the flag after successful account selection
+      setTimeout(() => {
+        void clearAutoLoginFlag();
+      }, 5000);
     }
 
     // Clean up observer
@@ -1197,7 +1302,15 @@
 
     if (isOAuthConfirmationPage) {
       console.log('[auto-google-login] Already on OAuth confirmation page');
-      void handleOAuthConfirmation();
+      // Only handle if auto login was initiated by a matching rule
+      const initiated = await wasAutoLoginInitiated();
+      if (initiated) {
+        void handleOAuthConfirmation();
+      } else {
+        console.log(
+          '[auto-google-login] Skipping OAuth confirmation - auto login was not initiated by a matching rule',
+        );
+      }
     }
 
     const isGoogleAccountSelectionPage =
@@ -1213,6 +1326,15 @@
       );
       // Wait a bit for the page to load before attempting account selection
       setTimeout(async () => {
+        // Only proceed if auto login was initiated by a matching rule
+        const initiated = await wasAutoLoginInitiated();
+        if (!initiated) {
+          console.log(
+            '[auto-google-login] Skipping account selection - auto login was not initiated by a matching rule',
+          );
+          return;
+        }
+
         // Try to get email from chrome.storage.local (stored when login was initiated)
         try {
           if (chrome?.storage?.local) {
@@ -1226,26 +1348,15 @@
                 storedEmail,
               );
               void handleGoogleAccountSelection(storedEmail);
-              // Clear the stored email after using it (with delay to allow retries)
+              // Clear the stored email and flag after using it (with delay to allow retries)
               setTimeout(() => {
                 void chrome.storage.local.remove(TEMP_EMAIL_STORAGE_KEY);
+                void clearAutoLoginFlag();
               }, 15000);
             } else {
               console.log(
                 '[auto-google-login] No stored email found in chrome.storage.local',
               );
-              // Fallback: try to find matching rule (won't work for Google URLs, but try anyway)
-              const matchingRule = findMatchingRule(currentUrl);
-              if (matchingRule && matchingRule.email) {
-                console.log(
-                  '[auto-google-login] Found matching rule, attempting account selection',
-                );
-                void handleGoogleAccountSelection(matchingRule);
-              } else {
-                console.log(
-                  '[auto-google-login] No matching rule found for Google URL',
-                );
-              }
             }
           }
         } catch (error) {
@@ -1347,7 +1458,17 @@
           console.log(
             '[auto-google-login] Navigated to OAuth confirmation page',
           );
-          void handleOAuthConfirmation();
+          // Only handle if auto login was initiated by a matching rule
+          void (async () => {
+            const initiated = await wasAutoLoginInitiated();
+            if (initiated) {
+              void handleOAuthConfirmation();
+            } else {
+              console.log(
+                '[auto-google-login] Skipping OAuth confirmation - auto login was not initiated by a matching rule',
+              );
+            }
+          })();
         }
 
         // Check if we navigated to account selection page
@@ -1360,6 +1481,15 @@
         ) {
           // Wait a bit for the page to load, then try to get email from chrome.storage.local
           setTimeout(async () => {
+            // Only proceed if auto login was initiated by a matching rule
+            const initiated = await wasAutoLoginInitiated();
+            if (!initiated) {
+              console.log(
+                '[auto-google-login] Skipping account selection - auto login was not initiated by a matching rule',
+              );
+              return;
+            }
+
             try {
               if (chrome?.storage?.local) {
                 const result = await chrome.storage.local.get(
@@ -1372,6 +1502,10 @@
                     storedEmail,
                   );
                   void handleGoogleAccountSelection(storedEmail);
+                  // Clear the flag after use (with delay to allow retries)
+                  setTimeout(() => {
+                    void clearAutoLoginFlag();
+                  }, 15000);
                 }
               }
             } catch (error) {
