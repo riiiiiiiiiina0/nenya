@@ -290,7 +290,13 @@ function normalizeRules(value) {
             ['copy-to-clipboard', 'save-to-raindrop', 'open-in-new-tab'].includes(aw),
           )
         : [];
-      if (applyWhen.length === 0) {
+      // Filter out 'open-in-new-tab' from new rules (keep for backward compatibility in existing rules)
+      const filteredApplyWhen = applyWhen.filter((aw) => aw !== 'open-in-new-tab');
+      if (filteredApplyWhen.length === 0 && applyWhen.length > 0) {
+        // Rule only has 'open-in-new-tab', skip it
+        return;
+      }
+      if (filteredApplyWhen.length === 0) {
         return;
       }
 
@@ -308,7 +314,7 @@ function normalizeRules(value) {
         name,
         urlPatterns,
         processors,
-        applyWhen: /** @type {ApplyWhenOption[]} */ (applyWhen),
+        applyWhen: /** @type {ApplyWhenOption[]} */ (filteredApplyWhen),
       };
 
       if (typeof raw.createdAt === 'string') {
@@ -552,7 +558,9 @@ function renderDetails(ruleId) {
       'save-to-raindrop': 'Save to Raindrop',
       'open-in-new-tab': 'Open in new tab',
     };
-    applyWhenContainer.innerHTML = rule.applyWhen
+    // Filter out 'open-in-new-tab' from display
+    const displayApplyWhen = rule.applyWhen.filter((aw) => aw !== 'open-in-new-tab');
+    applyWhenContainer.innerHTML = displayApplyWhen
       .map((aw) => {
         const label = applyWhenLabels[aw] || aw;
         return `<div class="text-sm text-base-content"><span class="badge badge-primary">${label}</span></div>`;
@@ -665,7 +673,8 @@ function startEdit(ruleId) {
 
   editingPatterns = [...rule.urlPatterns];
   editingProcessors = rule.processors.map((p) => ({ ...p }));
-  editingApplyWhen = [...rule.applyWhen];
+  // Filter out 'open-in-new-tab' when editing
+  editingApplyWhen = rule.applyWhen.filter((aw) => aw !== 'open-in-new-tab');
 
   updatePatternsList();
   updateProcessorsList();
@@ -1124,16 +1133,12 @@ function updateProcessorFormVisibility() {
 function updateApplyWhenDisplay() {
   const copyCheckbox = document.getElementById('urlProcessRuleApplyWhenCopy');
   const raindropCheckbox = document.getElementById('urlProcessRuleApplyWhenRaindrop');
-  const openTabCheckbox = document.getElementById('urlProcessRuleApplyWhenOpenTab');
 
   if (copyCheckbox) {
     copyCheckbox.checked = editingApplyWhen.includes('copy-to-clipboard');
   }
   if (raindropCheckbox) {
     raindropCheckbox.checked = editingApplyWhen.includes('save-to-raindrop');
-  }
-  if (openTabCheckbox) {
-    openTabCheckbox.checked = editingApplyWhen.includes('open-in-new-tab');
   }
 }
 
@@ -1216,7 +1221,6 @@ function init() {
   // Apply when checkboxes
   const copyCheckbox = document.getElementById('urlProcessRuleApplyWhenCopy');
   const raindropCheckbox = document.getElementById('urlProcessRuleApplyWhenRaindrop');
-  const openTabCheckbox = document.getElementById('urlProcessRuleApplyWhenOpenTab');
 
   if (copyCheckbox) {
     copyCheckbox.addEventListener('change', (e) => {
@@ -1229,13 +1233,6 @@ function init() {
     raindropCheckbox.addEventListener('change', (e) => {
       const target = /** @type {HTMLInputElement} */ (e.target);
       handleApplyWhenChange('save-to-raindrop', target.checked);
-    });
-  }
-
-  if (openTabCheckbox) {
-    openTabCheckbox.addEventListener('change', (e) => {
-      const target = /** @type {HTMLInputElement} */ (e.target);
-      handleApplyWhenChange('open-in-new-tab', target.checked);
     });
   }
 
@@ -1257,16 +1254,16 @@ function init() {
         );
         rules = sanitized;
         // Clear selection if selected rule no longer exists
-        if (selectedRuleId && !findRule(selectedRuleId)) {
+        if (selectedRuleId && !rules.some((r) => r.id === selectedRuleId)) {
           selectedRuleId = '';
         }
         // Clear editing state if editing rule no longer exists
-        if (editingRuleId && !findRule(editingRuleId)) {
+        if (editingRuleId && !rules.some((r) => r.id === editingRuleId)) {
           editingRuleId = '';
           editingPatterns = [];
           editingProcessors = [];
           editingApplyWhen = [];
-          resetForm();
+          clearForm();
         }
         render();
       })();
