@@ -1046,6 +1046,51 @@
   }
 
   /**
+   * Check if the current tab is active in the focused window
+   * @returns {Promise<boolean>}
+   */
+  async function isCurrentTabActive() {
+    try {
+      // First check if the window has focus
+      if (!document.hasFocus()) {
+        console.log('[auto-google-login] Window does not have focus');
+        return false;
+      }
+
+      // Then verify with the background script that this tab is active
+      return new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          { type: 'auto-google-login:checkTabActive' },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              console.warn(
+                '[auto-google-login] Failed to check tab active status:',
+                chrome.runtime.lastError,
+              );
+              resolve(false);
+              return;
+            }
+            const isActive =
+              response && typeof response.isActive === 'boolean'
+                ? response.isActive
+                : false;
+            if (!isActive) {
+              console.log('[auto-google-login] Tab is not active');
+            }
+            resolve(isActive);
+          },
+        );
+      });
+    } catch (error) {
+      console.warn(
+        '[auto-google-login] Error checking if tab is active:',
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
    * Check for Google login buttons and initiate login if found
    * @returns {Promise<void>}
    */
@@ -1067,6 +1112,15 @@
     // If we already processed this rule, don't process again
     if (lastAlertedRuleId === matchingRule.id && loginInProgress) {
       console.log('[auto-google-login] Already processing login for this rule');
+      return;
+    }
+
+    // Check if the current tab is active before proceeding
+    const tabIsActive = await isCurrentTabActive();
+    if (!tabIsActive) {
+      console.log(
+        '[auto-google-login] Skipping auto login - tab is not active in focused window',
+      );
       return;
     }
 

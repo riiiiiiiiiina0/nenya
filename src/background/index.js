@@ -2161,6 +2161,55 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'auto-google-login:checkTabActive') {
+    void (async () => {
+      try {
+        if (!sender.tab || typeof sender.tab.id !== 'number') {
+          sendResponse({ isActive: false });
+          return;
+        }
+
+        const tabId = sender.tab.id;
+        const windowId =
+          typeof sender.tab.windowId === 'number'
+            ? sender.tab.windowId
+            : null;
+
+        if (windowId === null) {
+          sendResponse({ isActive: false });
+          return;
+        }
+
+        // Get the window to check if it's focused
+        const window = await chrome.windows.get(windowId);
+        if (!window || !window.focused) {
+          sendResponse({ isActive: false });
+          return;
+        }
+
+        // Check if this tab is active in its window
+        const tabs = await chrome.tabs.query({
+          active: true,
+          windowId: windowId,
+        });
+
+        const isActive =
+          tabs.length > 0 &&
+          typeof tabs[0]?.id === 'number' &&
+          tabs[0].id === tabId;
+
+        sendResponse({ isActive });
+      } catch (error) {
+        console.warn(
+          '[background] Failed to check tab active status:',
+          error,
+        );
+        sendResponse({ isActive: false });
+      }
+    })();
+    return true;
+  }
+
   return false;
 });
 
