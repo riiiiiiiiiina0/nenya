@@ -95,6 +95,15 @@
         "src/contentScript/video-controller.css"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/*"
+      ],
+      "js": [
+        "src/contentScript/youtube-fixes.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "commands": {
