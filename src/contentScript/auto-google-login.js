@@ -555,9 +555,9 @@
   /**
    * Monitor the current page for Google OAuth flow and try to select account
    * @param {AutoGoogleLoginRule} rule
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  function monitorGoogleOAuthFlow(rule) {
+  async function monitorGoogleOAuthFlow(rule) {
     // Check if we're on a Google OAuth page
     const currentUrl = getCurrentUrl();
     const isGoogleOAuthPage =
