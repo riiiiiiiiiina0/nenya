@@ -575,6 +575,86 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   }
 });
 
+// Flag to prevent concurrent restoration
+let isRestoringSplitPages = false;
+
+/**
+ * Restore split pages from storage
+ * Called on startup, extension reload, and when service worker initializes
+ * Includes deduplication logic to prevent opening duplicate tabs
+ */
+async function restoreSplitPages() {
+  // Prevent concurrent restoration
+  if (isRestoringSplitPages) {
+    console.log('[background] Split page restoration already in progress, skipping');
+    return;
+  }
+
+  isRestoringSplitPages = true;
+
+  try {
+    const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+    const result = await chrome.storage.local.get(['splitPageUrls']);
+    const savedUrls = Array.isArray(result.splitPageUrls)
+      ? result.splitPageUrls
+      : [];
+
+    if (savedUrls.length === 0) {
+      return;
+    }
+
+    // Check which split pages are already open
+    const allTabs = await chrome.tabs.query({});
+    const openSplitUrls = new Set(
+      allTabs
+        .filter(
+          (tab) =>
+            tab.url &&
+            typeof tab.url === 'string' &&
+            tab.url.startsWith(splitBaseUrl),
+        )
+        .map((tab) => String(tab.url)),
+    );
+
+    // Open split pages that aren't already open
+    const urlsToOpen = savedUrls.filter((url) => !openSplitUrls.has(url));
+    
+    if (urlsToOpen.length === 0) {
+      console.log('[background] All split pages are already open, skipping restoration');
+      return;
+    }
+
+    console.log(`[background] Restoring ${urlsToOpen.length} split page(s)`);
+
+    for (const url of urlsToOpen) {
+      try {
+        // Double-check the tab wasn't opened between the query and now
+        const currentTabs = await chrome.tabs.query({ url });
+        if (currentTabs.length > 0) {
+          console.log('[background] Split page already exists, skipping:', url);
+          continue;
+        }
+
+        await chrome.tabs.create({ url });
+        console.log('[background] Restored split page:', url);
+      } catch (error) {
+        console.warn(
+          '[background] Failed to restore split page:',
+          url,
+          error,
+        );
+      }
+    }
+  } catch (error) {
+    console.warn('[background] Failed to restore split pages:', error);
+  } finally {
+    // Reset flag after a short delay to allow for any concurrent calls to complete
+    setTimeout(() => {
+      isRestoringSplitPages = false;
+    }, 1000);
+  }
+}
+
 chrome.runtime.onStartup.addListener(() => {
   handleLifecycleEvent('startup');
   // Deduplicate custom titles by URL first
@@ -596,6 +676,9 @@ chrome.runtime.onStartup.addListener(() => {
     } catch (error) {
       console.warn('[background] Failed to restore custom titles on startup:', error);
     }
+
+    // Restore split pages from storage
+    await restoreSplitPages();
   })();
 });
 
@@ -605,6 +688,14 @@ initializeOptionsBackupService();
 void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
 });
+
+// Restore split pages when service worker initializes (handles extension reload)
+// Use a small delay to ensure all initialization is complete
+void (async () => {
+  // Wait a bit for the service worker to fully initialize
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await restoreSplitPages();
+})();
 
 chrome.tabs.onHighlighted.addListener(() => {
   void updateClipboardContextMenuVisibility();
@@ -791,6 +882,52 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   } catch (error) {
     console.warn('[background] Failed to clean up custom title:', error);
   }
+
+  // Remove split page URL from storage if this was a split page tab
+  // Since the tab is already removed when onRemoved fires, we check all open tabs
+  // and remove any URLs from storage that are no longer open
+  // Use a delay to avoid race conditions during extension reload
+  void (async () => {
+    try {
+      // Wait a bit to allow restoration to complete if extension just reloaded
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+      const result = await chrome.storage.local.get(['splitPageUrls']);
+      const savedUrls = Array.isArray(result.splitPageUrls)
+        ? result.splitPageUrls
+        : [];
+
+      if (savedUrls.length === 0) {
+        return;
+      }
+
+      // Check all open tabs to see which split URLs are still open
+      const allTabs = await chrome.tabs.query({});
+      const openSplitUrls = new Set(
+        allTabs
+          .filter(
+            (tab) =>
+              tab.url &&
+              typeof tab.url === 'string' &&
+              tab.url.startsWith(splitBaseUrl),
+          )
+          .map((tab) => String(tab.url)),
+      );
+
+      // Remove URLs that are no longer open
+      const updatedUrls = savedUrls.filter((url) => openSplitUrls.has(url));
+
+      if (updatedUrls.length !== savedUrls.length) {
+        await chrome.storage.local.set({ splitPageUrls: updatedUrls });
+        console.log(
+          '[background] Cleaned up closed split page URLs from storage',
+        );
+      }
+    } catch (error) {
+      console.warn('[background] Failed to clean up split page URL:', error);
+    }
+  })();
 });
 
 // Intercept navigation to nenya.local split URLs early

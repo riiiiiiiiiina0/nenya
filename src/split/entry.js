@@ -557,6 +557,9 @@ if (!iframeContainer) {
 
   // Check if we should show the embedded tab picker (only one iframe)
   checkAndShowEmbeddedTabPicker();
+
+  // Save the split page URL to storage when page loads
+  void saveSplitPageUrl();
 }
 
 // Global resize state and handlers (to avoid duplicate event listeners)
@@ -958,6 +961,69 @@ function updatePageTitle() {
 }
 
 /**
+ * Save or update the current split page URL in Chrome storage
+ */
+async function saveSplitPageUrl() {
+  try {
+    const currentUrl = window.location.href;
+    const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+    
+    // Only save if this is a split page
+    if (!currentUrl.startsWith(splitBaseUrl)) {
+      return;
+    }
+
+    // Get existing split page URLs
+    const result = await chrome.storage.local.get(['splitPageUrls']);
+    const existingUrls = Array.isArray(result.splitPageUrls)
+      ? result.splitPageUrls
+      : [];
+
+    // Remove this URL if it already exists (to avoid duplicates)
+    const filteredUrls = existingUrls.filter((url) => url !== currentUrl);
+
+    // Add current URL
+    const updatedUrls = [...filteredUrls, currentUrl];
+
+    // Save to storage
+    await chrome.storage.local.set({ splitPageUrls: updatedUrls });
+    console.log('[split] Saved split page URL:', currentUrl);
+  } catch (error) {
+    console.error('[split] Failed to save split page URL:', error);
+  }
+}
+
+/**
+ * Remove the current split page URL from Chrome storage
+ */
+async function removeSplitPageUrl() {
+  try {
+    const currentUrl = window.location.href;
+    const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+    
+    // Only remove if this is a split page
+    if (!currentUrl.startsWith(splitBaseUrl)) {
+      return;
+    }
+
+    // Get existing split page URLs
+    const result = await chrome.storage.local.get(['splitPageUrls']);
+    const existingUrls = Array.isArray(result.splitPageUrls)
+      ? result.splitPageUrls
+      : [];
+
+    // Remove current URL
+    const updatedUrls = existingUrls.filter((url) => url !== currentUrl);
+
+    // Save to storage
+    await chrome.storage.local.set({ splitPageUrls: updatedUrls });
+    console.log('[split] Removed split page URL:', currentUrl);
+  } catch (error) {
+    console.error('[split] Failed to remove split page URL:', error);
+  }
+}
+
+/**
  * Update the URL state parameter to reflect iframe URLs, layout, and size ratios
  */
 function updateUrlStateParameter() {
@@ -1020,6 +1086,9 @@ function updateUrlStateParameter() {
   )}`;
 
   window.history.replaceState(null, '', newUrl);
+  
+  // Save the updated URL to storage
+  void saveSplitPageUrl();
 }
 
 /**
@@ -1821,7 +1890,8 @@ function removeIframeWrapper(iframeWrapper) {
   // Check if there are any iframes left
   const remainingWrappers = document.querySelectorAll('.iframe-wrapper');
   if (remainingWrappers.length === 0) {
-    // No iframes left, close the split page tab
+    // No iframes left, remove from storage and close the split page tab
+    void removeSplitPageUrl();
     chrome.tabs.getCurrent((tab) => {
       if (tab && tab.id) {
         chrome.tabs.remove(tab.id);
