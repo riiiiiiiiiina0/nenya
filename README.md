@@ -8,10 +8,73 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
 
 ## Features
 
-- **Project Management:** Save and restore entire browsing sessions as "projects."
-- **Cross-Browser Sync:** Easily move your projects and data between different browsers.
-- **Raindrop.io Integration:** Sync your bookmarks with the popular bookmarking service.
-- **Split Screen:** View multiple web pages in a single tab with a resizable split-screen view.
-- **Clipboard Tools:** A variety of tools to copy URLs, titles, and even screenshots to your clipboard.
-- **Content Enhancement:** Features like custom titles, video controller, and text highlighting to improve your browsing experience.
-- **Element Blocker:** Block distracting elements on web pages.
+### 🗂️ Tab & Project Management
+
+- **Project Management:** Save and restore entire browsing sessions as "projects"
+- **Custom Tab Titles:** Set persistent custom titles for any tab
+- **Tab Snapshots:** Automatic tab state preservation
+- **Tab Switching:** Quick keyboard shortcuts to navigate between tabs (left/right)
+- **Pinned Shortcuts:** Customize your popup toolbar with your most-used features
+
+### 🔄 Cross-Browser & Sync
+
+- **Cross-Browser Sync:** Seamlessly move your projects and data between different browsers
+- **Raindrop.io Integration:** Full two-way sync with Raindrop.io bookmarks
+  - Pull collections from Raindrop
+  - Save current tabs to Raindrop Unsorted
+  - Mirror Raindrop collections as browser bookmarks
+  - Automatic background synchronization
+- **Backup & Restore:** Export and import all your extension settings
+
+### 🖥️ Advanced Tab Features
+
+- **Split Screen:** View up to 4 web pages simultaneously in a single tab with resizable split-screen view
+- **Auto Reload:** Automatically reload specific pages based on URL patterns and intervals
+- **Bookmark Search:** Fast search across all your bookmarks with keyboard navigation
+
+### 🤖 AI/LLM Integration
+
+- **Chat with LLM:** Send page content directly to ChatGPT, Claude, Gemini, or Perplexity
+- **Custom LLM Prompts:** Create and manage reusable prompts for AI interactions
+- **Page Content Extraction:**
+  - General web pages (using Readability)
+  - YouTube videos (title, description, transcript)
+  - Notion pages (full content extraction)
+- **Download as Markdown:** Export page content as markdown files
+- **Screenshot Integration:** Automatically attach screenshots when sending to LLM
+
+### 📋 Clipboard Tools
+
+- Copy page title
+- Copy title + URL (newline separated)
+- Copy title - URL (dash separated)
+- Copy markdown link `[Title](URL)`
+- Copy visible page screenshot
+
+### ✨ Content Enhancement
+
+- **Video Controller:** Enhanced video playback controls with keyboard shortcuts
+- **Picture-in-Picture:** Quick PiP mode for any video on the page
+- **Text Highlighting:** Persistent text highlights on web pages
+- **Bright Mode:** Force light/bright mode on any website (override dark themes)
+- **Element Blocker:** Visual element picker to permanently hide distracting page elements
+- **Custom JavaScript:** Inject custom JS code into specific websites
+- **Custom CSS:** Inject custom CSS styles into specific websites
+- **YouTube Enhancements:** Special optimizations and fixes for YouTube
+
+### 🔐 Auto Features
+
+- **Auto Google Login:** Automatically log in with your preferred Google account on specified sites
+
+### 🔧 URL Processing
+
+- **URL Processing Rules:** Transform URLs when opening in new tabs or saving to Raindrop
+- **Split URL Conversion:** Special handling for split screen URLs across sessions
+
+### ⚙️ Customization
+
+- **Theme Support:** Adapts to your system theme preferences
+- **Keyboard Shortcuts:** Comprehensive keyboard shortcuts for all major features
+- **Context Menus:** Right-click menu integration for quick actions
+- **Notifications:** Desktop notifications for background operations
+- **Debug Tools:** Built-in debugging utilities for troubleshooting
