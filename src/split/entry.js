@@ -956,7 +956,18 @@ function updatePageTitle() {
     }
   }
 
-  // Fallback to default title if no active iframe or no title available
+  // Default: comma-separated list of all iframe titles
+  const allTitles = Array.from(iframeData.values())
+    .map((data) => data.title)
+    .filter((title) => title && title.trim() !== '')
+    .map((title) => title.trim());
+
+  if (allTitles.length > 0) {
+    document.title = allTitles.join(', ');
+    return;
+  }
+
+  // Fallback to default title if no titles available
   document.title = 'Split View - Nenya';
 }
 
