@@ -266,6 +266,19 @@ const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
 const AUTO_GOOGLE_LOGIN_RULES_KEY = 'autoGoogleLoginRules';
 const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
+const VALID_PINNED_SHORTCUT_IDS = [
+  'getMarkdown',
+  'pull',
+  'saveUnsorted',
+  'importCustomCode',
+  'customFilter',
+  'splitPage',
+  'autoReload',
+  'brightMode',
+  'highlightText',
+  'customCode',
+  'pictureInPicture',
+];
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_FOLDER_ID = '1';
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -915,21 +928,8 @@ async function applyPinnedShortcuts(shortcuts) {
     return;
   }
   // Valid shortcut IDs (excluding openOptions which is always shown)
-  const validIds = [
-    'getMarkdown',
-    'pull',
-    'saveUnsorted',
-    'importCustomCode',
-    'customFilter',
-    'splitPage',
-    'autoReload',
-    'brightMode',
-    'highlightText',
-    'customCode',
-    'pictureInPicture',
-  ];
   const sanitized = shortcuts
-    .filter((id) => typeof id === 'string' && validIds.includes(id))
+    .filter((id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id))
     .slice(0, 6);
   suppressBackup('pinned-shortcuts');
   await chrome.storage.sync.set({
@@ -2157,21 +2157,8 @@ async function collectPinnedShortcuts() {
     return [];
   }
   // Valid shortcut IDs (excluding openOptions which is always shown)
-  const validIds = [
-    'getMarkdown',
-    'pull',
-    'saveUnsorted',
-    'importCustomCode',
-    'customFilter',
-    'splitPage',
-    'autoReload',
-    'brightMode',
-    'highlightText',
-    'customCode',
-    'pictureInPicture',
-  ];
   return shortcuts
-    .filter((id) => typeof id === 'string' && validIds.includes(id))
+    .filter((id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id))
     .slice(0, 6);
 }
 
@@ -3198,22 +3185,8 @@ function parsePinnedShortcutsItem(item) {
     }
 
     // Valid shortcut IDs (excluding openOptions which is always shown)
-    const validIds = [
-      'getMarkdown',
-      'pull',
-      'saveUnsorted',
-      'importCustomCode',
-      'customFilter',
-      'splitPage',
-      'autoReload',
-      'brightMode',
-      'highlightText',
-      'customCode',
-      'pictureInPicture',
-    ];
-
     const normalizedShortcuts = parsed.shortcuts
-      .filter((id) => typeof id === 'string' && validIds.includes(id))
+      .filter((id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id))
       .slice(0, 6);
 
     const payload = /** @type {PinnedShortcutsBackupPayload} */ ({
