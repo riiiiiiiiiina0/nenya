@@ -100,15 +100,16 @@
     // Combine text and value for checking
     const combinedText = (text + ' ' + valueText).trim();
 
-    // Check if text contains login-related keywords and google
+    // Check if text contains login-related keywords and google/gmail
     // Match "login", "log in", "sign in", "signin", etc.
     const loginPatterns = ['login', 'log in', 'sign in', 'signin'];
     const hasLogin = loginPatterns.some((pattern) =>
       combinedText.includes(pattern),
     );
     const hasGoogle = combinedText.includes('google');
+    const hasGmail = combinedText.includes('gmail');
 
-    if (hasLogin && hasGoogle) {
+    if (hasLogin && (hasGoogle || hasGmail)) {
       return true;
     }
 
@@ -120,21 +121,26 @@
       ariaLabel.includes(pattern),
     );
     const ariaHasGoogle = ariaLabel.includes('google');
+    const ariaHasGmail = ariaLabel.includes('gmail');
 
     const titleHasLogin = loginPatterns.some((pattern) =>
       title.includes(pattern),
     );
     const titleHasGoogle = title.includes('google');
+    const titleHasGmail = title.includes('gmail');
 
-    if ((ariaHasLogin && ariaHasGoogle) || (titleHasLogin && titleHasGoogle)) {
+    if (
+      (ariaHasLogin && (ariaHasGoogle || ariaHasGmail)) ||
+      (titleHasLogin && (titleHasGoogle || titleHasGmail))
+    ) {
       return true;
     }
 
-    // Check class names for common Google login button patterns
+    // Check class names for common Google/Gmail login button patterns
     const className = (element.className || '').toLowerCase();
     const id = (element.id || '').toLowerCase();
 
-    // Check for common class patterns like "login-with-google", "google-login", etc.
+    // Check for common class patterns like "login-with-google", "google-login", "login-with-gmail", etc.
     const googleLoginClassPatterns = [
       'login-with-google',
       'google-login',
@@ -142,19 +148,29 @@
       'signin-google',
       'btn-google',
       'google-btn',
+      'login-with-gmail',
+      'gmail-login',
+      'gmail-signin',
+      'signin-gmail',
+      'btn-gmail',
+      'gmail-btn',
     ];
 
     const hasGoogleLoginClass = googleLoginClassPatterns.some(
       (pattern) => className.includes(pattern) || id.includes(pattern),
     );
 
-    // If element has Google login class and contains "google" in text/aria/title/value, consider it
+    // If element has Google/Gmail login class and contains "google" or "gmail" in text/aria/title/value, consider it
     if (
       hasGoogleLoginClass &&
       (hasGoogle ||
+        hasGmail ||
         ariaHasGoogle ||
+        ariaHasGmail ||
         titleHasGoogle ||
-        valueText.includes('google'))
+        titleHasGmail ||
+        valueText.includes('google') ||
+        valueText.includes('gmail'))
     ) {
       return true;
     }
