@@ -1152,8 +1152,14 @@ export async function saveUrlsToUnsorted(entries) {
           }),
         });
 
+        if (!response || typeof response !== 'object' || !response.item) {
+          throw new Error(
+            'Invalid response from Raindrop API: missing item field',
+          );
+        }
+
         const itemTitle =
-          typeof response?.item?.title === 'string' ? response.item.title : '';
+          typeof response.item.title === 'string' ? response.item.title : '';
         const bookmarkTitle = normalizeBookmarkTitle(
           itemTitle || entry.title,
           entry.url,
@@ -1215,6 +1221,8 @@ export async function saveUrlsToUnsorted(entries) {
 
 /**
  * Filter entries that already exist in Raindrop.
+ * If the existence check fails (e.g., API error), we still include the entry
+ * so it can be attempted to save - the save API will handle duplicates properly.
  * @param {StoredProviderTokens} tokens
  * @param {SaveUnsortedEntry[]} entries
  * @returns {Promise<{ entries: SaveUnsortedEntry[], skipped: number, failed: number, errors: string[] }>}
@@ -1235,12 +1243,14 @@ async function filterExistingRaindropEntries(tokens, entries) {
       }
       filtered.push(entry);
     } catch (error) {
-      failed += 1;
-      errors.push(
-        entry.url +
-          ': ' +
-          (error instanceof Error ? error.message : String(error)),
+      // If existence check fails (e.g., API 500 error), we still try to save
+      // The save API will handle duplicates or other issues appropriately
+      console.warn(
+        '[mirror] Failed to check if raindrop exists, will attempt save anyway:',
+        entry.url,
+        error,
       );
+      filtered.push(entry);
     }
   }
 
@@ -1433,8 +1443,12 @@ async function raindropRequest(path, tokens, init) {
   }
 
   const data = await response.json();
-  if (data && data.result === false && data.errorMessage) {
-    throw new Error(data.errorMessage);
+  if (data && data.result === false) {
+    const errorMessage =
+      data.errorMessage ||
+      data.error ||
+      'Raindrop API returned an error result';
+    throw new Error(errorMessage);
   }
 
   return data;
