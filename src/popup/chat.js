@@ -934,9 +934,6 @@ async function handleDownload() {
     // Clean up
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
-    // Show success message
-    alert(`Page content downloaded as ${filename}`);
   } catch (error) {
     console.error('[chat] Failed to download:', error);
     alert('Failed to download page content. Please try again.');
