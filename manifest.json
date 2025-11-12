@@ -158,6 +158,9 @@
     },
     "bookmarks-rename-tab": {
       "description": "✏️ Rename tab"
+    },
+    "llm-download-markdown": {
+      "description": "📥 Download as markdown"
     }
   }
 }
