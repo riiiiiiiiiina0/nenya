@@ -926,6 +926,7 @@ async function applyPinnedShortcuts(shortcuts) {
     'brightMode',
     'highlightText',
     'customCode',
+    'pictureInPicture',
   ];
   const sanitized = shortcuts
     .filter((id) => typeof id === 'string' && validIds.includes(id))
@@ -2167,6 +2168,7 @@ async function collectPinnedShortcuts() {
     'brightMode',
     'highlightText',
     'customCode',
+    'pictureInPicture',
   ];
   return shortcuts
     .filter((id) => typeof id === 'string' && validIds.includes(id))
@@ -3207,6 +3209,7 @@ function parsePinnedShortcutsItem(item) {
       'brightMode',
       'highlightText',
       'customCode',
+      'pictureInPicture',
     ];
 
     const normalizedShortcuts = parsed.shortcuts
