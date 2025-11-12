@@ -698,21 +698,30 @@ async function restoreSplitPages() {
       return;
     }
 
-    // Check which split pages are already open
+    // Step 1: De-duplicate URLs from storage first
+    const uniqueUrls = Array.from(new Set(savedUrls));
+    if (uniqueUrls.length !== savedUrls.length) {
+      console.log(
+        `[background] De-duplicated ${savedUrls.length - uniqueUrls.length} duplicate URL(s) from storage`,
+      );
+      // Update storage with de-duplicated URLs
+      await chrome.storage.local.set({ splitPageUrls: uniqueUrls });
+    }
+
+    // Step 2: Check if there is already a tab with the same URL (any tab, not just split pages)
     const allTabs = await chrome.tabs.query({});
-    const openSplitUrls = new Set(
+    const existingUrls = new Set(
       allTabs
         .filter(
           (tab) =>
             tab.url &&
-            typeof tab.url === 'string' &&
-            tab.url.startsWith(splitBaseUrl),
+            typeof tab.url === 'string',
         )
         .map((tab) => String(tab.url)),
     );
 
     // Open split pages that aren't already open
-    const urlsToOpen = savedUrls.filter((url) => !openSplitUrls.has(url));
+    const urlsToOpen = uniqueUrls.filter((url) => !existingUrls.has(url));
     
     if (urlsToOpen.length === 0) {
       console.log('[background] All split pages are already open, skipping restoration');
