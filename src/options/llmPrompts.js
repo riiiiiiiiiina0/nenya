@@ -5,7 +5,6 @@
  * @property {string} id
  * @property {string} name
  * @property {string} prompt
- * @property {boolean} requireSearch
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -20,9 +19,6 @@ const promptNameInput = /** @type {HTMLInputElement | null} */ (
 );
 const promptTextInput = /** @type {HTMLTextAreaElement | null} */ (
   document.getElementById('llmPromptTextInput')
-);
-const promptRequireSearchInput = /** @type {HTMLInputElement | null} */ (
-  document.getElementById('llmPromptRequireSearchInput')
 );
 const promptFormError = /** @type {HTMLParagraphElement | null} */ (
   document.getElementById('llmPromptFormError')
@@ -47,9 +43,6 @@ const promptDetailName = /** @type {HTMLElement | null} */ (
 );
 const promptDetailText = /** @type {HTMLElement | null} */ (
   document.getElementById('llmPromptDetailText')
-);
-const promptDetailRequireSearch = /** @type {HTMLElement | null} */ (
-  document.getElementById('llmPromptDetailRequireSearch')
 );
 const promptDetailCreated = /** @type {HTMLElement | null} */ (
   document.getElementById('llmPromptDetailCreated')
@@ -167,7 +160,6 @@ async function savePrompts(prompts) {
 function clearForm() {
   if (promptNameInput) promptNameInput.value = '';
   if (promptTextInput) promptTextInput.value = '';
-  if (promptRequireSearchInput) promptRequireSearchInput.checked = false;
   if (promptFormError) {
     promptFormError.textContent = '';
     promptFormError.hidden = true;
@@ -213,15 +205,7 @@ function renderPromptListItem(prompt) {
   name.className = 'font-medium text-base-content';
   name.textContent = prompt.name;
 
-  if (prompt.requireSearch) {
-    const badge = document.createElement('span');
-    badge.className = 'badge badge-sm badge-primary';
-    badge.textContent = 'Requires search';
-    header.appendChild(name);
-    header.appendChild(badge);
-  } else {
-    header.appendChild(name);
-  }
+  header.appendChild(name);
 
   const preview = document.createElement('div');
   preview.className = 'text-sm text-base-content/70 mt-1 truncate';
@@ -287,10 +271,6 @@ async function selectPrompt(promptId) {
   if (promptDetailName) promptDetailName.textContent = prompt.name;
   if (promptDetailText) promptDetailText.textContent = prompt.prompt;
 
-  if (promptDetailRequireSearch) {
-    promptDetailRequireSearch.textContent = prompt.requireSearch ? 'Yes' : 'No';
-  }
-
   if (promptDetailCreated) {
     promptDetailCreated.textContent = formatTimestamp(prompt.createdAt);
   }
@@ -307,13 +287,12 @@ async function selectPrompt(promptId) {
 async function handleFormSubmit(event) {
   event.preventDefault();
 
-  if (!promptNameInput || !promptTextInput || !promptRequireSearchInput) {
+  if (!promptNameInput || !promptTextInput) {
     return;
   }
 
   const name = promptNameInput.value.trim();
   const text = promptTextInput.value.trim();
-  const requireSearch = promptRequireSearchInput.checked;
 
   if (!name) {
     showFormError('Please enter a name for the prompt.');
@@ -336,7 +315,6 @@ async function handleFormSubmit(event) {
         ...prompts[index],
         name,
         prompt: text,
-        requireSearch,
         updatedAt: now,
       };
       await savePrompts(prompts);
@@ -349,7 +327,6 @@ async function handleFormSubmit(event) {
       id: generatePromptId(),
       name,
       prompt: text,
-      requireSearch,
       createdAt: now,
       updatedAt: now,
     };
@@ -385,8 +362,6 @@ async function handleEditClick() {
   currentlyEditingPromptId = prompt.id;
   if (promptNameInput) promptNameInput.value = prompt.name;
   if (promptTextInput) promptTextInput.value = prompt.prompt;
-  if (promptRequireSearchInput)
-    promptRequireSearchInput.checked = prompt.requireSearch;
 
   if (promptSaveButton) promptSaveButton.textContent = 'Update prompt';
   if (promptCancelEditButton) promptCancelEditButton.hidden = false;
@@ -501,9 +476,6 @@ async function initLLMPrompts() {
             if (promptDetails) promptDetails.hidden = false;
             if (promptDetailName) promptDetailName.textContent = prompt.name;
             if (promptDetailText) promptDetailText.textContent = prompt.prompt;
-            if (promptDetailRequireSearch) {
-              promptDetailRequireSearch.textContent = prompt.requireSearch ? 'Yes' : 'No';
-            }
             if (promptDetailCreated) {
               promptDetailCreated.textContent = formatTimestamp(prompt.createdAt);
             }

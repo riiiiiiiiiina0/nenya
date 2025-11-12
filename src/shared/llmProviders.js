@@ -16,11 +16,6 @@
  * @type {Record<string, LLMProviderMeta>}
  */
 export const LLM_PROVIDER_META = {
-  chatgpt: {
-    name: 'ChatGPT',
-    url: 'https://chatgpt.com',
-    sendButtonSelector: 'button[data-testid="send-button"]:not([disabled])',
-  },
   'chatgpt-search': {
     name: 'ChatGPT with Search',
     url: 'https://chatgpt.com?hints=search',
@@ -71,10 +66,8 @@ export function getLLMProviderFromURL(url) {
     url.startsWith('https://chatgpt.com') ||
     url.startsWith('https://chat.openai.com')
   ) {
-    if (url.includes('hints=search')) {
-      return 'chatgpt-search';
-    }
-    return 'chatgpt';
+    // Always return chatgpt-search for ChatGPT URLs
+    return 'chatgpt-search';
   }
 
   if (url.startsWith('https://gemini.google.com')) {

@@ -835,10 +835,6 @@
                 Enter the prompt text that will be used with the LLM.
               </span>
             </label>
-            <label class="flex items-center gap-3 rounded-lg border border-base-200 bg-base-200 px-3 py-2">
-              <input id="llmPromptRequireSearchInput" class="checkbox checkbox-sm" type="checkbox">
-              <span class="text-sm text-base-content">Require search (use for prompts that need web search)</span>
-            </label>
             <p id="llmPromptFormError" class="text-sm text-error" hidden></p>
             <div class="flex flex-wrap gap-3">
               <button id="llmPromptSaveButton" class="btn btn-primary" type="submit">
@@ -870,10 +866,6 @@
               <div class="flex flex-col gap-1">
                 <dt class="text-base-content/70 uppercase tracking-wide text-xs">Prompt</dt>
                 <dd id="llmPromptDetailText" class="text-base-content whitespace-pre-wrap"></dd>
-              </div>
-              <div class="flex flex-col gap-1">
-                <dt class="text-base-content/70 uppercase tracking-wide text-xs">Require search</dt>
-                <dd id="llmPromptDetailRequireSearch" class="text-base-content"></dd>
               </div>
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="flex flex-col gap-1">

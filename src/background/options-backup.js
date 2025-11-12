@@ -178,7 +178,6 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {string} id
  * @property {string} name
  * @property {string} prompt
- * @property {boolean} requireSearch
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -1730,7 +1729,7 @@ function normalizeLLMPrompts(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, requireSearch?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
 
@@ -1744,9 +1743,6 @@ function normalizeLLMPrompts(value) {
         return;
       }
 
-      const requireSearch =
-        typeof raw.requireSearch === 'boolean' ? raw.requireSearch : false;
-
       let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
       if (!id) {
         id = generateRuleId();
@@ -1758,7 +1754,6 @@ function normalizeLLMPrompts(value) {
         id,
         name,
         prompt,
-        requireSearch,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:

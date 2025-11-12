@@ -125,17 +125,6 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  * @property {string} id
  * @property {string} name
  * @property {string} prompt
- * @property {boolean} requireSearch
- * @property {string} [createdAt]
- * @property {string} [updatedAt]
- */
-
-/**
- * @typedef {Object} LLMPromptSettings
- * @property {string} id
- * @property {string} name
- * @property {string} prompt
- * @property {boolean} requireSearch
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -702,7 +691,7 @@ function normalizeLLMPrompts(value) {
       return;
     }
     const raw =
-      /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, requireSearch?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+      /** @type {{ id?: unknown, name?: unknown, prompt?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
         entry
       );
 
@@ -716,9 +705,6 @@ function normalizeLLMPrompts(value) {
       return;
     }
 
-    const requireSearch =
-      typeof raw.requireSearch === 'boolean' ? raw.requireSearch : false;
-
     const id =
       typeof raw.id === 'string' && raw.id.trim()
         ? raw.id.trim()
@@ -729,7 +715,6 @@ function normalizeLLMPrompts(value) {
       id,
       name,
       prompt,
-      requireSearch,
     };
 
     if (typeof raw.createdAt === 'string') {

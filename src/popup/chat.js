@@ -41,40 +41,29 @@ const tabCountSpan = /** @type {HTMLSpanElement | null} */ (
  * @typedef {Object} LLMProvider
  * @property {string} id
  * @property {string} name
- * @property {boolean} supportsSearch
  * @property {string} url
  */
 
 /** @type {LLMProvider[]} */
 const LLM_PROVIDERS = [
   {
-    id: 'chatgpt',
-    name: 'ChatGPT',
-    supportsSearch: false,
-    url: 'https://chat.openai.com',
-  },
-  {
     id: 'chatgpt-search',
-    name: 'ChatGPT with search',
-    supportsSearch: true,
+    name: 'ChatGPT',
     url: 'https://chat.openai.com',
   },
   {
     id: 'gemini',
     name: 'Gemini',
-    supportsSearch: true,
     url: 'https://gemini.google.com',
   },
   {
     id: 'claude',
     name: 'Claude',
-    supportsSearch: true,
     url: 'https://claude.ai',
   },
   {
     id: 'perplexity',
     name: 'Perplexity',
-    supportsSearch: true,
     url: 'https://www.perplexity.ai',
   },
 ];
@@ -90,7 +79,9 @@ function getProviderIconHtml(provider) {
   // Extract domain from URL (e.g., "https://chat.openai.com" -> "chat.openai.com")
   const urlObj = new URL(provider.url);
   const domain = urlObj.hostname;
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+    domain,
+  )}&sz=32`;
   return `<img src="${faviconUrl}" alt="${provider.name}" class="provider-icon" style="width: 16px; height: 16px; vertical-align: middle; margin-right: 4px;" />`;
 }
 
@@ -102,9 +93,6 @@ let targetTabs = [];
 
 /** @type {string | null} */
 let currentSelectedPromptId = null;
-
-/** @type {boolean} */
-let currentPromptRequiresSearch = false;
 
 let activeDropdownIndex = -1;
 
@@ -139,14 +127,14 @@ async function loadSelectedProviders() {
     if (Array.isArray(saved) && saved.length > 0) {
       selectedProviders = new Set(saved);
     } else {
-      // Default to ChatGPT if no providers are saved
-      selectedProviders = new Set(['chatgpt']);
+      // Default to ChatGPT with search if no providers are saved
+      selectedProviders = new Set(['chatgpt-search']);
       await saveSelectedProviders();
     }
   } catch (error) {
     console.error('[chat] Failed to load selected providers:', error);
-    // Default to ChatGPT on error
-    selectedProviders = new Set(['chatgpt']);
+    // Default to ChatGPT with search on error
+    selectedProviders = new Set(['chatgpt-search']);
   }
 }
 
@@ -193,7 +181,9 @@ function updateSelectedProvidersDisplay() {
     const badge = document.createElement('div');
     badge.className = 'llm-provider-badge';
     badge.style.cursor = 'pointer';
-    badge.innerHTML = `${getProviderIconHtml(provider)}<span>${provider.name}</span>`;
+    badge.innerHTML = `${getProviderIconHtml(provider)}<span>${
+      provider.name
+    }</span>`;
 
     // Add click handler to show dropdown when clicking on badge
     badge.addEventListener('click', (event) => {
@@ -332,13 +322,6 @@ async function showPromptsDropdown(searchQuery = '') {
       item.appendChild(nameSpan);
       item.appendChild(previewSpan);
 
-      if (prompt.requireSearch) {
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-xs badge-primary mt-1';
-        badge.textContent = 'Requires search';
-        item.appendChild(badge);
-      }
-
       item.addEventListener('click', () => {
         selectPrompt(prompt);
       });
@@ -380,10 +363,8 @@ function showProvidersDropdown(referenceElement, searchQuery = '') {
 
   providersDropdown.innerHTML = '';
 
-  // Filter providers based on whether current prompt requires search
-  let availableProviders = currentPromptRequiresSearch
-    ? LLM_PROVIDERS.filter((p) => p.supportsSearch)
-    : LLM_PROVIDERS;
+  // All providers are available
+  let availableProviders = LLM_PROVIDERS;
 
   // Filter providers based on search query
   const query = searchQuery.toLowerCase().trim();
@@ -414,13 +395,6 @@ function showProvidersDropdown(referenceElement, searchQuery = '') {
         item.innerHTML = `● ${providerIconHtml} ${provider.name}`;
       } else {
         item.innerHTML = `○ ${providerIconHtml} ${provider.name}`;
-      }
-
-      // Disable ChatGPT if prompt requires search
-      if (currentPromptRequiresSearch && provider.id === 'chatgpt') {
-        item.classList.add('opacity-50', 'cursor-not-allowed');
-        item.innerHTML = `○ ${providerIconHtml} ${provider.name} (disabled - prompt requires search)`;
-        return;
       }
 
       item.addEventListener('click', () => {
@@ -509,14 +483,6 @@ function selectPrompt(prompt) {
   }
 
   currentSelectedPromptId = prompt.id;
-  currentPromptRequiresSearch = prompt.requireSearch || false;
-
-  // Remove ChatGPT from selection if prompt requires search
-  if (currentPromptRequiresSearch && selectedProviders.has('chatgpt')) {
-    selectedProviders.delete('chatgpt');
-    updateSelectedProvidersDisplay();
-    void saveSelectedProviders();
-  }
 
   hideAllDropdowns();
   promptTextarea.focus();
@@ -529,11 +495,6 @@ function selectPrompt(prompt) {
  */
 function toggleProvider(providerId) {
   if (!promptTextarea) return;
-
-  // Don't allow ChatGPT if prompt requires search
-  if (currentPromptRequiresSearch && providerId === 'chatgpt') {
-    return;
-  }
 
   // Get the old provider ID before changing
   const oldProviderId =
@@ -577,11 +538,6 @@ function toggleProvider(providerId) {
  * @returns {void}
  */
 function toggleProviderFromButton(providerId) {
-  // Don't allow ChatGPT if prompt requires search
-  if (currentPromptRequiresSearch && providerId === 'chatgpt') {
-    return;
-  }
-
   // Get the old provider ID before changing
   const oldProviderId =
     selectedProviders.size > 0 ? Array.from(selectedProviders)[0] : null;
@@ -684,7 +640,9 @@ function handleDropdownKeyboard(event, dropdown) {
 async function getChatPageTabId() {
   try {
     // Generate a unique session ID for this chat session
-    sessionId = `chat-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    sessionId = `chat-${Date.now()}-${Math.random()
+      .toString(36)
+      .substring(2, 9)}`;
 
     // Try to get tab ID if this is opened as a tab (not popup)
     const response = await chrome.runtime.sendMessage({
@@ -828,8 +786,13 @@ async function handleSend() {
   sendButton.classList.add('loading');
 
   try {
-    console.log('[chat] Sending to LLM, llmTabsOpened:', llmTabsOpened, 'sessionId:', sessionId);
-    
+    console.log(
+      '[chat] Sending to LLM, llmTabsOpened:',
+      llmTabsOpened,
+      'sessionId:',
+      sessionId,
+    );
+
     // Send message to background script to collect content and inject into LLM pages
     const response = await chrome.runtime.sendMessage({
       type: 'collect-and-send-to-llm',
@@ -841,7 +804,7 @@ async function handleSend() {
       sessionId: sessionId,
       useReuseTabs: llmTabsOpened,
     });
-    
+
     console.log('[chat] Send response:', response);
 
     if (!response?.success) {
