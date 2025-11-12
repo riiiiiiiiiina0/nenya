@@ -121,6 +121,162 @@ function createControlButton({ icon, title, className = '', onClick }) {
 }
 
 /**
+ * Show a dialog to ask user for a URL and navigate the iframe to it
+ * @param {HTMLIFrameElement} iframe - The iframe to navigate
+ * @returns {Promise<void>}
+ */
+function showOpenUrlDialog(iframe) {
+  return new Promise((resolve) => {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className =
+      'fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] flex items-center justify-center';
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+
+    // Create dialog container
+    const dialog = document.createElement('div');
+    dialog.className =
+      'bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-md w-full p-6';
+    dialog.style.maxWidth = '500px';
+
+    // Title
+    const title = document.createElement('h3');
+    title.className =
+      'text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4';
+    title.textContent = 'Open URL';
+
+    // Input field
+    const inputWrapper = document.createElement('div');
+    inputWrapper.className = 'mb-4';
+    const input = document.createElement('input');
+    input.type = 'url';
+    input.className =
+      'input input-bordered w-full text-gray-900 dark:text-gray-100 dark:bg-gray-700 dark:border-gray-600';
+    input.placeholder = 'https://example.com';
+    input.autofocus = true;
+
+    // Get current URL as default value
+    const data = iframeData.get(iframe.name);
+    const currentUrl = data ? data.url : iframe.src;
+    if (currentUrl && currentUrl !== 'about:blank') {
+      input.value = currentUrl;
+    }
+
+    inputWrapper.appendChild(input);
+
+    // Button row
+    const buttonRow = document.createElement('div');
+    buttonRow.className = 'flex gap-2 justify-end';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className =
+      'btn btn-sm btn-ghost text-gray-700 dark:text-gray-300';
+    cancelBtn.textContent = 'Cancel';
+
+    const goBtn = document.createElement('button');
+    goBtn.className = 'btn btn-sm btn-primary';
+    goBtn.textContent = 'Go';
+
+    buttonRow.appendChild(cancelBtn);
+    buttonRow.appendChild(goBtn);
+
+    // Assemble dialog
+    dialog.appendChild(title);
+    dialog.appendChild(inputWrapper);
+    dialog.appendChild(buttonRow);
+    overlay.appendChild(dialog);
+
+    // Handle Go button click
+    const handleGo = () => {
+      const url = input.value.trim();
+      if (url) {
+        // Validate and normalize URL
+        let normalizedUrl = url;
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          normalizedUrl = 'https://' + url;
+        }
+
+        try {
+          // Validate URL
+          new URL(normalizedUrl);
+
+          // Navigate iframe
+          const iframeName = iframe.name;
+          const data = iframeData.get(iframeName);
+          if (data) {
+            data.loaded = false;
+          }
+          clearIframeLoadTimeout(iframeName);
+          iframe.src = normalizedUrl;
+
+          // Close dialog
+          overlay.remove();
+          resolve();
+        } catch (e) {
+          // Invalid URL, show error
+          input.classList.add('input-error');
+          input.placeholder = 'Please enter a valid URL';
+          input.value = '';
+          setTimeout(() => {
+            input.classList.remove('input-error');
+            input.placeholder = 'https://example.com';
+          }, 2000);
+        }
+      }
+    };
+
+    // Handle Enter key
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleGo();
+      }
+    });
+
+    goBtn.addEventListener('click', handleGo);
+
+    // Handle Cancel button
+    cancelBtn.addEventListener('click', () => {
+      overlay.remove();
+      resolve();
+    });
+
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        overlay.remove();
+        resolve();
+      }
+    });
+
+    // Close on Escape key
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        overlay.remove();
+        document.removeEventListener('keydown', handleEscape);
+        resolve();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Add to DOM
+    document.body.appendChild(overlay);
+
+    // Auto-focus and select text after dialog is rendered
+    setTimeout(() => {
+      input.focus();
+      if (input.value) {
+        input.select();
+      }
+    }, 0);
+  });
+}
+
+/**
  * Get the current theme based on system preference
  * @returns {'light' | 'dark'}
  */
@@ -417,6 +573,15 @@ if (!iframeContainer) {
       },
     });
 
+    const openUrlButton = createControlButton({
+      icon: icons.link,
+      title: 'Open URL',
+      onClick: async (e) => {
+        e.stopPropagation();
+        await showOpenUrlDialog(iframe);
+      },
+    });
+
     const restoreButton = createControlButton({
       icon: icons.arrowTopRight,
       title: 'Restore as browser tab',
@@ -456,6 +621,7 @@ if (!iframeContainer) {
     buttonsWrapper.appendChild(moveRightButton.tooltip);
     buttonsWrapper.appendChild(layoutToggleButton.tooltip);
     buttonsWrapper.appendChild(reloadButton.tooltip);
+    buttonsWrapper.appendChild(openUrlButton.tooltip);
     buttonsWrapper.appendChild(restoreButton.tooltip);
     buttonsWrapper.appendChild(deleteButton.tooltip);
 
@@ -978,7 +1144,7 @@ async function saveSplitPageUrl() {
   try {
     const currentUrl = window.location.href;
     const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
-    
+
     // Only save if this is a split page
     if (!currentUrl.startsWith(splitBaseUrl)) {
       return;
@@ -1011,7 +1177,7 @@ async function removeSplitPageUrl() {
   try {
     const currentUrl = window.location.href;
     const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
-    
+
     // Only remove if this is a split page
     if (!currentUrl.startsWith(splitBaseUrl)) {
       return;
@@ -1097,7 +1263,7 @@ function updateUrlStateParameter() {
   )}`;
 
   window.history.replaceState(null, '', newUrl);
-  
+
   // Save the updated URL to storage
   void saveSplitPageUrl();
 }
@@ -1529,8 +1695,8 @@ function insertIframeAtEdge(position, tab) {
   } else {
     // Insert at the end
     // Only consider iframe-wrapper elements, not other elements like the embedded picker
-    const wrapperElements = Array.from(iframeContainer.children).filter(
-      (el) => el.classList.contains('iframe-wrapper'),
+    const wrapperElements = Array.from(iframeContainer.children).filter((el) =>
+      el.classList.contains('iframe-wrapper'),
     );
     const maxOrder = Math.max(
       ...wrapperElements.map((el) =>
@@ -1684,6 +1850,15 @@ function createIframeWrapper(url, order) {
     },
   });
 
+  const openUrlButton = createControlButton({
+    icon: icons.link,
+    title: 'Open URL',
+    onClick: async (e) => {
+      e.stopPropagation();
+      await showOpenUrlDialog(iframe);
+    },
+  });
+
   const restoreButton = createControlButton({
     icon: icons.arrowTopRight,
     title: 'Restore as browser tab',
@@ -1720,6 +1895,7 @@ function createIframeWrapper(url, order) {
   buttonsWrapper.appendChild(moveRightButton.tooltip);
   buttonsWrapper.appendChild(layoutToggleButton.tooltip);
   buttonsWrapper.appendChild(reloadButton.tooltip);
+  buttonsWrapper.appendChild(openUrlButton.tooltip);
   buttonsWrapper.appendChild(restoreButton.tooltip);
   buttonsWrapper.appendChild(deleteButton.tooltip);
 
