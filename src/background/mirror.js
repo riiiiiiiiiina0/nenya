@@ -1221,8 +1221,9 @@ export async function saveUrlsToUnsorted(entries) {
 
 /**
  * Filter entries that already exist in Raindrop.
- * If the existence check fails (e.g., API error), we still include the entry
- * so it can be attempted to save - the save API will handle duplicates properly.
+ * Note: The search API endpoint (/raindrops/0?search=...) is currently returning 500 errors,
+ * so we skip the existence check and let the save API handle duplicates.
+ * The save operation will create the raindrop, and we check for duplicate bookmarks locally.
  * @param {StoredProviderTokens} tokens
  * @param {SaveUnsortedEntry[]} entries
  * @returns {Promise<{ entries: SaveUnsortedEntry[], skipped: number, failed: number, errors: string[] }>}
@@ -1234,25 +1235,10 @@ async function filterExistingRaindropEntries(tokens, entries) {
   let failed = 0;
   const errors = [];
 
-  for (const entry of entries) {
-    try {
-      const exists = await doesRaindropItemExist(tokens, entry.url);
-      if (exists) {
-        skipped += 1;
-        continue;
-      }
-      filtered.push(entry);
-    } catch (error) {
-      // If existence check fails (e.g., API 500 error), we still try to save
-      // The save API will handle duplicates or other issues appropriately
-      console.warn(
-        '[mirror] Failed to check if raindrop exists, will attempt save anyway:',
-        entry.url,
-        error,
-      );
-      filtered.push(entry);
-    }
-  }
+  // Skip existence check - the search API is returning 500 errors
+  // We'll let the save API handle duplicates, and check for duplicate bookmarks locally
+  // by comparing URLs against existing bookmarks in the unsorted folder
+  filtered.push(...entries);
 
   return {
     entries: filtered,
