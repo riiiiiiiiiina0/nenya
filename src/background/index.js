@@ -739,7 +739,7 @@ async function restoreSplitPages() {
           continue;
         }
 
-        await chrome.tabs.create({ url });
+        await chrome.tabs.create({ url, active: false });
         console.log('[background] Restored split page:', url);
       } catch (error) {
         console.warn(
