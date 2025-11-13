@@ -138,4 +138,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
-.DS_Storejles-scratch/
+.DS_Store
+jules-scratch/
+jles-scratch/
