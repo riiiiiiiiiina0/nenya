@@ -293,7 +293,6 @@ const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const DARK_MODE_RULES_KEY = 'darkModeRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
-const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
@@ -1460,14 +1459,10 @@ async function applyBrightModeSettings(settings) {
   const { patterns: sanitizedWhitelist } = normalizeBrightModePatterns(
     settings.whitelist || [],
   );
-  const { patterns: sanitizedBlacklist } = normalizeBrightModePatterns(
-    settings.blacklist || [],
-  );
 
   suppressBackup('bright-mode-settings');
   await chrome.storage.sync.set({
     [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
-    [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
   });
 }
 
@@ -1785,14 +1780,12 @@ async function buildAutoReloadRulesPayload(trigger) {
  * @returns {Promise<BrightModeSettingsBackupPayload>}
  */
 async function buildBrightModeSettingsPayload(trigger) {
-  const [whitelistPatterns, blacklistPatterns] = await Promise.all([
+  const [whitelistPatterns] = await Promise.all([
     collectBrightModePatterns(BRIGHT_MODE_WHITELIST_KEY),
-    collectBrightModePatterns(BRIGHT_MODE_BLACKLIST_KEY),
   ]);
 
   const settings = {
     whitelist: whitelistPatterns,
-    blacklist: blacklistPatterns,
   };
 
   const metadata = await buildMetadata(trigger);
@@ -2868,15 +2861,11 @@ function parseBrightModeSettingsItem(item) {
     const normalizedWhitelist = normalizeBrightModePatterns(
       settings.whitelist || [],
     ).patterns;
-    const normalizedBlacklist = normalizeBrightModePatterns(
-      settings.blacklist || [],
-    ).patterns;
 
     const payload = /** @type {BrightModeSettingsBackupPayload} */ ({
       kind: 'bright-mode-settings',
       settings: {
         whitelist: normalizedWhitelist,
-        blacklist: normalizedBlacklist,
       },
       metadata: {
         version: Number.isFinite(parsed?.metadata?.version)
@@ -4081,8 +4070,7 @@ function handleStorageChanges(changes, areaName) {
       queueCategoryBackup('dark-mode-rules', 'storage');
     }
     if (
-      BRIGHT_MODE_WHITELIST_KEY in changes ||
-      BRIGHT_MODE_BLACKLIST_KEY in changes
+      BRIGHT_MODE_WHITELIST_KEY in changes
     ) {
       queueCategoryBackup('bright-mode-settings', 'storage');
     }
@@ -4275,7 +4263,6 @@ export async function resetOptionsToDefaults() {
       [AUTO_RELOAD_RULES_KEY]: [],
       [DARK_MODE_RULES_KEY]: [],
       [BRIGHT_MODE_WHITELIST_KEY]: [],
-      [BRIGHT_MODE_BLACKLIST_KEY]: [],
       [HIGHLIGHT_TEXT_RULES_KEY]: [],
       [BLOCK_ELEMENT_RULES_KEY]: [],
       [LLM_PROMPTS_KEY]: [],

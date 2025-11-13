@@ -11,7 +11,6 @@
 
 
 const WHITELIST_STORAGE_KEY = 'brightModeWhitelist';
-const BLACKLIST_STORAGE_KEY = 'brightModeBlacklist';
 
 // Whitelist elements
 const whitelistForm = /** @type {HTMLFormElement | null} */ (
@@ -36,29 +35,6 @@ const whitelistListElement = /** @type {HTMLDivElement | null} */ (
   document.getElementById('brightModeWhitelistList')
 );
 
-// Blacklist elements
-const blacklistForm = /** @type {HTMLFormElement | null} */ (
-  document.getElementById('brightModeBlacklistForm')
-);
-const blacklistPatternInput = /** @type {HTMLInputElement | null} */ (
-  document.getElementById('brightModeBlacklistPatternInput')
-);
-const blacklistSaveButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('brightModeBlacklistSaveButton')
-);
-const blacklistCancelButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('brightModeBlacklistCancelEditButton')
-);
-const blacklistFormError = /** @type {HTMLParagraphElement | null} */ (
-  document.getElementById('brightModeBlacklistFormError')
-);
-const blacklistEmptyState = /** @type {HTMLDivElement | null} */ (
-  document.getElementById('brightModeBlacklistEmpty')
-);
-const blacklistListElement = /** @type {HTMLDivElement | null} */ (
-  document.getElementById('brightModeBlacklistList')
-);
-
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
   timeStyle: 'short',
@@ -66,10 +42,7 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 
 /** @type {BrightModePattern[]} */
 let whitelistPatterns = [];
-/** @type {BrightModePattern[]} */
-let blacklistPatterns = [];
 let editingWhitelistId = '';
-let editingBlacklistId = '';
 let syncing = false;
 
 /**
@@ -245,18 +218,6 @@ function resetForm(type) {
       whitelistCancelButton.hidden = true;
     }
     showFormError(whitelistFormError, '');
-  } else {
-    editingBlacklistId = '';
-    if (blacklistForm) {
-      blacklistForm.reset();
-    }
-    if (blacklistSaveButton) {
-      blacklistSaveButton.textContent = '➕';
-    }
-    if (blacklistCancelButton) {
-      blacklistCancelButton.hidden = true;
-    }
-    showFormError(blacklistFormError, '');
   }
 }
 
@@ -410,9 +371,6 @@ function renderList(patterns, listElement, emptyState, type) {
       if (type === 'whitelist') {
         void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
         renderWhitelist();
-      } else {
-        void savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY);
-        renderBlacklist();
       }
     });
     toggleLabel.appendChild(toggle);
@@ -434,19 +392,6 @@ function renderWhitelist() {
     whitelistListElement,
     whitelistEmptyState,
     'whitelist',
-  );
-}
-
-/**
- * Render blacklist patterns.
- * @returns {void}
- */
-function renderBlacklist() {
-  renderList(
-    blacklistPatterns,
-    blacklistListElement,
-    blacklistEmptyState,
-    'blacklist',
   );
 }
 
@@ -513,33 +458,6 @@ function handleFormSubmit(event, type) {
     resetForm('whitelist');
     void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
     renderWhitelist();
-  } else {
-    if (editingId) {
-      const existing = findPattern(blacklistPatterns, editingId);
-      if (!existing) {
-        showFormError(formError, 'Selected pattern no longer exists.');
-        resetForm('blacklist');
-        return;
-      }
-      existing.pattern = pattern;
-      existing.updatedAt = now;
-      if (!existing.createdAt) {
-        existing.createdAt = now;
-      }
-    } else {
-      const patternObj = {
-        id: generatePatternId(),
-        pattern,
-        createdAt: now,
-        updatedAt: now,
-      };
-      blacklistPatterns.push(patternObj);
-    }
-    blacklistPatterns = sortPatterns(blacklistPatterns);
-    showFormError(formError, '');
-    resetForm('blacklist');
-    void savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY);
-    renderBlacklist();
   }
 }
 
@@ -569,18 +487,6 @@ function init() {
     );
   }
 
-  // Blacklist form
-  if (blacklistForm) {
-    blacklistForm.addEventListener('submit', (event) =>
-      handleFormSubmit(event, 'blacklist'),
-    );
-  }
-  if (blacklistCancelButton) {
-    blacklistCancelButton.addEventListener('click', () =>
-      handleCancelEdit('blacklist'),
-    );
-  }
-
   // Storage change listener
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -607,21 +513,6 @@ function init() {
         renderWhitelist();
       }
 
-      if (
-        Object.prototype.hasOwnProperty.call(changes, BLACKLIST_STORAGE_KEY)
-      ) {
-        const { patterns: sanitized } = normalizePatterns(
-          changes[BLACKLIST_STORAGE_KEY]?.newValue,
-        );
-        blacklistPatterns = sanitized;
-        if (
-          editingBlacklistId &&
-          !findPattern(blacklistPatterns, editingBlacklistId)
-        ) {
-          resetForm('blacklist');
-        }
-        renderBlacklist();
-      }
     });
   }
 
@@ -629,10 +520,6 @@ function init() {
   void loadPatterns(WHITELIST_STORAGE_KEY).then((patterns) => {
     whitelistPatterns = patterns;
     renderWhitelist();
-  });
-  void loadPatterns(BLACKLIST_STORAGE_KEY).then((patterns) => {
-    blacklistPatterns = patterns;
-    renderBlacklist();
   });
 
   // Check for prefilled URL from popup
@@ -700,33 +587,20 @@ export function getWhitelistPatterns() {
 }
 
 /**
- * Get current blacklist patterns for export.
- * @returns {BrightModePattern[]}
- */
-export function getBlacklistPatterns() {
-  return [...blacklistPatterns];
-}
-
-/**
  * Set patterns from import.
  * @param {BrightModePattern[]} whitelist
- * @param {BrightModePattern[]} blacklist
  * @returns {Promise<void>}
  */
-export async function setPatterns(whitelist, blacklist) {
+export async function setPatterns(whitelist) {
   const { patterns: normalizedWhitelist } = normalizePatterns(whitelist);
-  const { patterns: normalizedBlacklist } = normalizePatterns(blacklist);
 
   whitelistPatterns = normalizedWhitelist;
-  blacklistPatterns = normalizedBlacklist;
 
   await Promise.all([
     savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY),
-    savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY),
   ]);
 
   renderWhitelist();
-  renderBlacklist();
 }
 
 export function isValidUrlPattern(pattern) {
