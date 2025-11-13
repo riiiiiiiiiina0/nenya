@@ -154,6 +154,22 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} DarkModeRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {boolean} enabled
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
+ * @typedef {Object} DarkModeRulesBackupPayload
+ * @property {'dark-mode-rules'} kind
+ * @property {DarkModeRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
  * @typedef {Object} HighlightTextRulesBackupPayload
  * @property {'highlight-text-rules'} kind
  * @property {HighlightTextRuleSettings[]} rules
@@ -275,6 +291,7 @@ const AUTO_NOTIFICATION_COOLDOWN_MS = 15 * 60 * 1000;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
+const DARK_MODE_RULES_KEY = 'darkModeRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
@@ -340,6 +357,7 @@ const CATEGORY_IDS = [
   'auth-provider-settings',
   'notification-preferences',
   'auto-reload-rules',
+  'dark-mode-rules',
   'bright-mode-settings',
   'highlight-text-rules',
   'block-element-rules',
@@ -1105,6 +1123,99 @@ async function applyAutoReloadRules(rules) {
 }
 
 /**
+ * Normalize dark mode rules.
+ * @param {unknown} value
+ * @returns {{ rules: DarkModeRuleSettings[], mutated: boolean }}
+ */
+function normalizeDarkModeRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, enabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!pattern) {
+        return;
+      }
+
+      try {
+        new URLPattern(pattern);
+      } catch (error) {
+        console.warn(
+          '[options-backup] Ignoring invalid dark mode pattern:',
+          pattern,
+          error,
+        );
+        return;
+      }
+
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {DarkModeRuleSettings} */
+      const rule = {
+        id,
+        pattern,
+        enabled: !!raw.enabled,
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+      sanitized.push(rule);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+  if (!mutated && sanitized.length !== originalLength) {
+    mutated = true;
+  }
+  return { rules: sorted, mutated };
+}
+
+/**
+ * Collect dark mode rules from storage.
+ * @returns {Promise<DarkModeRuleSettings[]>}
+ */
+async function collectDarkModeRules() {
+    const result = await chrome.storage.sync.get(DARK_MODE_RULES_KEY);
+    const { rules: sanitized, mutated } = normalizeDarkModeRules(
+        result?.[DARK_MODE_RULES_KEY],
+    );
+    if (mutated) {
+        suppressBackup('dark-mode-rules');
+        await chrome.storage.sync.set({
+        [DARK_MODE_RULES_KEY]: sanitized,
+        });
+    }
+    return sanitized;
+}
+
+/**
+ * Apply dark mode rules to storage.
+ * @param {DarkModeRuleSettings[]} rules
+ * @returns {Promise<void>}
+ */
+async function applyDarkModeRules(rules) {
+    const { rules: sanitized } = normalizeDarkModeRules(rules);
+    suppressBackup('dark-mode-rules');
+    await chrome.storage.sync.set({
+        [DARK_MODE_RULES_KEY]: sanitized,
+    });
+}
+
+/**
  * Normalize bright mode patterns from storage or input.
  * @param {unknown} value
  * @returns {{ patterns: BrightModePatternSettings[], mutated: boolean }}
@@ -1621,6 +1732,21 @@ async function buildAuthProviderPayload(trigger) {
     },
     metadata,
   };
+}
+
+/**
+ * Build the dark mode rules payload for backup.
+ * @param {string} trigger
+ * @returns {Promise<DarkModeRulesBackupPayload>}
+ */
+async function buildDarkModeRulesPayload(trigger) {
+    const rules = await collectDarkModeRules();
+    const metadata = await buildMetadata(trigger);
+    return {
+        kind: 'dark-mode-rules',
+        rules,
+        metadata,
+    };
 }
 
 /**
@@ -2466,6 +2592,66 @@ async function restoreCategoryFromChunks(
 }
 
 /**
+ * Attempt to parse dark mode rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: DarkModeRulesBackupPayload | null, lastModified: number }}
+ */
+function parseDarkModeRulesItem(item) {
+    const note = typeof item?.note === 'string' ? item.note : '';
+    if (!note) {
+        return { payload: null, lastModified: 0 };
+    }
+
+    try {
+        const parsed = JSON.parse(note);
+        if (!parsed || typeof parsed !== 'object') {
+        return { payload: null, lastModified: 0 };
+        }
+
+        const normalizedRules = normalizeDarkModeRules(parsed?.rules).rules;
+
+        const payload = /** @type {DarkModeRulesBackupPayload} */ ({
+        kind: 'dark-mode-rules',
+        rules: normalizedRules,
+        metadata: {
+            version: Number.isFinite(parsed?.metadata?.version)
+            ? Number(parsed.metadata.version)
+            : STATE_VERSION,
+            lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+            ? Number(parsed.metadata.lastModified)
+            : parseTimestamp(item?.lastUpdate),
+            device: {
+            id:
+                typeof parsed?.metadata?.device?.id === 'string'
+                ? parsed.metadata.device.id
+                : '',
+            platform:
+                typeof parsed?.metadata?.device?.platform === 'string'
+                ? parsed.metadata.device.platform
+                : 'unknown',
+            arch:
+                typeof parsed?.metadata?.device?.arch === 'string'
+                ? parsed.metadata.device.arch
+                : 'unknown',
+            },
+            trigger:
+            typeof parsed?.metadata?.trigger === 'string'
+                ? parsed.metadata.trigger
+                : 'unknown',
+        },
+        });
+
+        const lastModified = Number.isFinite(payload.metadata.lastModified)
+        ? payload.metadata.lastModified
+        : parseTimestamp(item?.lastUpdate);
+
+        return { payload, lastModified };
+    } catch (error) {
+        return { payload: null, lastModified: 0 };
+    }
+}
+
+/**
  * Attempt to parse an auth/provider payload from Raindrop.
  * @param {any} item
  * @returns {{ payload: AuthProviderBackupPayload | null, lastModified: number }}
@@ -3285,6 +3471,13 @@ const CATEGORY_CONFIG = {
     parseItem: parseAutoReloadItem,
     applyPayload: applyAutoReloadRules,
   },
+  'dark-mode-rules': {
+    title: 'dark-mode-rules',
+    link: 'https://nenya.local/options/dark-mode',
+    buildPayload: buildDarkModeRulesPayload,
+    parseItem: parseDarkModeRulesItem,
+    applyPayload: applyDarkModeRules,
+  },
   'bright-mode-settings': {
     title: 'bright-mode-settings',
     link: 'https://nenya.local/options/bright-mode',
@@ -3884,6 +4077,9 @@ function handleStorageChanges(changes, areaName) {
     if (AUTO_RELOAD_RULES_KEY in changes) {
       queueCategoryBackup('auto-reload-rules', 'storage');
     }
+    if (DARK_MODE_RULES_KEY in changes) {
+      queueCategoryBackup('dark-mode-rules', 'storage');
+    }
     if (
       BRIGHT_MODE_WHITELIST_KEY in changes ||
       BRIGHT_MODE_BLACKLIST_KEY in changes
@@ -4055,6 +4251,7 @@ export async function resetOptionsToDefaults() {
   suppressBackup('auth-provider-settings');
   suppressBackup('notification-preferences');
   suppressBackup('auto-reload-rules');
+  suppressBackup('dark-mode-rules');
   suppressBackup('bright-mode-settings');
   suppressBackup('highlight-text-rules');
   suppressBackup('block-element-rules');
@@ -4076,6 +4273,7 @@ export async function resetOptionsToDefaults() {
       },
       [NOTIFICATION_PREFERENCES_KEY]: defaultPreferences,
       [AUTO_RELOAD_RULES_KEY]: [],
+      [DARK_MODE_RULES_KEY]: [],
       [BRIGHT_MODE_WHITELIST_KEY]: [],
       [BRIGHT_MODE_BLACKLIST_KEY]: [],
       [HIGHLIGHT_TEXT_RULES_KEY]: [],
