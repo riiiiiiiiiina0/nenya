@@ -11,7 +11,6 @@
 
 
 const WHITELIST_STORAGE_KEY = 'brightModeWhitelist';
-const BLACKLIST_STORAGE_KEY = 'brightModeBlacklist';
 
 // Whitelist elements
 const whitelistForm = /** @type {HTMLFormElement | null} */ (
@@ -36,28 +35,6 @@ const whitelistListElement = /** @type {HTMLDivElement | null} */ (
   document.getElementById('brightModeWhitelistList')
 );
 
-// Blacklist elements
-const blacklistForm = /** @type {HTMLFormElement | null} */ (
-  document.getElementById('brightModeBlacklistForm')
-);
-const blacklistPatternInput = /** @type {HTMLInputElement | null} */ (
-  document.getElementById('brightModeBlacklistPatternInput')
-);
-const blacklistSaveButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('brightModeBlacklistSaveButton')
-);
-const blacklistCancelButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('brightModeBlacklistCancelEditButton')
-);
-const blacklistFormError = /** @type {HTMLParagraphElement | null} */ (
-  document.getElementById('brightModeBlacklistFormError')
-);
-const blacklistEmptyState = /** @type {HTMLDivElement | null} */ (
-  document.getElementById('brightModeBlacklistEmpty')
-);
-const blacklistListElement = /** @type {HTMLDivElement | null} */ (
-  document.getElementById('brightModeBlacklistList')
-);
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -66,10 +43,7 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
 
 /** @type {BrightModePattern[]} */
 let whitelistPatterns = [];
-/** @type {BrightModePattern[]} */
-let blacklistPatterns = [];
 let editingWhitelistId = '';
-let editingBlacklistId = '';
 let syncing = false;
 
 /**
@@ -229,35 +203,20 @@ function findPattern(patterns, patternId) {
 
 /**
  * Reset the form to its default (create) state.
- * @param {'whitelist' | 'blacklist'} type
  * @returns {void}
  */
-function resetForm(type) {
-  if (type === 'whitelist') {
-    editingWhitelistId = '';
-    if (whitelistForm) {
-      whitelistForm.reset();
-    }
-    if (whitelistSaveButton) {
-      whitelistSaveButton.textContent = '➕';
-    }
-    if (whitelistCancelButton) {
-      whitelistCancelButton.hidden = true;
-    }
-    showFormError(whitelistFormError, '');
-  } else {
-    editingBlacklistId = '';
-    if (blacklistForm) {
-      blacklistForm.reset();
-    }
-    if (blacklistSaveButton) {
-      blacklistSaveButton.textContent = '➕';
-    }
-    if (blacklistCancelButton) {
-      blacklistCancelButton.hidden = true;
-    }
-    showFormError(blacklistFormError, '');
+function resetForm() {
+  editingWhitelistId = '';
+  if (whitelistForm) {
+    whitelistForm.reset();
   }
+  if (whitelistSaveButton) {
+    whitelistSaveButton.textContent = '➕';
+  }
+  if (whitelistCancelButton) {
+    whitelistCancelButton.hidden = true;
+  }
+  showFormError(whitelistFormError, '');
 }
 
 /**
@@ -281,10 +240,9 @@ function formatTimestamp(value) {
  * @param {BrightModePattern[]} patterns
  * @param {HTMLDivElement | null} listElement
  * @param {HTMLDivElement | null} emptyState
- * @param {'whitelist' | 'blacklist'} type
  * @returns {void}
  */
-function renderList(patterns, listElement, emptyState, type) {
+function renderList(patterns, listElement, emptyState) {
   if (!listElement || !emptyState) {
     return;
   }
@@ -329,34 +287,18 @@ function renderList(patterns, listElement, emptyState, type) {
     editButton.className = 'btn btn-sm btn-outline';
     editButton.textContent = 'Edit';
     editButton.addEventListener('click', () => {
-      if (type === 'whitelist') {
-        editingWhitelistId = pattern.id;
-        if (whitelistPatternInput) {
-          whitelistPatternInput.value = pattern.pattern;
-        }
-        if (whitelistSaveButton) {
-          whitelistSaveButton.textContent = '✅';
-        }
-        if (whitelistCancelButton) {
-          whitelistCancelButton.hidden = false;
-        }
-        if (whitelistPatternInput) {
-          whitelistPatternInput.focus();
-        }
-      } else {
-        editingBlacklistId = pattern.id;
-        if (blacklistPatternInput) {
-          blacklistPatternInput.value = pattern.pattern;
-        }
-        if (blacklistSaveButton) {
-          blacklistSaveButton.textContent = '✅';
-        }
-        if (blacklistCancelButton) {
-          blacklistCancelButton.hidden = false;
-        }
-        if (blacklistPatternInput) {
-          blacklistPatternInput.focus();
-        }
+      editingWhitelistId = pattern.id;
+      if (whitelistPatternInput) {
+        whitelistPatternInput.value = pattern.pattern;
+      }
+      if (whitelistSaveButton) {
+        whitelistSaveButton.textContent = '✅';
+      }
+      if (whitelistCancelButton) {
+        whitelistCancelButton.hidden = false;
+      }
+      if (whitelistPatternInput) {
+        whitelistPatternInput.focus();
       }
     });
     actions.appendChild(editButton);
@@ -368,30 +310,19 @@ function renderList(patterns, listElement, emptyState, type) {
     deleteButton.addEventListener('click', () => {
       // eslint-disable-next-line no-alert
       const confirmed = window.confirm(
-        'Delete the ' + type + ' pattern for "' + pattern.pattern + '"?',
+        'Delete the whitelist pattern for "' + pattern.pattern + '"?',
       );
       if (!confirmed) {
         return;
       }
-      if (type === 'whitelist') {
-        whitelistPatterns = whitelistPatterns.filter(
-          (candidate) => candidate.id !== pattern.id,
-        );
-        if (editingWhitelistId === pattern.id) {
-          resetForm('whitelist');
-        }
-        void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
-        renderWhitelist();
-      } else {
-        blacklistPatterns = blacklistPatterns.filter(
-          (candidate) => candidate.id !== pattern.id,
-        );
-        if (editingBlacklistId === pattern.id) {
-          resetForm('blacklist');
-        }
-        void savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY);
-        renderBlacklist();
+      whitelistPatterns = whitelistPatterns.filter(
+        (candidate) => candidate.id !== pattern.id,
+      );
+      if (editingWhitelistId === pattern.id) {
+        resetForm();
       }
+      void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
+      renderWhitelist();
     });
     actions.appendChild(deleteButton);
 
@@ -407,13 +338,8 @@ function renderList(patterns, listElement, emptyState, type) {
     toggle.addEventListener('change', (event) => {
       const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
       pattern.disabled = !isChecked;
-      if (type === 'whitelist') {
-        void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
-        renderWhitelist();
-      } else {
-        void savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY);
-        renderBlacklist();
-      }
+      void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
+      renderWhitelist();
     });
     toggleLabel.appendChild(toggle);
     toggleContainer.appendChild(toggleLabel);
@@ -433,52 +359,30 @@ function renderWhitelist() {
     whitelistPatterns,
     whitelistListElement,
     whitelistEmptyState,
-    'whitelist',
-  );
-}
-
-/**
- * Render blacklist patterns.
- * @returns {void}
- */
-function renderBlacklist() {
-  renderList(
-    blacklistPatterns,
-    blacklistListElement,
-    blacklistEmptyState,
-    'blacklist',
   );
 }
 
 /**
  * Handle form submission to create or update patterns.
  * @param {SubmitEvent} event
- * @param {'whitelist' | 'blacklist'} type
  * @returns {void}
  */
-function handleFormSubmit(event, type) {
+function handleFormSubmit(event) {
   event.preventDefault();
 
-  const patternInput =
-    type === 'whitelist' ? whitelistPatternInput : blacklistPatternInput;
-  const formError =
-    type === 'whitelist' ? whitelistFormError : blacklistFormError;
-  const editingId =
-    type === 'whitelist' ? editingWhitelistId : editingBlacklistId;
-
-  if (!patternInput) {
+  if (!whitelistPatternInput) {
     return;
   }
 
-  const pattern = patternInput.value.trim();
+  const pattern = whitelistPatternInput.value.trim();
   if (!pattern) {
-    showFormError(formError, 'Enter a URL pattern.');
+    showFormError(whitelistFormError, 'Enter a URL pattern.');
     return;
   }
 
   if (!isValidUrlPattern(pattern)) {
     showFormError(
-      formError,
+      whitelistFormError,
       'Enter a valid URL pattern that the browser accepts.',
     );
     return;
@@ -486,70 +390,40 @@ function handleFormSubmit(event, type) {
 
   const now = new Date().toISOString();
 
-  if (type === 'whitelist') {
-    if (editingId) {
-      const existing = findPattern(whitelistPatterns, editingId);
-      if (!existing) {
-        showFormError(formError, 'Selected pattern no longer exists.');
-        resetForm('whitelist');
-        return;
-      }
-      existing.pattern = pattern;
-      existing.updatedAt = now;
-      if (!existing.createdAt) {
-        existing.createdAt = now;
-      }
-    } else {
-      const patternObj = {
-        id: generatePatternId(),
-        pattern,
-        createdAt: now,
-        updatedAt: now,
-      };
-      whitelistPatterns.push(patternObj);
+  if (editingWhitelistId) {
+    const existing = findPattern(whitelistPatterns, editingWhitelistId);
+    if (!existing) {
+      showFormError(whitelistFormError, 'Selected pattern no longer exists.');
+      resetForm();
+      return;
     }
-    whitelistPatterns = sortPatterns(whitelistPatterns);
-    showFormError(formError, '');
-    resetForm('whitelist');
-    void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
-    renderWhitelist();
+    existing.pattern = pattern;
+    existing.updatedAt = now;
+    if (!existing.createdAt) {
+      existing.createdAt = now;
+    }
   } else {
-    if (editingId) {
-      const existing = findPattern(blacklistPatterns, editingId);
-      if (!existing) {
-        showFormError(formError, 'Selected pattern no longer exists.');
-        resetForm('blacklist');
-        return;
-      }
-      existing.pattern = pattern;
-      existing.updatedAt = now;
-      if (!existing.createdAt) {
-        existing.createdAt = now;
-      }
-    } else {
-      const patternObj = {
-        id: generatePatternId(),
-        pattern,
-        createdAt: now,
-        updatedAt: now,
-      };
-      blacklistPatterns.push(patternObj);
-    }
-    blacklistPatterns = sortPatterns(blacklistPatterns);
-    showFormError(formError, '');
-    resetForm('blacklist');
-    void savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY);
-    renderBlacklist();
+    const patternObj = {
+      id: generatePatternId(),
+      pattern,
+      createdAt: now,
+      updatedAt: now,
+    };
+    whitelistPatterns.push(patternObj);
   }
+  whitelistPatterns = sortPatterns(whitelistPatterns);
+  showFormError(whitelistFormError, '');
+  resetForm();
+  void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
+  renderWhitelist();
 }
 
 /**
  * Handle cancel edit button click.
- * @param {'whitelist' | 'blacklist'} type
  * @returns {void}
  */
-function handleCancelEdit(type) {
-  resetForm(type);
+function handleCancelEdit() {
+  resetForm();
 }
 
 /**
@@ -560,24 +434,12 @@ function init() {
   // Whitelist form
   if (whitelistForm) {
     whitelistForm.addEventListener('submit', (event) =>
-      handleFormSubmit(event, 'whitelist'),
+      handleFormSubmit(event),
     );
   }
   if (whitelistCancelButton) {
     whitelistCancelButton.addEventListener('click', () =>
-      handleCancelEdit('whitelist'),
-    );
-  }
-
-  // Blacklist form
-  if (blacklistForm) {
-    blacklistForm.addEventListener('submit', (event) =>
-      handleFormSubmit(event, 'blacklist'),
-    );
-  }
-  if (blacklistCancelButton) {
-    blacklistCancelButton.addEventListener('click', () =>
-      handleCancelEdit('blacklist'),
+      handleCancelEdit(),
     );
   }
 
@@ -602,25 +464,9 @@ function init() {
           editingWhitelistId &&
           !findPattern(whitelistPatterns, editingWhitelistId)
         ) {
-          resetForm('whitelist');
+          resetForm();
         }
         renderWhitelist();
-      }
-
-      if (
-        Object.prototype.hasOwnProperty.call(changes, BLACKLIST_STORAGE_KEY)
-      ) {
-        const { patterns: sanitized } = normalizePatterns(
-          changes[BLACKLIST_STORAGE_KEY]?.newValue,
-        );
-        blacklistPatterns = sanitized;
-        if (
-          editingBlacklistId &&
-          !findPattern(blacklistPatterns, editingBlacklistId)
-        ) {
-          resetForm('blacklist');
-        }
-        renderBlacklist();
       }
     });
   }
@@ -629,10 +475,6 @@ function init() {
   void loadPatterns(WHITELIST_STORAGE_KEY).then((patterns) => {
     whitelistPatterns = patterns;
     renderWhitelist();
-  });
-  void loadPatterns(BLACKLIST_STORAGE_KEY).then((patterns) => {
-    blacklistPatterns = patterns;
-    renderBlacklist();
   });
 
   // Check for prefilled URL from popup
@@ -700,33 +542,18 @@ export function getWhitelistPatterns() {
 }
 
 /**
- * Get current blacklist patterns for export.
- * @returns {BrightModePattern[]}
- */
-export function getBlacklistPatterns() {
-  return [...blacklistPatterns];
-}
-
-/**
  * Set patterns from import.
  * @param {BrightModePattern[]} whitelist
- * @param {BrightModePattern[]} blacklist
  * @returns {Promise<void>}
  */
-export async function setPatterns(whitelist, blacklist) {
+export async function setPatterns(whitelist) {
   const { patterns: normalizedWhitelist } = normalizePatterns(whitelist);
-  const { patterns: normalizedBlacklist } = normalizePatterns(blacklist);
 
   whitelistPatterns = normalizedWhitelist;
-  blacklistPatterns = normalizedBlacklist;
 
-  await Promise.all([
-    savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY),
-    savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY),
-  ]);
+  await savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
 
   renderWhitelist();
-  renderBlacklist();
 }
 
 export function isValidUrlPattern(pattern) {

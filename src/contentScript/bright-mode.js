@@ -11,7 +11,6 @@
    */
 
   const WHITELIST_STORAGE_KEY = 'brightModeWhitelist';
-  const BLACKLIST_STORAGE_KEY = 'brightModeBlacklist';
   const BRIGHT_MODE_STYLE_ID = 'nenya-bright-mode-styles';
 
   /**
@@ -21,7 +20,6 @@
   class BrightModeEnforcer {
     constructor() {
       this.whitelistPatterns = [];
-      this.blacklistPatterns = [];
       this.isBrightModeActive = false;
       this.observer = null;
       this.mediaQuery = null;
@@ -59,7 +57,7 @@
     }
 
     /**
-     * Load whitelist and blacklist patterns from storage
+     * Load whitelist patterns from storage
      */
     async loadPatterns() {
       if (!chrome?.storage?.sync) {
@@ -70,15 +68,12 @@
       try {
         const result = await chrome.storage.sync.get([
           WHITELIST_STORAGE_KEY,
-          BLACKLIST_STORAGE_KEY,
         ]);
 
         this.whitelistPatterns = result[WHITELIST_STORAGE_KEY] || [];
-        this.blacklistPatterns = result[BLACKLIST_STORAGE_KEY] || [];
 
         console.log('[BrightMode] Loaded patterns:', {
           whitelist: this.whitelistPatterns.length,
-          blacklist: this.blacklistPatterns.length,
         });
       } catch (error) {
         console.error('[BrightMode] Failed to load patterns:', error);
@@ -151,10 +146,6 @@
         this.whitelistPatterns,
         currentUrl,
       );
-      const isInBlacklist = this.matchesPattern(
-        this.blacklistPatterns,
-        currentUrl,
-      );
       const isOSLightMode = window.matchMedia(
         '(prefers-color-scheme: light)',
       ).matches;
@@ -162,16 +153,14 @@
       console.log('[BrightMode] Checking conditions:', {
         currentUrl,
         isInWhitelist,
-        isInBlacklist,
         isOSLightMode,
       });
 
       // Apply bright mode if:
       // 1. OS is in light mode AND
-      // 2. Page is in whitelist AND
-      // 3. Page is NOT in blacklist
+      // 2. Page is in whitelist
       const shouldApplyBrightMode =
-        isOSLightMode && isInWhitelist && !isInBlacklist;
+        isOSLightMode && isInWhitelist;
 
       if (shouldApplyBrightMode && !this.isBrightModeActive) {
         this.applyBrightMode();
@@ -257,9 +246,8 @@
         }
 
         const whitelistChanged = changes[WHITELIST_STORAGE_KEY];
-        const blacklistChanged = changes[BLACKLIST_STORAGE_KEY];
 
-        if (whitelistChanged || blacklistChanged) {
+        if (whitelistChanged) {
           console.log('[BrightMode] Patterns updated, reloading...');
           this.loadPatterns().then(() => {
             this.checkAndApplyBrightMode();

@@ -6,7 +6,6 @@ import {
 } from '../shared/bookmarkFolders.js';
 import {
   getWhitelistPatterns,
-  getBlacklistPatterns,
   setPatterns,
   isValidUrlPattern,
 } from './brightMode.js';
@@ -82,7 +81,6 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
 /**
  * @typedef {Object} BrightModeSettings
  * @property {BrightModePatternSettings[]} whitelist
- * @property {BrightModePatternSettings[]} blacklist
  */
 
 /**
@@ -193,7 +191,6 @@ const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
-const BRIGHT_MODE_BLACKLIST_KEY = 'brightModeBlacklist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
@@ -1063,7 +1060,6 @@ async function readCurrentOptions() {
     notifResp,
     reloadResp,
     whitelistPatterns,
-    blacklistPatterns,
     highlightTextRules,
     blockElementResp,
     customCodeResp,
@@ -1076,7 +1072,6 @@ async function readCurrentOptions() {
     chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
     chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY),
     getWhitelistPatterns(),
-    getBlacklistPatterns(),
     loadHighlightTextRules(),
     chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
@@ -1129,7 +1124,6 @@ async function readCurrentOptions() {
 
   const brightModeSettings = {
     whitelist: whitelistPatterns,
-    blacklist: blacklistPatterns,
   };
 
   const blockElementRules = normalizeBlockElementRules(
@@ -1339,20 +1333,15 @@ async function applyImportedOptions(
 
   // Handle bright mode settings - support both old and new format
   let sanitizedWhitelist = [];
-  let sanitizedBlacklist = [];
 
   if (brightModeSettings && typeof brightModeSettings === 'object') {
-    // New format: { whitelist: [...], blacklist: [...] }
+    // New format: { whitelist: [...] }
     sanitizedWhitelist = normalizeBrightModePatterns(
       brightModeSettings.whitelist || [],
-    );
-    sanitizedBlacklist = normalizeBrightModePatterns(
-      brightModeSettings.blacklist || [],
     );
   } else {
     // Fallback for old format or missing data
     sanitizedWhitelist = [];
-    sanitizedBlacklist = [];
   }
 
   // Read existing map to preserve other providers if any
@@ -1368,7 +1357,6 @@ async function applyImportedOptions(
       [NOTIFICATION_PREFERENCES_KEY]: sanitizedNotifications,
       [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
       [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
-      [BRIGHT_MODE_BLACKLIST_KEY]: sanitizedBlacklist,
       [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
       [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
       [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
@@ -1443,13 +1431,12 @@ async function handleFileChosen() {
       !brightModeSettings &&
       (data.brightModeWhitelist || data.brightModeBlacklist)
     ) {
-      // Convert old format to new format
+      // Convert old format to new format (ignore blacklist)
       brightModeSettings = {
         whitelist: data.brightModeWhitelist || [],
-        blacklist: data.brightModeBlacklist || [],
       };
     }
-    brightModeSettings = brightModeSettings || { whitelist: [], blacklist: [] };
+    brightModeSettings = brightModeSettings || { whitelist: [] };
 
     await applyImportedOptions(
       root,
