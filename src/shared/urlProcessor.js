@@ -23,6 +23,7 @@
  * @property {string[]} urlPatterns
  * @property {UrlProcessor[]} processors
  * @property {ApplyWhenOption[]} applyWhen - When to apply this rule
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -174,6 +175,10 @@ export async function processUrl(url, applyWhen) {
 
     // Find all matching rules for this URL and applyWhen context
     const matchingRules = rules.filter((rule) => {
+      // Check if rule is disabled
+      if (rule.disabled) {
+        return false;
+      }
       // Check if rule applies to this context
       if (!rule.applyWhen || !rule.applyWhen.includes(applyWhen)) {
         return false;

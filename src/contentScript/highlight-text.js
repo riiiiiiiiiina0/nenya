@@ -29,6 +29,7 @@
    * @property {boolean} italic
    * @property {boolean} underline
    * @property {boolean} ignoreCase
+   * @property {boolean} [disabled]
    * @property {string} [createdAt]
    * @property {string} [updatedAt]
    */
@@ -363,8 +364,8 @@
 
     // Check if current URL matches any rules
     const currentUrl = window.location.href;
-    const applicableRules = rules.filter((rule) =>
-      matchesUrlPattern(currentUrl, rule.pattern),
+    const applicableRules = rules.filter(
+      (rule) => !rule.disabled && matchesUrlPattern(currentUrl, rule.pattern),
     );
 
     if (applicableRules.length === 0) {
@@ -462,6 +463,7 @@
             typeof rule.underline === 'boolean' ? rule.underline : false,
           ignoreCase:
             typeof rule.ignoreCase === 'boolean' ? rule.ignoreCase : false,
+          disabled: typeof rule.disabled === 'boolean' ? rule.disabled : false,
         }));
     } catch (error) {
       console.warn('[highlight-text] Failed to load rules:', error);

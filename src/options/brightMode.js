@@ -4,6 +4,7 @@
  * @typedef {Object} BrightModePattern
  * @property {string} id
  * @property {string} pattern
+ * @property {boolean} [disabled]
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -107,7 +108,7 @@ function normalizePatterns(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, pattern?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, pattern?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
@@ -133,6 +134,7 @@ function normalizePatterns(value) {
       const patternObj = {
         id,
         pattern,
+        disabled: !!raw.disabled,
         createdAt: undefined,
         updatedAt: undefined,
       };
@@ -300,6 +302,10 @@ function renderList(patterns, listElement, emptyState, type) {
       'rounded-lg border border-base-300 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
     container.setAttribute('role', 'listitem');
 
+    if (pattern.disabled) {
+      container.classList.add('opacity-50');
+    }
+
     const info = document.createElement('div');
     info.className = 'space-y-1';
 
@@ -388,6 +394,30 @@ function renderList(patterns, listElement, emptyState, type) {
       }
     });
     actions.appendChild(deleteButton);
+
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'form-control';
+    const toggleLabel = document.createElement('label');
+    toggleLabel.className = 'label cursor-pointer gap-4';
+    toggleLabel.textContent = 'Enabled';
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'toggle toggle-success';
+    toggle.checked = !pattern.disabled;
+    toggle.addEventListener('change', (event) => {
+      const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
+      pattern.disabled = !isChecked;
+      if (type === 'whitelist') {
+        void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
+        renderWhitelist();
+      } else {
+        void savePatterns(blacklistPatterns, BLACKLIST_STORAGE_KEY);
+        renderBlacklist();
+      }
+    });
+    toggleLabel.appendChild(toggle);
+    toggleContainer.appendChild(toggleLabel);
+    actions.appendChild(toggleContainer);
 
     container.appendChild(actions);
     listElement.appendChild(container);

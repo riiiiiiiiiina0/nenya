@@ -20,6 +20,7 @@
    * @property {string} id
    * @property {string} pattern
    * @property {string} [email]
+   * @property {boolean} [disabled]
    * @property {string} [createdAt]
    * @property {string} [updatedAt]
    */
@@ -64,7 +65,7 @@
    */
   function findMatchingRule(url) {
     for (const rule of cachedRules) {
-      if (matchesPattern(rule.pattern, url)) {
+      if (!rule.disabled && matchesPattern(rule.pattern, url)) {
         return rule;
       }
     }

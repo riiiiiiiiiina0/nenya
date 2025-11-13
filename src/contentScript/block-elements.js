@@ -17,6 +17,7 @@
    * @property {string} id
    * @property {string} urlPattern
    * @property {string[]} selectors
+   * @property {boolean | undefined} disabled
    * @property {string | undefined} createdAt
    * @property {string | undefined} updatedAt
    */
@@ -61,7 +62,7 @@
     const selectors = [];
 
     for (const rule of cachedRules) {
-      if (matchesPattern(rule.urlPattern, url)) {
+      if (!rule.disabled && matchesPattern(rule.urlPattern, url)) {
         selectors.push(...rule.selectors);
       }
     }

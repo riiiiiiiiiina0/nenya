@@ -5,6 +5,7 @@
    * @typedef {Object} BrightModePattern
    * @property {string} id
    * @property {string} pattern
+   * @property {boolean} [disabled]
    * @property {string} [createdAt]
    * @property {string} [updatedAt]
    */
@@ -99,6 +100,9 @@
         const currentUrl = new URL(url);
 
         return patterns.some((pattern) => {
+          if (pattern.disabled) {
+            return false;
+          }
           try {
             // Handle different pattern formats
             if (pattern.pattern.includes('://')) {

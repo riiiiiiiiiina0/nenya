@@ -39,6 +39,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {string} id
  * @property {string} pattern
  * @property {number} intervalSeconds
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -77,6 +78,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @typedef {Object} BrightModePatternSettings
  * @property {string} id
  * @property {string} pattern
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -129,6 +131,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {boolean} italic
  * @property {boolean} underline
  * @property {boolean} ignoreCase
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -138,6 +141,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {string} id
  * @property {string} urlPattern
  * @property {string[]} selectors
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -169,6 +173,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {string} pattern
  * @property {string} css
  * @property {string} js
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -197,6 +202,18 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} UrlProcessRuleSettings
+ * @property {string} id
+ * @property {string} name
+ * @property {string[]} urlPatterns
+ * @property {UrlProcessor[]} processors
+ * @property {ApplyWhenOption[]} applyWhen
+ * @property {boolean | undefined} disabled
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} UrlProcessRulesBackupPayload
  * @property {'url-process-rules'} kind
  * @property {UrlProcessRuleSettings[]} rules
@@ -208,6 +225,7 @@ import { evaluateAllTabs } from './auto-reload.js';
  * @property {string} id
  * @property {string} pattern
  * @property {string} [email]
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -981,7 +999,7 @@ function normalizeAutoReloadRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
@@ -1028,6 +1046,7 @@ function normalizeAutoReloadRules(value) {
         id,
         pattern,
         intervalSeconds,
+        disabled: !!raw.disabled,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:
@@ -1101,7 +1120,7 @@ function normalizeBrightModePatterns(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, pattern?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, pattern?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
@@ -1138,6 +1157,7 @@ function normalizeBrightModePatterns(value) {
       const patternObj = {
         id,
         pattern,
+        disabled: !!raw.disabled,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:
@@ -1170,7 +1190,7 @@ function normalizeHighlightTextRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, pattern?: unknown, type?: unknown, value?: unknown, textColor?: unknown, backgroundColor?: unknown, bold?: unknown, italic?: unknown, underline?: unknown, ignoreCase?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
@@ -1240,6 +1260,7 @@ function normalizeHighlightTextRules(value) {
         typeof raw.underline === 'boolean' ? raw.underline : false;
       const ignoreCase =
         typeof raw.ignoreCase === 'boolean' ? raw.ignoreCase : false;
+      const disabled = typeof raw.disabled === 'boolean' ? raw.disabled : false;
 
       let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
       if (!id) {
@@ -1261,6 +1282,7 @@ function normalizeHighlightTextRules(value) {
         italic,
         underline,
         ignoreCase,
+        disabled,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:
@@ -1385,7 +1407,7 @@ function normalizeBlockElementRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, urlPattern?: unknown, selectors?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, urlPattern?: unknown, selectors?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const urlPattern =
@@ -1431,6 +1453,7 @@ function normalizeBlockElementRules(value) {
         id,
         urlPattern,
         selectors,
+        disabled: !!raw.disabled,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:
@@ -1465,7 +1488,7 @@ function normalizeCustomCodeRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, pattern?: unknown, css?: unknown, js?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
@@ -1501,6 +1524,7 @@ function normalizeCustomCodeRules(value) {
         pattern,
         css,
         js,
+        disabled: !!raw.disabled,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:
@@ -1790,7 +1814,7 @@ function normalizeUrlProcessRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, name?: unknown, urlPatterns?: unknown, processors?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, name?: unknown, urlPatterns?: unknown, processors?: unknown, applyWhen?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
 
@@ -1912,6 +1936,7 @@ function normalizeUrlProcessRules(value) {
         urlPatterns,
         processors,
         applyWhen: /** @type {ApplyWhenOption[]} */ (applyWhen),
+        disabled: !!raw.disabled,
         createdAt:
           typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
         updatedAt:
@@ -2030,7 +2055,7 @@ function normalizeAutoGoogleLoginRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, pattern?: unknown, email?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, pattern?: unknown, email?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
 
@@ -2064,6 +2089,7 @@ function normalizeAutoGoogleLoginRules(value) {
       const rule = {
         id,
         pattern,
+        disabled: !!raw.disabled,
       };
 
       if (email) {

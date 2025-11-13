@@ -12,6 +12,7 @@
  * @property {boolean} italic
  * @property {boolean} underline
  * @property {boolean} ignoreCase
+ * @property {boolean} [disabled]
  * @property {string} [createdAt]
  * @property {string} [updatedAt]
  */
@@ -401,6 +402,7 @@ async function loadRules() {
       italic: typeof rule.italic === 'boolean' ? rule.italic : false,
       underline: typeof rule.underline === 'boolean' ? rule.underline : false,
       ignoreCase: typeof rule.ignoreCase === 'boolean' ? rule.ignoreCase : false,
+      disabled: typeof rule.disabled === 'boolean' ? rule.disabled : false,
     }));
   } catch (error) {
     console.warn('[highlightText] Failed to load rules:', error);
@@ -470,7 +472,7 @@ function renderRulesList() {
 
   rulesEmpty.hidden = true;
   rulesList.innerHTML = rules.map(rule => `
-    <div class="card bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow" data-rule-id="${rule.id}">
+    <div class="card bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${rule.disabled ? 'opacity-50' : ''}" data-rule-id="${rule.id}">
       <div class="card-body p-4">
         <div class="flex items-center justify-between gap-3">
           <div class="flex-1 min-w-0">
@@ -498,6 +500,12 @@ function renderRulesList() {
               🗑️
             </button>
           </div>
+          <div class="form-control">
+            <label class="label cursor-pointer gap-2">
+              <span class="label-text text-xs">Enabled</span>
+              <input type="checkbox" class="toggle toggle-sm toggle-success" data-action="toggle" data-rule-id="${rule.id}" ${!rule.disabled ? 'checked' : ''} />
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -517,6 +525,18 @@ function renderRulesList() {
       e.stopPropagation();
       const ruleId = button.getAttribute('data-rule-id');
       if (ruleId) deleteRule(ruleId);
+    });
+  });
+
+  rulesList.querySelectorAll('[data-action="toggle"]').forEach(toggle => {
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ruleId = toggle.getAttribute('data-rule-id');
+      const rule = rules.find(r => r.id === ruleId);
+      if (rule) {
+        rule.disabled = !/** @type {HTMLInputElement} */ (toggle).checked;
+        void saveRules(rules).then(renderRulesList);
+      }
     });
   });
 

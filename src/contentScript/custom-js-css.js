@@ -9,6 +9,7 @@
    * @property {string} pattern
    * @property {string} css
    * @property {string} js
+   * @property {boolean} [disabled]
    * @property {string} [createdAt]
    * @property {string} [updatedAt]
    */
@@ -207,7 +208,7 @@
 
       // Apply matching rules
       this.rules.forEach((rule) => {
-        if (this.matchesPattern(rule.pattern, currentUrl)) {
+        if (!rule.disabled && this.matchesPattern(rule.pattern, currentUrl)) {
           activeRuleIds.add(rule.id);
           this.injectCSS(rule.id, rule.css);
           this.injectJS(rule.id, rule.js);
