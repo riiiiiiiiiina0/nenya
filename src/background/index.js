@@ -382,7 +382,6 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-
   if (command === 'llm-chat-with-llm') {
     void (async () => {
       try {
@@ -603,21 +602,37 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   handleLifecycleEvent('install');
   // Deduplicate custom titles on install/update
   void deduplicateCustomTitlesByUrl();
+
   if (details.reason === 'install' || details.reason === 'update') {
+    // Restore split pages on extension reload/update (not on wake-up)
+    // Use a small delay to ensure all initialization is complete
+    void (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await restoreSplitPages();
+    })();
+
     // Inject content scripts into existing tabs instead of reloading them
     // This preserves user state (scroll position, form data, etc.)
     const windows = await chrome.windows.getAll({ populate: true });
-    
+
     // Content scripts to inject (matching manifest.json structure)
     // Note: iframe-monitor.js runs in all_frames and is skipped here;
     // it will be injected automatically for new tabs/iframes
     const contentScripts = [
       // document_start scripts
-      ['src/contentScript/bright-mode.js', 'src/contentScript/block-elements.js', 'src/contentScript/custom-js-css.js', 'src/contentScript/custom-title.js'],
+      [
+        'src/contentScript/bright-mode.js',
+        'src/contentScript/block-elements.js',
+        'src/contentScript/custom-js-css.js',
+        'src/contentScript/custom-title.js',
+      ],
       // document_idle scripts
-      ['src/contentScript/video-controller.js', 'src/contentScript/highlight-text.js'],
+      [
+        'src/contentScript/video-controller.js',
+        'src/contentScript/highlight-text.js',
+      ],
     ];
-    
+
     // CSS to inject (for video-controller)
     const cssFiles = ['src/contentScript/video-controller.css'];
 
@@ -640,7 +655,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
                   files: [cssFile],
                 });
               } catch (error) {
-                console.warn(`[background] Failed to inject CSS ${cssFile} into tab ${tab.id}:`, error);
+                console.warn(
+                  `[background] Failed to inject CSS ${cssFile} into tab ${tab.id}:`,
+                  error,
+                );
               }
             }
 
@@ -652,16 +670,25 @@ chrome.runtime.onInstalled.addListener(async (details) => {
                   files: scriptFiles,
                 });
               } catch (error) {
-                console.warn(`[background] Failed to inject scripts into tab ${tab.id}:`, error);
+                console.warn(
+                  `[background] Failed to inject scripts into tab ${tab.id}:`,
+                  error,
+                );
               }
             }
           } catch (error) {
-            console.warn(`[background] Failed to inject content scripts into tab ${tab.id}:`, error);
+            console.warn(
+              `[background] Failed to inject content scripts into tab ${tab.id}:`,
+              error,
+            );
             // Fallback: reload the tab if injection fails (e.g., for restricted pages)
             try {
               await chrome.tabs.reload(tab.id, { bypassCache: true });
             } catch (reloadError) {
-              console.warn(`[background] Failed to reload tab ${tab.id}:`, reloadError);
+              console.warn(
+                `[background] Failed to reload tab ${tab.id}:`,
+                reloadError,
+              );
             }
           }
         }
@@ -674,14 +701,131 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 let isRestoringSplitPages = false;
 
 /**
+ * Update split page group information in storage
+ * @param {string} url - The split page URL
+ * @param {string | null} groupName - The group name, or null if ungrouped
+ * @returns {Promise<void>}
+ */
+async function updateSplitPageGroupInfo(url, groupName) {
+  try {
+    const result = await chrome.storage.local.get(['splitPageUrls']);
+    const savedEntries = Array.isArray(result.splitPageUrls)
+      ? result.splitPageUrls
+      : [];
+
+    // Normalize entries (handle backward compatibility with string URLs)
+    const normalizedEntries = savedEntries.map((entry) => {
+      if (typeof entry === 'string') {
+        return { url: entry };
+      }
+      return entry;
+    });
+
+    // Find the existing entry for this URL
+    const existingEntry = normalizedEntries.find((entry) => entry.url === url);
+    const existingGroupName =
+      existingEntry && typeof existingEntry.groupName === 'string'
+        ? existingEntry.groupName
+        : null;
+
+    // Only update if the group name actually changed
+    if (existingGroupName === groupName) {
+      return; // No change needed
+    }
+
+    // Find and update the entry for this URL
+    const updatedEntries = normalizedEntries.map((entry) => {
+      if (entry.url === url) {
+        const updatedEntry = { url };
+        if (groupName) {
+          updatedEntry.groupName = groupName;
+        }
+        return updatedEntry;
+      }
+      return entry;
+    });
+
+    // Save updated entries
+    await chrome.storage.local.set({ splitPageUrls: updatedEntries });
+    console.log(
+      '[background] Updated split page group info:',
+      url,
+      existingGroupName ? `(was: ${existingGroupName})` : '(was: ungrouped)',
+      '->',
+      groupName ? `(now: ${groupName})` : '(now: ungrouped)',
+    );
+  } catch (error) {
+    console.warn('[background] Failed to update split page group info:', error);
+  }
+}
+
+/**
+ * Find a tab group by name
+ * @param {string} groupName - The name of the tab group to find
+ * @returns {Promise<number | null>} The group ID if found, null otherwise
+ */
+async function findTabGroupByName(groupName) {
+  if (!chrome.tabGroups || typeof chrome.tabGroups.get !== 'function') {
+    return null;
+  }
+
+  try {
+    // Get all tabs to find unique group IDs
+    const allTabs = await chrome.tabs.query({});
+    const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+    const groupIds = new Set();
+
+    allTabs.forEach((tab) => {
+      if (typeof tab.groupId === 'number' && tab.groupId !== noneGroupId) {
+        groupIds.add(tab.groupId);
+      }
+    });
+
+    // Check each group to find one with matching name
+    for (const groupId of groupIds) {
+      try {
+        const group = await new Promise((resolve, reject) => {
+          chrome.tabGroups.get(groupId, (group) => {
+            const lastError = chrome.runtime.lastError;
+            if (lastError) {
+              reject(new Error(lastError.message));
+              return;
+            }
+            resolve(group);
+          });
+        });
+
+        if (
+          group &&
+          typeof group.title === 'string' &&
+          group.title.trim() === groupName.trim()
+        ) {
+          return groupId;
+        }
+      } catch (error) {
+        // Continue to next group if this one fails
+        continue;
+      }
+    }
+  } catch (error) {
+    console.warn('[background] Failed to find tab group by name:', error);
+  }
+
+  return null;
+}
+
+/**
  * Restore split pages from storage
  * Called on startup, extension reload, and when service worker initializes
  * Includes deduplication logic to prevent opening duplicate tabs
+ * Restores tabs in their corresponding tab groups if the group exists
  */
 async function restoreSplitPages() {
   // Prevent concurrent restoration
   if (isRestoringSplitPages) {
-    console.log('[background] Split page restoration already in progress, skipping');
+    console.log(
+      '[background] Split page restoration already in progress, skipping',
+    );
     return;
   }
 
@@ -690,48 +834,66 @@ async function restoreSplitPages() {
   try {
     const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
     const result = await chrome.storage.local.get(['splitPageUrls']);
-    const savedUrls = Array.isArray(result.splitPageUrls)
+    const savedEntries = Array.isArray(result.splitPageUrls)
       ? result.splitPageUrls
       : [];
 
-    if (savedUrls.length === 0) {
+    if (savedEntries.length === 0) {
       return;
     }
 
-    // Step 1: De-duplicate URLs from storage first
-    const uniqueUrls = Array.from(new Set(savedUrls));
-    if (uniqueUrls.length !== savedUrls.length) {
+    // Normalize entries (handle backward compatibility with string URLs)
+    const normalizedEntries = savedEntries.map((entry) => {
+      if (typeof entry === 'string') {
+        return { url: entry };
+      }
+      return entry;
+    });
+
+    // Step 1: De-duplicate entries by URL
+    const urlMap = new Map();
+    normalizedEntries.forEach((entry) => {
+      if (!urlMap.has(entry.url)) {
+        urlMap.set(entry.url, entry);
+      }
+    });
+    const uniqueEntries = Array.from(urlMap.values());
+
+    if (uniqueEntries.length !== normalizedEntries.length) {
       console.log(
-        `[background] De-duplicated ${savedUrls.length - uniqueUrls.length} duplicate URL(s) from storage`,
+        `[background] De-duplicated ${
+          normalizedEntries.length - uniqueEntries.length
+        } duplicate URL(s) from storage`,
       );
-      // Update storage with de-duplicated URLs
-      await chrome.storage.local.set({ splitPageUrls: uniqueUrls });
+      // Update storage with de-duplicated entries
+      await chrome.storage.local.set({ splitPageUrls: uniqueEntries });
     }
 
     // Step 2: Check if there is already a tab with the same URL (any tab, not just split pages)
     const allTabs = await chrome.tabs.query({});
     const existingUrls = new Set(
       allTabs
-        .filter(
-          (tab) =>
-            tab.url &&
-            typeof tab.url === 'string',
-        )
+        .filter((tab) => tab.url && typeof tab.url === 'string')
         .map((tab) => String(tab.url)),
     );
 
     // Open split pages that aren't already open
-    const urlsToOpen = uniqueUrls.filter((url) => !existingUrls.has(url));
-    
-    if (urlsToOpen.length === 0) {
-      console.log('[background] All split pages are already open, skipping restoration');
+    const entriesToOpen = uniqueEntries.filter(
+      (entry) => !existingUrls.has(entry.url),
+    );
+
+    if (entriesToOpen.length === 0) {
+      console.log(
+        '[background] All split pages are already open, skipping restoration',
+      );
       return;
     }
 
-    console.log(`[background] Restoring ${urlsToOpen.length} split page(s)`);
+    console.log(`[background] Restoring ${entriesToOpen.length} split page(s)`);
 
-    for (const url of urlsToOpen) {
+    for (const entry of entriesToOpen) {
       try {
+        const url = entry.url;
         // Double-check the tab wasn't opened between the query and now
         const currentTabs = await chrome.tabs.query({ url });
         if (currentTabs.length > 0) {
@@ -739,12 +901,71 @@ async function restoreSplitPages() {
           continue;
         }
 
-        await chrome.tabs.create({ url, active: false });
+        // Create the tab
+        const tab = await chrome.tabs.create({ url, active: false });
         console.log('[background] Restored split page:', url);
+
+        // If entry has a group name, try to add it to that group
+        if (entry.groupName && typeof entry.groupName === 'string' && tab.id) {
+          try {
+            // Wait a bit for the tab to be fully created before grouping
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            console.log(
+              `[background] Looking for tab group "${entry.groupName}" to restore split page`,
+            );
+            const groupId = await findTabGroupByName(entry.groupName);
+
+            if (
+              groupId !== null &&
+              chrome.tabs &&
+              typeof chrome.tabs.group === 'function'
+            ) {
+              console.log(
+                `[background] Found tab group "${entry.groupName}" with ID ${groupId}, adding tab ${tab.id}`,
+              );
+              // Add tab to existing group
+              await new Promise((resolve, reject) => {
+                chrome.tabs.group(
+                  { tabIds: tab.id, groupId },
+                  (resultGroupId) => {
+                    const lastError = chrome.runtime.lastError;
+                    if (lastError) {
+                      console.warn(
+                        `[background] Error adding tab to group: ${lastError.message}`,
+                      );
+                      reject(new Error(lastError.message));
+                      return;
+                    }
+                    console.log(
+                      `[background] Successfully added split page to group "${entry.groupName}" (group ID: ${resultGroupId})`,
+                    );
+                    resolve(resultGroupId);
+                  },
+                );
+              });
+            } else {
+              if (groupId === null) {
+                console.log(
+                  `[background] Tab group "${entry.groupName}" not found, tab restored without group`,
+                );
+              } else {
+                console.log(
+                  `[background] Tab groups API not available, tab restored without group`,
+                );
+              }
+            }
+          } catch (error) {
+            console.warn(
+              `[background] Failed to add split page to group "${entry.groupName}":`,
+              error,
+            );
+          }
+        }
       } catch (error) {
         console.warn(
           '[background] Failed to restore split page:',
-          url,
+          entry.url,
           error,
         );
       }
@@ -778,7 +999,10 @@ chrome.runtime.onStartup.addListener(() => {
         }
       }
     } catch (error) {
-      console.warn('[background] Failed to restore custom titles on startup:', error);
+      console.warn(
+        '[background] Failed to restore custom titles on startup:',
+        error,
+      );
     }
 
     // Restore split pages from storage
@@ -793,14 +1017,6 @@ void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
 });
 
-// Restore split pages when service worker initializes (handles extension reload)
-// Use a small delay to ensure all initialization is complete
-void (async () => {
-  // Wait a bit for the service worker to fully initialize
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  await restoreSplitPages();
-})();
-
 chrome.tabs.onHighlighted.addListener(() => {
   void updateClipboardContextMenuVisibility();
 });
@@ -811,6 +1027,44 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const tab = await chrome.tabs.get(activeInfo.tabId);
     if (tab) {
       void updateContextMenuVisibility(tab);
+
+      // Also check and update split page group info when tab is activated
+      // This helps catch group changes that might not trigger onUpdated reliably
+      if (tab.url && typeof tab.url === 'string') {
+        const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+        if (tab.url.startsWith(splitBaseUrl)) {
+          void (async () => {
+            try {
+              let groupName = null;
+              if (typeof tab.groupId === 'number') {
+                const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+                if (tab.groupId !== noneGroupId && chrome.tabGroups?.get) {
+                  const group = await new Promise((resolve) => {
+                    chrome.tabGroups.get(tab.groupId, (group) => {
+                      const lastError = chrome.runtime.lastError;
+                      if (lastError) {
+                        resolve(null);
+                        return;
+                      }
+                      resolve(group || null);
+                    });
+                  });
+                  if (
+                    group &&
+                    typeof group.title === 'string' &&
+                    group.title.trim()
+                  ) {
+                    groupName = group.title.trim();
+                  }
+                }
+              }
+              await updateSplitPageGroupInfo(tab.url, groupName);
+            } catch (error) {
+              // Ignore errors - group info update is optional
+            }
+          })();
+        }
+      }
     }
   } catch (error) {
     console.warn('Failed to get tab for context menu update:', error);
@@ -874,7 +1128,9 @@ async function deduplicateCustomTitlesByUrl() {
       }
 
       console.log(
-        `[background] Deduplicating custom titles for URL: ${url}, keeping latest (${records[0].key}), removing ${records.length - 1} duplicate(s)`,
+        `[background] Deduplicating custom titles for URL: ${url}, keeping latest (${
+          records[0].key
+        }), removing ${records.length - 1} duplicate(s)`,
       );
     }
 
@@ -998,13 +1254,21 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
       const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
       const result = await chrome.storage.local.get(['splitPageUrls']);
-      const savedUrls = Array.isArray(result.splitPageUrls)
+      const savedEntries = Array.isArray(result.splitPageUrls)
         ? result.splitPageUrls
         : [];
 
-      if (savedUrls.length === 0) {
+      if (savedEntries.length === 0) {
         return;
       }
+
+      // Normalize entries (handle backward compatibility with string URLs)
+      const normalizedEntries = savedEntries.map((entry) => {
+        if (typeof entry === 'string') {
+          return { url: entry };
+        }
+        return entry;
+      });
 
       // Check all open tabs to see which split URLs are still open
       const allTabs = await chrome.tabs.query({});
@@ -1019,11 +1283,13 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
           .map((tab) => String(tab.url)),
       );
 
-      // Remove URLs that are no longer open
-      const updatedUrls = savedUrls.filter((url) => openSplitUrls.has(url));
+      // Remove entries that are no longer open
+      const updatedEntries = normalizedEntries.filter((entry) =>
+        openSplitUrls.has(entry.url),
+      );
 
-      if (updatedUrls.length !== savedUrls.length) {
-        await chrome.storage.local.set({ splitPageUrls: updatedUrls });
+      if (updatedEntries.length !== normalizedEntries.length) {
+        await chrome.storage.local.set({ splitPageUrls: updatedEntries });
         console.log(
           '[background] Cleaned up closed split page URLs from storage',
         );
@@ -1074,6 +1340,59 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       } catch (error) {
         console.warn('[background] Failed to redirect nenya.local URL:', error);
       }
+    }
+  }
+
+  // Update split page group info when tab group changes
+  // Check if this is a split page and update group info
+  if (tab && tab.url && typeof tab.url === 'string') {
+    const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
+    if (tab.url.startsWith(splitBaseUrl)) {
+      // This is a split page tab - check and update group info
+      // Use a small delay to ensure groupId is updated after group changes
+      void (async () => {
+        try {
+          // Small delay to ensure groupId is updated
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // Re-fetch the tab to get the latest groupId
+          const updatedTab = await chrome.tabs.get(tabId);
+          if (!updatedTab || !updatedTab.url) {
+            return;
+          }
+
+          let groupName = null;
+          if (typeof updatedTab.groupId === 'number') {
+            const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+            if (updatedTab.groupId !== noneGroupId && chrome.tabGroups?.get) {
+              const group = await new Promise((resolve) => {
+                chrome.tabGroups.get(updatedTab.groupId, (group) => {
+                  const lastError = chrome.runtime.lastError;
+                  if (lastError) {
+                    resolve(null);
+                    return;
+                  }
+                  resolve(group || null);
+                });
+              });
+              if (
+                group &&
+                typeof group.title === 'string' &&
+                group.title.trim()
+              ) {
+                groupName = group.title.trim();
+              }
+            }
+          }
+          await updateSplitPageGroupInfo(updatedTab.url, groupName);
+        } catch (error) {
+          // Ignore errors - group info update is optional
+          console.log(
+            '[background] Could not update split page group info:',
+            error,
+          );
+        }
+      })();
     }
   }
 
@@ -1342,15 +1661,24 @@ chrome.runtime.onConnect.addListener((port) => {
 
     port.onDisconnect.addListener(() => {
       console.log('[background] Chat page disconnected:', sessionId);
-      console.log('[background] Sessions with sent content:', Array.from(sessionsWithSentContent));
-      console.log('[background] Has sent content?:', sessionsWithSentContent.has(sessionId));
-      
+      console.log(
+        '[background] Sessions with sent content:',
+        Array.from(sessionsWithSentContent),
+      );
+      console.log(
+        '[background] Has sent content?:',
+        sessionsWithSentContent.has(sessionId),
+      );
+
       // Only clean up LLM tabs if content hasn't been sent yet
       // If content was sent, keep the LLM tabs open for the user to continue
       if (!sessionsWithSentContent.has(sessionId)) {
         const llmTabs = sessionToLLMTabs.get(sessionId);
         if (llmTabs) {
-          console.log('[background] Cleaning up unused LLM tabs for session:', sessionId);
+          console.log(
+            '[background] Cleaning up unused LLM tabs for session:',
+            sessionId,
+          );
           for (const llmTabId of llmTabs.values()) {
             chrome.tabs.remove(llmTabId).catch(() => {
               // Tab might already be closed
@@ -1359,7 +1687,10 @@ chrome.runtime.onConnect.addListener((port) => {
           sessionToLLMTabs.delete(sessionId);
         }
       } else {
-        console.log('[background] Content was sent, keeping LLM tabs open for session:', sessionId);
+        console.log(
+          '[background] Content was sent, keeping LLM tabs open for session:',
+          sessionId,
+        );
         // Clean up the sent content flag as it's no longer needed
         sessionsWithSentContent.delete(sessionId);
       }
@@ -1452,7 +1783,12 @@ async function waitForTabReady(tabId, timeout = 30000) {
  * @param {number} currentTabIndex - The index of the current active tab
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-async function openLLMTabs(sessionId, chatPageTabId, providers, currentTabIndex) {
+async function openLLMTabs(
+  sessionId,
+  chatPageTabId,
+  providers,
+  currentTabIndex,
+) {
   try {
     if (!sessionId) {
       return { success: false, error: 'Session ID is required' };
@@ -1557,7 +1893,10 @@ async function switchLLMProvider(sessionId, oldProviderId, newProviderId) {
 
     const llmTabs = sessionToLLMTabs.get(sessionId);
     if (!llmTabs) {
-      return { success: false, error: 'No LLM tabs found for this chat session' };
+      return {
+        success: false,
+        error: 'No LLM tabs found for this chat session',
+      };
     }
 
     const oldTabId = llmTabs.get(oldProviderId);
@@ -1594,7 +1933,7 @@ async function switchLLMProvider(sessionId, oldProviderId, newProviderId) {
 async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
   try {
     console.log('[background] reuseLLMTabs called with sessionId:', sessionId);
-    
+
     if (!sessionId) {
       return { success: false, error: 'Session ID is required' };
     }
@@ -1602,15 +1941,21 @@ async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
     // Mark this session as having sent content IMMEDIATELY (before anything else)
     // This prevents auto-cleanup if the popup closes while we're processing
     sessionsWithSentContent.add(sessionId);
-    console.log('[background] Marked session as sent, sessionsWithSentContent:', Array.from(sessionsWithSentContent));
+    console.log(
+      '[background] Marked session as sent, sessionsWithSentContent:',
+      Array.from(sessionsWithSentContent),
+    );
 
     const llmTabs = sessionToLLMTabs.get(sessionId);
     if (!llmTabs) {
       console.log('[background] No LLM tabs found for session');
       sessionsWithSentContent.delete(sessionId); // Clean up if we're failing
-      return { success: false, error: 'No LLM tabs found for this chat session' };
+      return {
+        success: false,
+        error: 'No LLM tabs found for this chat session',
+      };
     }
-    
+
     console.log('[background] Found LLM tabs:', Array.from(llmTabs.entries()));
 
     // Find the first valid tab and activate it immediately
@@ -2283,7 +2628,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Use reuseLLMTabs if requested and session ID is provided
-        console.log('[background] useReuseTabs:', useReuseTabs, 'sessionId:', sessionId);
+        console.log(
+          '[background] useReuseTabs:',
+          useReuseTabs,
+          'sessionId:',
+          sessionId,
+        );
         if (useReuseTabs && sessionId) {
           console.log('[background] Using reuseLLMTabs');
           const result = await reuseLLMTabs(
@@ -2296,11 +2646,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         } else {
           console.log('[background] Using openOrReuseLLMTabs (fallback)');
           // Fallback to old behavior for backward compatibility
-          await openOrReuseLLMTabs(
-            currentTab,
-            llmProviders,
-            collectedContents,
-          );
+          await openOrReuseLLMTabs(currentTab, llmProviders, collectedContents);
           sendResponse({ success: true });
         }
       } catch (error) {
@@ -2336,7 +2682,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
-
 
   if (message.type === 'INJECT_CUSTOM_JS') {
     const ruleId = message.ruleId;
@@ -2412,9 +2757,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const tabId = sender.tab.id;
         const windowId =
-          typeof sender.tab.windowId === 'number'
-            ? sender.tab.windowId
-            : null;
+          typeof sender.tab.windowId === 'number' ? sender.tab.windowId : null;
 
         if (windowId === null) {
           sendResponse({ isActive: false });
@@ -2441,10 +2784,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         sendResponse({ isActive });
       } catch (error) {
-        console.warn(
-          '[background] Failed to check tab active status:',
-          error,
-        );
+        console.warn('[background] Failed to check tab active status:', error);
         sendResponse({ isActive: false });
       }
     })();
