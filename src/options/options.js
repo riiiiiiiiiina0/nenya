@@ -105,7 +105,7 @@ class NavigationManager {
    */
   handleInitialHash() {
     if (window.location.hash) {
-      const targetId = window.location.hash.substring(1);
+      const targetId = window.location.hash.substring(1).split('&')[0];
       this.showSection(targetId);
     } else {
       // Default to first section if no hash

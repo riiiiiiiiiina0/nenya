@@ -35,9 +35,10 @@ const getdarkModeRules = async () => {
   };
 
   const initUrlPreload = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const url = urlParams.get('url');
-    if (url) {
+    const hash = window.location.hash;
+    const urlMatch = hash.match(/&url=([^&]*)/);
+    if (urlMatch && urlMatch[1]) {
+      const url = decodeURIComponent(urlMatch[1]);
       document.getElementById('darkModePatternInput').value = url;
     }
   }
