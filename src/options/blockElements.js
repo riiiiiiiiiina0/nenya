@@ -5,6 +5,7 @@
  * @property {string} id
  * @property {string} urlPattern
  * @property {string[]} selectors
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -101,7 +102,7 @@ function normalizeRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, urlPattern?: unknown, selectors?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, urlPattern?: unknown, selectors?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const urlPattern =
@@ -146,6 +147,7 @@ function normalizeRules(value) {
         id,
         urlPattern,
         selectors,
+        disabled: !!raw.disabled,
       };
       if (typeof raw.createdAt === 'string') {
         rule.createdAt = raw.createdAt;
@@ -499,6 +501,10 @@ function renderList() {
       'rounded-lg border border-base-300 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
     container.setAttribute('role', 'listitem');
 
+    if (rule.disabled) {
+      container.classList.add('opacity-50');
+    }
+
     const info = document.createElement('div');
     info.className = 'space-y-1 flex-1';
 
@@ -579,6 +585,25 @@ function renderList() {
       render();
     });
     actions.appendChild(deleteButton);
+
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'form-control';
+    const toggleLabel = document.createElement('label');
+    toggleLabel.className = 'label cursor-pointer gap-4';
+    toggleLabel.textContent = 'Enabled';
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'toggle toggle-success';
+    toggle.checked = !rule.disabled;
+    toggle.addEventListener('change', (event) => {
+      const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
+      rule.disabled = !isChecked;
+      void saveRules(rules);
+      render();
+    });
+    toggleLabel.appendChild(toggle);
+    toggleContainer.appendChild(toggleLabel);
+    actions.appendChild(toggleContainer);
 
     container.appendChild(actions);
     listElement.appendChild(container);

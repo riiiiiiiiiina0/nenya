@@ -9,6 +9,7 @@
  * @property {string} id
  * @property {string} pattern
  * @property {number} intervalSeconds
+ * @property {boolean | undefined} [disabled]
  * @property {string | undefined} [createdAt]
  * @property {string | undefined} [updatedAt]
  */
@@ -113,7 +114,7 @@ function normalizeStoredRules(value) {
         return;
       }
 
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+      const raw = /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
       const pattern =
         typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       const interval = Math.max(
@@ -144,6 +145,7 @@ function normalizeStoredRules(value) {
         id,
         pattern,
         intervalSeconds: interval,
+        disabled: !!raw.disabled,
         createdAt: undefined,
         updatedAt: undefined,
       };
@@ -252,7 +254,7 @@ function findMatchingRule(url) {
   let bestInterval = Number.POSITIVE_INFINITY;
 
   compiledRules.forEach((entry) => {
-    if (!entry?.pattern) {
+    if (!entry?.pattern || entry.rule.disabled) {
       return;
     }
     if (!entry.pattern.test(url)) {

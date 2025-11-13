@@ -23,6 +23,7 @@
  * @property {string[]} urlPatterns
  * @property {UrlProcessor[]} processors
  * @property {ApplyWhenOption[]} applyWhen - When to apply this rule
+ * @property {boolean | undefined} disabled
  * @property {string | undefined} createdAt
  * @property {string | undefined} updatedAt
  */
@@ -209,7 +210,7 @@ function normalizeRules(value) {
         return;
       }
       const raw =
-        /** @type {{ id?: unknown, name?: unknown, urlPatterns?: unknown, processors?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        /** @type {{ id?: unknown, name?: unknown, urlPatterns?: unknown, processors?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
           entry
         );
       const name =
@@ -315,6 +316,7 @@ function normalizeRules(value) {
         urlPatterns,
         processors,
         applyWhen: /** @type {ApplyWhenOption[]} */ (filteredApplyWhen),
+        disabled: !!raw.disabled,
       };
 
       if (typeof raw.createdAt === 'string') {
@@ -394,7 +396,7 @@ function render() {
     <div
       class="rounded-lg border border-base-300 p-3 cursor-pointer transition-colors hover:bg-base-200 ${
         selectedRuleId === rule.id ? 'bg-base-200 border-primary' : ''
-      }"
+      } ${rule.disabled ? 'opacity-50' : ''}"
       data-rule-id="${rule.id}"
       role="button"
       tabindex="0"
@@ -425,6 +427,12 @@ function render() {
           </button>
         </div>
       </div>
+      <div class="form-control mt-2">
+        <label class="label cursor-pointer gap-2">
+          <span class="label-text text-xs">Enabled</span>
+          <input type="checkbox" class="toggle toggle-sm toggle-success" data-toggle-id="${rule.id}" ${!rule.disabled ? 'checked' : ''} />
+        </label>
+      </div>
     </div>
   `,
     )
@@ -447,6 +455,28 @@ function render() {
         selectedRuleId = ruleId;
         renderDetails(ruleId);
         render();
+      }
+    });
+  });
+
+  listElement.querySelectorAll('[data-toggle-id]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ruleId = el.getAttribute('data-toggle-id');
+      const rule = rules.find((r) => r.id === ruleId);
+      if (rule) {
+        rule.disabled = !/** @type {HTMLInputElement} */ (el).checked;
+        void (async () => {
+          syncing = true;
+          try {
+            await chrome.storage.sync.set({ [STORAGE_KEY]: rules });
+            render();
+          } catch (error) {
+            console.error('[urlProcessRules] Failed to save rule:', error);
+          } finally {
+            syncing = false;
+          }
+        })();
       }
     });
   });
