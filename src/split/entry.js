@@ -1139,7 +1139,6 @@ function updatePageTitle() {
 
 /**
  * Save or update the current split page URL in Chrome storage
- * Also saves the tab group ID if the tab belongs to a group
  */
 async function saveSplitPageUrl() {
   try {
@@ -1151,37 +1150,21 @@ async function saveSplitPageUrl() {
       return;
     }
 
-    // Get current tab info to retrieve groupId
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const currentTab = tabs && tabs[0];
-    const groupId = currentTab && typeof currentTab.groupId === 'number' 
-      ? currentTab.groupId 
-      : chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
-
     // Get existing split page URLs
     const result = await chrome.storage.local.get(['splitPageUrls']);
-    const existingEntries = Array.isArray(result.splitPageUrls)
+    const existingUrls = Array.isArray(result.splitPageUrls)
       ? result.splitPageUrls
       : [];
 
-    // Normalize existing entries (handle both old string format and new object format)
-    const normalizedEntries = existingEntries.map((entry) => {
-      if (typeof entry === 'string') {
-        return { url: entry, groupId: chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1 };
-      }
-      return entry;
-    });
-
     // Remove this URL if it already exists (to avoid duplicates)
-    const filteredEntries = normalizedEntries.filter((entry) => entry.url !== currentUrl);
+    const filteredUrls = existingUrls.filter((url) => url !== currentUrl);
 
-    // Add current URL with group info
-    const newEntry = { url: currentUrl, groupId };
-    const updatedEntries = [...filteredEntries, newEntry];
+    // Add current URL
+    const updatedUrls = [...filteredUrls, currentUrl];
 
     // Save to storage
-    await chrome.storage.local.set({ splitPageUrls: updatedEntries });
-    console.log('[split] Saved split page URL with groupId:', currentUrl, groupId);
+    await chrome.storage.local.set({ splitPageUrls: updatedUrls });
+    console.log('[split] Saved split page URL:', currentUrl);
   } catch (error) {
     console.error('[split] Failed to save split page URL:', error);
   }
@@ -1202,18 +1185,15 @@ async function removeSplitPageUrl() {
 
     // Get existing split page URLs
     const result = await chrome.storage.local.get(['splitPageUrls']);
-    const existingEntries = Array.isArray(result.splitPageUrls)
+    const existingUrls = Array.isArray(result.splitPageUrls)
       ? result.splitPageUrls
       : [];
 
-    // Remove current URL (handle both old string format and new object format)
-    const updatedEntries = existingEntries.filter((entry) => {
-      const url = typeof entry === 'string' ? entry : entry.url;
-      return url !== currentUrl;
-    });
+    // Remove current URL
+    const updatedUrls = existingUrls.filter((url) => url !== currentUrl);
 
     // Save to storage
-    await chrome.storage.local.set({ splitPageUrls: updatedEntries });
+    await chrome.storage.local.set({ splitPageUrls: updatedUrls });
     console.log('[split] Removed split page URL:', currentUrl);
   } catch (error) {
     console.error('[split] Failed to remove split page URL:', error);
