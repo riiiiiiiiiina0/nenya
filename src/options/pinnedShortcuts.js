@@ -20,6 +20,7 @@ const AVAILABLE_SHORTCUTS = [
   { id: 'splitPage', emoji: '🈹', tooltip: 'Split page' },
   { id: 'autoReload', emoji: '🔁', tooltip: 'Auto reload this page' },
   { id: 'brightMode', emoji: '🔆', tooltip: 'Render this page in bright mode' },
+  { id: 'darkMode', emoji: '🌘', tooltip: 'Render this page in dark mode' },
   { id: 'highlightText', emoji: '🟨', tooltip: 'Highlight text in this page' },
   { id: 'customCode', emoji: '📑', tooltip: 'Inject js/css into this page' },
   { id: 'pictureInPicture', emoji: '🖼️', tooltip: 'Picture in Picture' },

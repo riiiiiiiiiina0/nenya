@@ -60,6 +60,11 @@ const SHORTCUT_CONFIG = {
     tooltip: 'Render this page in bright mode',
     handler: () => void handleBrightMode(),
   },
+  darkMode: {
+    emoji: '🌘',
+    tooltip: 'Render this page in dark mode',
+    handler: () => void handleDarkMode(),
+  },
   highlightText: {
     emoji: '🟨',
     tooltip: 'Highlight text in this page',
@@ -122,6 +127,7 @@ let importCustomCodeButton = null;
 let splitPageButton = null;
 let autoReloadButton = null;
 let brightModeButton = null;
+let darkModeButton = null;
 let highlightTextButton = null;
 let customCodeButton = null;
 let pictureInPictureButton = null;
@@ -192,6 +198,7 @@ async function loadAndRenderShortcuts() {
     splitPageButton = null;
     autoReloadButton = null;
     brightModeButton = null;
+    darkModeButton = null;
     highlightTextButton = null;
     customCodeButton = null;
     pictureInPictureButton = null;
@@ -248,6 +255,9 @@ async function loadAndRenderShortcuts() {
         case 'brightMode':
           brightModeButton = button;
           break;
+        case 'darkMode':
+            darkModeButton = button;
+            break;
         case 'highlightText':
           highlightTextButton = button;
           break;
@@ -340,6 +350,54 @@ if (chrome?.storage?.onChanged) {
       void loadAndRenderShortcuts();
     }
   });
+}
+
+/**
+ * Handle opening dark mode options with current tab URL prefilled.
+ * @returns {Promise<void>}
+ */
+
+async function handleDarkMode() {
+    try {
+        // Get the current active tab
+        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tabs || tabs.length === 0) {
+            if (statusMessage) {
+                concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+            }
+            return;
+        }
+
+        const currentTab = tabs[0];
+        const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
+
+        if (!currentUrl) {
+            if (statusMessage) {
+                concludeStatus(
+                    'No URL found for current tab.',
+                    'error',
+                    3000,
+                    statusMessage,
+                );
+            }
+            return;
+        }
+
+        // Open options page with dark mode section hash
+        const optionsUrl = chrome.runtime.getURL('src/options/index.html');
+        chrome.tabs.create({ url: `${optionsUrl}#dark-mode-heading&url=${encodeURIComponent(currentUrl)}` });
+        window.close();
+    } catch (error) {
+        console.error('[popup] Error opening dark mode options:', error);
+        if (statusMessage) {
+            concludeStatus(
+                'Unable to open dark mode options.',
+                'error',
+                3000,
+                statusMessage,
+            );
+        }
+    }
 }
 
 /**

@@ -66,6 +66,8 @@
         "<all_urls>"
       ],
       "js": [
+        "src/libs/darkreader.js",
+        "src/contentScript/darkMode.js",
         "src/contentScript/bright-mode.js",
         "src/contentScript/block-elements.js",
         "src/contentScript/custom-js-css.js",
