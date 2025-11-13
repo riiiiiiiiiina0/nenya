@@ -1084,21 +1084,6 @@ async function handlePictureInPicture() {
             };
           }
 
-          // Wait for videos to load metadata if needed
-          await Promise.all(
-            videos.map((video) => {
-              if (video.readyState >= 1) {
-                return Promise.resolve();
-              }
-              return new Promise((resolve) => {
-                video.addEventListener('loadedmetadata', resolve, {
-                  once: true,
-                });
-                // Timeout after 2 seconds
-                setTimeout(resolve, 2000);
-              });
-            }),
-          );
 
           // Find the largest video by area (width * height)
           let largestVideo = null;
