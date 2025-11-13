@@ -603,6 +603,15 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   handleLifecycleEvent('install');
   // Deduplicate custom titles on install/update
   void deduplicateCustomTitlesByUrl();
+  
+  // Clear the session flag so split pages can be restored after reload/update
+  try {
+    await chrome.storage.session.remove('splitPagesRestored');
+    console.log('[background] Cleared split pages restored flag for reload/update');
+  } catch (error) {
+    console.warn('[background] Failed to clear session storage:', error);
+  }
+  
   if (details.reason === 'install' || details.reason === 'update') {
     // Inject content scripts into existing tabs instead of reloading them
     // This preserves user state (scroll position, form data, etc.)
@@ -677,6 +686,7 @@ let isRestoringSplitPages = false;
  * Restore split pages from storage
  * Called on startup, extension reload, and when service worker initializes
  * Includes deduplication logic to prevent opening duplicate tabs
+ * Preserves tab group membership and avoids auto-activation
  */
 async function restoreSplitPages() {
   // Prevent concurrent restoration
@@ -685,27 +695,56 @@ async function restoreSplitPages() {
     return;
   }
 
+  // Check if we've already restored split pages this session
+  // This prevents restoring when service worker wakes up from inactive state
+  try {
+    const sessionResult = await chrome.storage.session.get(['splitPagesRestored']);
+    if (sessionResult.splitPagesRestored) {
+      console.log('[background] Split pages already restored this session, skipping');
+      return;
+    }
+  } catch (error) {
+    // chrome.storage.session might not be available in all Chrome versions
+    console.warn('[background] Failed to check session storage:', error);
+  }
+
   isRestoringSplitPages = true;
 
   try {
     const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
     const result = await chrome.storage.local.get(['splitPageUrls']);
-    const savedUrls = Array.isArray(result.splitPageUrls)
+    const savedEntries = Array.isArray(result.splitPageUrls)
       ? result.splitPageUrls
       : [];
 
-    if (savedUrls.length === 0) {
+    if (savedEntries.length === 0) {
       return;
     }
 
+    // Normalize entries (handle both old string format and new object format)
+    const normalizedEntries = savedEntries.map((entry) => {
+      if (typeof entry === 'string') {
+        return { url: entry, groupId: chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1 };
+      }
+      return entry;
+    });
+
     // Step 1: De-duplicate URLs from storage first
-    const uniqueUrls = Array.from(new Set(savedUrls));
-    if (uniqueUrls.length !== savedUrls.length) {
+    const seen = new Set();
+    const uniqueEntries = [];
+    for (const entry of normalizedEntries) {
+      if (!seen.has(entry.url)) {
+        seen.add(entry.url);
+        uniqueEntries.push(entry);
+      }
+    }
+
+    if (uniqueEntries.length !== savedEntries.length) {
       console.log(
-        `[background] De-duplicated ${savedUrls.length - uniqueUrls.length} duplicate URL(s) from storage`,
+        `[background] De-duplicated ${savedEntries.length - uniqueEntries.length} duplicate URL(s) from storage`,
       );
-      // Update storage with de-duplicated URLs
-      await chrome.storage.local.set({ splitPageUrls: uniqueUrls });
+      // Update storage with de-duplicated entries
+      await chrome.storage.local.set({ splitPageUrls: uniqueEntries });
     }
 
     // Step 2: Check if there is already a tab with the same URL (any tab, not just split pages)
@@ -721,33 +760,53 @@ async function restoreSplitPages() {
     );
 
     // Open split pages that aren't already open
-    const urlsToOpen = uniqueUrls.filter((url) => !existingUrls.has(url));
+    const entriesToOpen = uniqueEntries.filter((entry) => !existingUrls.has(entry.url));
     
-    if (urlsToOpen.length === 0) {
+    if (entriesToOpen.length === 0) {
       console.log('[background] All split pages are already open, skipping restoration');
       return;
     }
 
-    console.log(`[background] Restoring ${urlsToOpen.length} split page(s)`);
+    console.log(`[background] Restoring ${entriesToOpen.length} split page(s)`);
 
-    for (const url of urlsToOpen) {
+    for (const entry of entriesToOpen) {
       try {
         // Double-check the tab wasn't opened between the query and now
-        const currentTabs = await chrome.tabs.query({ url });
+        const currentTabs = await chrome.tabs.query({ url: entry.url });
         if (currentTabs.length > 0) {
-          console.log('[background] Split page already exists, skipping:', url);
+          console.log('[background] Split page already exists, skipping:', entry.url);
           continue;
         }
 
-        await chrome.tabs.create({ url });
-        console.log('[background] Restored split page:', url);
+        // Prepare tab creation options
+        const createOptions = { 
+          url: entry.url,
+          active: false  // Don't auto-activate restored split pages
+        };
+
+        // Add groupId if the tab belonged to a group (not the default "no group" value)
+        const noGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
+        if (entry.groupId && entry.groupId !== noGroupId) {
+          createOptions.groupId = entry.groupId;
+        }
+
+        await chrome.tabs.create(createOptions);
+        console.log('[background] Restored split page:', entry.url, 'groupId:', entry.groupId);
       } catch (error) {
         console.warn(
           '[background] Failed to restore split page:',
-          url,
+          entry.url,
           error,
         );
       }
+    }
+
+    // Mark that we've restored split pages this session
+    try {
+      await chrome.storage.session.set({ splitPagesRestored: true });
+      console.log('[background] Marked split pages as restored for this session');
+    } catch (error) {
+      console.warn('[background] Failed to set session storage:', error);
     }
   } catch (error) {
     console.warn('[background] Failed to restore split pages:', error);
@@ -998,11 +1057,11 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
       const splitBaseUrl = chrome.runtime.getURL('src/split/split.html');
       const result = await chrome.storage.local.get(['splitPageUrls']);
-      const savedUrls = Array.isArray(result.splitPageUrls)
+      const savedEntries = Array.isArray(result.splitPageUrls)
         ? result.splitPageUrls
         : [];
 
-      if (savedUrls.length === 0) {
+      if (savedEntries.length === 0) {
         return;
       }
 
@@ -1019,11 +1078,15 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
           .map((tab) => String(tab.url)),
       );
 
-      // Remove URLs that are no longer open
-      const updatedUrls = savedUrls.filter((url) => openSplitUrls.has(url));
+      // Remove entries for URLs that are no longer open
+      // Handle both old string format and new object format
+      const updatedEntries = savedEntries.filter((entry) => {
+        const url = typeof entry === 'string' ? entry : entry.url;
+        return openSplitUrls.has(url);
+      });
 
-      if (updatedUrls.length !== savedUrls.length) {
-        await chrome.storage.local.set({ splitPageUrls: updatedUrls });
+      if (updatedEntries.length !== savedEntries.length) {
+        await chrome.storage.local.set({ splitPageUrls: updatedEntries });
         console.log(
           '[background] Cleaned up closed split page URLs from storage',
         );
