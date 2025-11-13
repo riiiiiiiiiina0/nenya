@@ -1153,6 +1153,14 @@ async function handlePictureInPicture() {
         return;
       }
 
+      // If PiP was entered successfully, store the tab ID
+      if (result.action === 'entered') {
+        await chrome.storage.local.set({ pipTabId: currentTab.id });
+      } else if (result.action === 'exited') {
+        // If PiP was exited, remove the stored tab ID
+        await chrome.storage.local.remove('pipTabId');
+      }
+
       // Success message
       if (statusMessage) {
         const actionText = result.action === 'entered' ? 'entered' : 'exited';
