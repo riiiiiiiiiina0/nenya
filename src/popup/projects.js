@@ -985,14 +985,6 @@ async function buildProjectTabDescriptors(tabs) {
   const descriptors = [];
   const seen = new Set();
 
-  // Get all custom titles at once for efficiency
-  const tabIds = tabs
-    .filter((tab) => tab && typeof tab.id === 'number')
-    .map((tab) => tab.id);
-
-  const customTitleKeys = tabIds.map((id) => `customTitle_${id}`);
-  const customTitles = await chrome.storage.local.get(customTitleKeys);
-
   tabs.forEach((tab) => {
     if (!tab || typeof tab.id !== 'number' || !tab.url) {
       return;
@@ -1006,26 +998,7 @@ async function buildProjectTabDescriptors(tabs) {
     }
     seen.add(normalizedUrl);
 
-    // Check for custom title (handle both old string format and new object format)
-    const customTitleData = customTitles[`customTitle_${tab.id}`];
-    let customTitle = '';
-
-    if (typeof customTitleData === 'string' && customTitleData.trim() !== '') {
-      // Old format: just a string
-      customTitle = customTitleData.trim();
-    } else if (
-      customTitleData &&
-      typeof customTitleData === 'object' &&
-      customTitleData.title &&
-      typeof customTitleData.title === 'string' &&
-      customTitleData.title.trim() !== ''
-    ) {
-      // New format: object with tabId, url, and title
-      customTitle = customTitleData.title.trim();
-    }
-
-    const finalTitle =
-      customTitle || (typeof tab.title === 'string' ? tab.title : '');
+    const finalTitle = typeof tab.title === 'string' ? tab.title : '';
 
     descriptors.push({
       id: tab.id,

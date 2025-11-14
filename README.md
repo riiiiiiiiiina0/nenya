@@ -11,7 +11,6 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
 ### 🗂️ Tab & Project Management
 
 - **Project Management:** Save and restore entire browsing sessions as "projects"
-- **Custom Tab Titles:** Set persistent custom titles for any tab
 - **Tab Snapshots:** Automatic tab state preservation
 - **Tab Switching:** Quick keyboard shortcuts to navigate between tabs (left/right)
 - **Pinned Shortcuts:** Customize your popup toolbar with your most-used features

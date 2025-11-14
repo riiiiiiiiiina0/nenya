@@ -49,7 +49,6 @@ import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/spl
  * @typedef {Object} ProjectGroupContext
  * @property {Map<number, ProjectGroupMetadata>} groupInfo
  * @property {Map<number, number>} tabIndexById
- * @property {Map<number, string>} [customTitles]
  */
 
 /**
@@ -57,7 +56,6 @@ import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/spl
  * @property {number | undefined} tabIndex
  * @property {{ name: string, color: string, index: number } | undefined} group
  * @property {boolean} pinned
- * @property {string | undefined} customTitle
  */
 
 /**
@@ -88,7 +86,6 @@ import { convertSplitUrlForSave, convertSplitUrlForRestore } from '../shared/spl
  * @property {boolean} pinned
  * @property {number | undefined} tabIndex
  * @property {{ name: string, color: string, index: number } | undefined} group
- * @property {string | undefined} customTitle
  * @property {number} order
  */
 
@@ -1091,7 +1088,7 @@ export async function deleteProject(projectId) {
 }
 
 /**
- * Clear all project-related cache and custom title records.
+ * Clear all project-related cache.
  * @returns {Promise<void>}
  */
 export async function clearAllProjectData() {
@@ -1101,16 +1098,6 @@ export async function clearAllProjectData() {
       CACHED_PROJECTS_KEY,
       CACHED_PROJECTS_TIMESTAMP_KEY,
     ]);
-
-    // Clear all custom title records
-    const allStorage = await chrome.storage.local.get(null);
-    const customTitleKeys = Object.keys(allStorage).filter((key) =>
-      key.startsWith('customTitle_'),
-    );
-
-    if (customTitleKeys.length > 0) {
-      await chrome.storage.local.remove(customTitleKeys);
-    }
   } catch (error) {
     console.warn('[projects] Failed to clear project data:', error);
   }
@@ -1472,20 +1459,13 @@ function sanitizeProjectItemsForRestore(items) {
 
     const metadata = parseProjectItemMetadata(item);
     const title = normalizeBookmarkTitle(item?.title, normalizedUrl);
-    const finalTitle =
-      metadata.customTitle &&
-      typeof metadata.customTitle === 'string' &&
-      metadata.customTitle.trim() !== ''
-        ? metadata.customTitle.trim()
-        : title;
 
     entries.push({
       url: normalizedUrl,
-      title: finalTitle,
+      title: title,
       pinned: metadata.pinned,
       tabIndex: metadata.tabIndex,
       group: metadata.group,
-      customTitle: metadata.customTitle,
       order: index,
     });
   });
@@ -1647,30 +1627,6 @@ async function applyProjectRestore(entries, options) {
         if (entry.pinned) {
           pinnedOffset += 1;
           outcome.pinned += 1;
-        }
-
-        // Save custom title as object with tab ID, URL, and title to local storage if it exists
-        if (
-          entry.customTitle &&
-          typeof entry.customTitle === 'string' &&
-          entry.customTitle.trim() !== ''
-        ) {
-          try {
-            await chrome.storage.local.set({
-              [`customTitle_${tab.id}`]: {
-                tabId: tab.id,
-                url: restoredUrl,
-                title: entry.customTitle.trim(),
-              },
-            });
-          } catch (error) {
-            console.log(
-              'Could not save custom title for tab',
-              tab.id,
-              ':',
-              error,
-            );
-          }
         }
       }
       totalCreated += 1;
@@ -2008,46 +1964,10 @@ async function buildProjectGroupContext(tabs) {
   const context = {
     groupInfo: new Map(),
     tabIndexById: new Map(),
-    customTitles: new Map(),
   };
 
   if (!Array.isArray(tabs) || tabs.length === 0) {
     return context;
-  }
-
-  // Fetch custom titles for all tabs
-  const tabIds = tabs
-    .map((tab) => tab.id)
-    .filter((id) => typeof id === 'number');
-  const customTitleKeys = tabIds.map((id) => `customTitle_${id}`);
-  if (customTitleKeys.length > 0) {
-    try {
-      const customTitles = await chrome.storage.local.get(customTitleKeys);
-      tabIds.forEach((id) => {
-        const customTitleData = customTitles[`customTitle_${id}`];
-        if (!context.customTitles || !customTitleData) {
-          return;
-        }
-
-        if (
-          typeof customTitleData === 'string' &&
-          customTitleData.trim() !== ''
-        ) {
-          context.customTitles.set(id, customTitleData.trim());
-          return;
-        }
-
-        if (
-          typeof customTitleData === 'object' &&
-          typeof customTitleData.title === 'string' &&
-          customTitleData.title.trim() !== ''
-        ) {
-          context.customTitles.set(id, customTitleData.title.trim());
-        }
-      });
-    } catch (error) {
-      console.warn('[projects] Failed to fetch custom titles:', error);
-    }
   }
 
   const noneGroupId = chrome.tabGroups?.TAB_GROUP_ID_NONE ?? -1;
@@ -2365,16 +2285,6 @@ function buildProjectItemPayload(tab, context, collectionId) {
     };
   }
 
-  // Include custom title in metadata if it exists
-  const customTitle = context.customTitles?.get(tab.id);
-  if (
-    customTitle &&
-    typeof customTitle === 'string' &&
-    customTitle.trim() !== ''
-  ) {
-    metadata.customTitle = customTitle.trim();
-  }
-
   return {
     link: tab.url,
     title: normalizeBookmarkTitle(tab.title, tab.url),
@@ -2396,7 +2306,6 @@ function parseProjectItemMetadata(item) {
       tabIndex: undefined,
       group: undefined,
       pinned: false,
-      customTitle: undefined,
     };
   }
 
@@ -2407,21 +2316,16 @@ function parseProjectItemMetadata(item) {
         tabIndex: undefined,
         group: undefined,
         pinned: false,
-        customTitle: undefined,
       };
     }
 
     const tabIndexValue = Number(parsed?.tab?.index);
     const tabIndex = Number.isFinite(tabIndexValue) ? tabIndexValue : undefined;
     const pinned = Boolean(parsed?.tab?.pinned);
-    const customTitle =
-      typeof parsed?.customTitle === 'string'
-        ? parsed.customTitle.trim()
-        : undefined;
 
     const groupValue = parsed?.group;
     if (!groupValue || typeof groupValue !== 'object') {
-      return { tabIndex, group: undefined, pinned, customTitle };
+      return { tabIndex, group: undefined, pinned };
     }
 
     const groupName =
@@ -2439,14 +2343,12 @@ function parseProjectItemMetadata(item) {
         index: groupIndex,
       },
       pinned,
-      customTitle,
     };
   } catch (error) {
     return {
       tabIndex: undefined,
       group: undefined,
       pinned: false,
-      customTitle: undefined,
     };
   }
 }

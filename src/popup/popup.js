@@ -135,9 +135,6 @@ let pictureInPictureButton = null;
 const saveProjectButton = /** @type {HTMLButtonElement | null} */ (
   document.getElementById('saveProjectButton')
 );
-const setCustomTitleButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('setCustomTitleButton')
-);
 
 const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
   document.getElementById('importCustomCodeFileInput')
@@ -694,20 +691,6 @@ void (async () => {
     console.error('[popup] Failed to check chat page flag:', error);
   }
 
-  // Check if we should show rename prompt (triggered by keyboard shortcut)
-  try {
-    const renameResult = await chrome.storage.local.get('openRenamePrompt');
-    if (renameResult.openRenamePrompt) {
-      // Clear the flag
-      await chrome.storage.local.remove('openRenamePrompt');
-      // Trigger the rename prompt
-      void handleSetCustomTitle();
-      return;
-    }
-  } catch (error) {
-    console.error('[popup] Failed to check rename prompt flag:', error);
-  }
-
   // Initialize the popup normally
   void initializePopup();
 })();
@@ -1256,127 +1239,6 @@ async function handlePictureInPicture() {
   }
 }
 
-/**
- * Handle setting a custom title for the current tab.
- * @returns {Promise<void>}
- */
-async function handleSetCustomTitle() {
-  try {
-    // Get the current active tab
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tabs || tabs.length === 0) {
-      if (statusMessage) {
-        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
-      }
-      return;
-    }
-
-    const currentTab = tabs[0];
-
-    // Check if tab has a valid ID
-    if (typeof currentTab.id !== 'number') {
-      if (statusMessage) {
-        concludeStatus('Invalid tab ID.', 'error', 3000, statusMessage);
-      }
-      return;
-    }
-
-    // Get current title as default
-    const currentTitle =
-      typeof currentTab.title === 'string' ? currentTab.title : '';
-
-    // Get Prompts object (loaded via script tag)
-    // @ts-ignore - Prompts is loaded globally via script tag
-    const Prompts =
-      typeof window !== 'undefined' && window.Prompts ? window.Prompts : null;
-    if (!Prompts) {
-      if (statusMessage) {
-        concludeStatus(
-          'Prompt library not loaded.',
-          'error',
-          3000,
-          statusMessage,
-        );
-      }
-      return;
-    }
-
-    // Prompt user for custom title
-    const customTitle = await Prompts.prompt(
-      'Enter custom title for this tab:',
-      currentTitle,
-    );
-    if (customTitle === null) {
-      // User cancelled
-      return;
-    }
-
-    const trimmedTitle = customTitle.trim();
-    if (!trimmedTitle) {
-      if (statusMessage) {
-        concludeStatus('Title cannot be empty.', 'error', 3000, statusMessage);
-      }
-      return;
-    }
-
-    // Save to chrome local storage
-    const storageKey = `customTitle_${currentTab.id}`;
-    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
-    await chrome.storage.local.set({
-      [storageKey]: {
-        tabId: currentTab.id,
-        url: currentUrl,
-        title: trimmedTitle,
-        updatedAt: Date.now(),
-      },
-    });
-
-    // Update the tab title immediately by injecting script
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: currentTab.id },
-        func: (title) => {
-          // Update document.title directly
-          document.title = title;
-          // Also update the title element if it exists
-          const titleElement = document.querySelector('title');
-          if (titleElement) {
-            titleElement.textContent = title;
-          }
-        },
-        args: [trimmedTitle],
-      });
-    } catch (updateError) {
-      console.warn(
-        '[popup] Failed to update tab title immediately:',
-        updateError,
-      );
-      // Continue anyway - content script will handle it via storage listener
-    }
-
-    if (statusMessage) {
-      concludeStatus(
-        'Custom title set successfully.',
-        'success',
-        2000,
-        statusMessage,
-      );
-    }
-
-    // Close the popup
-    window.close();
-  } catch (error) {
-    console.error('[popup] Error setting custom title:', error);
-    if (statusMessage) {
-      concludeStatus(
-        'Unable to set custom title.',
-        'error',
-        3000,
-        statusMessage,
-      );
-    }
-  }
-}
 
 // Listen for storage changes to update popup when user logs in/out
 chrome.storage.onChanged.addListener((changes, namespace) => {

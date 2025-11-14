@@ -1233,7 +1233,7 @@ async function handleDisconnectClick() {
       await resetMirrorState(settingsData);
     }
 
-    // Clear all project-related data and custom title records
+    // Clear all project-related data
     await clearAllProjectData();
 
     renderProviderState();

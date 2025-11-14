@@ -8,7 +8,6 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
 
 🗂️ Tab & Project Management
 • Save and restore entire browsing sessions as "projects"
-• Set persistent custom titles for any tab
 • Automatic tab state preservation with snapshots
 • Quick keyboard shortcuts to navigate between tabs
 • Customize your popup toolbar with pinned shortcuts
@@ -74,10 +73,10 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
   Required for Raindrop.io integration to mirror collections and items as browser bookmarks. The extension creates, updates, and manages bookmark folders to sync with your Raindrop account. Also enables the built-in bookmark search functionality allowing seamless cross-platform bookmark management.
 
 - **storage**:
-  Essential for saving user projects, settings, and preferences. Uses both `chrome.storage.sync` for cross-device synchronization of settings (shortcuts, rules, configurations) and `chrome.storage.local` for tab snapshots, custom titles, project data, and LLM prompts that don't need to sync.
+  Essential for saving user projects, settings, and preferences. Uses both `chrome.storage.sync` for cross-device synchronization of settings (shortcuts, rules, configurations) and `chrome.storage.local` for tab snapshots, project data, and LLM prompts that don't need to sync.
 
 - **tabs**:
-  Core functionality for project management - creates, queries, updates, and manages browser tabs. Enables saving entire browsing sessions as "projects" and restoring them later, plus features like tab switching, screenshots, split-screen functionality, auto-reload, and custom tab titles.
+  Core functionality for project management - creates, queries, updates, and manages browser tabs. Enables saving entire browsing sessions as "projects" and restoring them later, plus features like tab switching, screenshots, split-screen functionality, and auto-reload.
 
 - **tabGroups**:
   Used in conjunction with tab management to organize related tabs into groups when saving and restoring projects. Helps maintain logical organization of browsing sessions and preserves tab group structure across project saves/restores.
@@ -92,10 +91,10 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
   Enables scheduled background tasks including automatic Raindrop synchronization at regular intervals, and auto-reload functionality for specific tabs based on user-defined URL patterns and time intervals.
 
 - **scripting**:
-  Required for content script injection to implement features like element blocking, custom CSS/JS injection, video controls, picture-in-picture, text highlighting, bright mode, custom titles, split-screen functionality, and LLM page content extraction across all websites.
+  Required for content script injection to implement features like element blocking, custom CSS/JS injection, video controls, picture-in-picture, text highlighting, bright mode, split-screen functionality, and LLM page content extraction across all websites.
 
 - **activeTab**:
-  Allows the extension to interact with the currently active tab for features like custom titles, video controls, text highlighting, element picker, bright mode toggle, and clipboard operations without requiring broad host permissions. Used for popup-triggered actions on the current tab.
+  Allows the extension to interact with the currently active tab for features like video controls, text highlighting, element picker, bright mode toggle, and clipboard operations without requiring broad host permissions. Used for popup-triggered actions on the current tab.
 
 - **clipboardWrite**:
   Enables copying various content to clipboard including page titles, URLs (various formats), markdown links, and screenshots. Essential for the extension's productivity and sharing features.
