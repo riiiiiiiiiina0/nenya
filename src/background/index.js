@@ -281,6 +281,8 @@ chrome.commands.onCommand.addListener((command) => {
             target: { tabId: pipTabId },
             func: () => {
               if (document.pictureInPictureElement) {
+                // @ts-ignore
+                document.pictureInPictureElement.pause();
                 document.exitPictureInPicture();
               }
             },

@@ -277,11 +277,25 @@
     container.appendChild(pipButton);
     container.appendChild(fullscreenButton);
 
+    video.addEventListener('enterpictureinpicture', async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'getCurrentTabId',
+        });
+        if (response && response.tabId) {
+          await chrome.storage.local.set({ pipTabId: response.tabId });
+        }
+      } catch (error) {
+        console.error(
+          '[video-controller] Failed to set pipTabId on enter:',
+          error,
+        );
+      }
+    });
+
     video.addEventListener('leavepictureinpicture', () => {
       chrome.storage.local.remove('pipTabId');
-      if (!video.paused) {
-        video.pause();
-      }
+      video.pause();
     });
 
     const parent = video.parentElement;
