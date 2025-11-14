@@ -1403,55 +1403,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       void restoreCustomTitleByUrl(tabId, tab.url);
     }
   }
-
-  // Enforce stored custom titles when the page updates its title
-  if (typeof changeInfo.title === 'string' && changeInfo.title.trim() !== '') {
-    const storageKey = `customTitle_${tabId}`;
-    try {
-      const stored = await chrome.storage.local.get(storageKey);
-      const record = stored?.[storageKey];
-      const customTitle =
-        typeof record === 'string'
-          ? record.trim()
-          : typeof record?.title === 'string'
-            ? record.title.trim()
-            : '';
-
-      if (customTitle && customTitle !== changeInfo.title.trim()) {
-        try {
-          await chrome.scripting.executeScript({
-            target: { tabId },
-            func: (title) => {
-              try {
-                document.title = title;
-              } catch (error) {
-                // Ignore failures from restricted pages
-              }
-              let titleElement = document.querySelector('title');
-              if (!titleElement) {
-                titleElement = document.createElement('title');
-                if (document.head) {
-                  document.head.appendChild(titleElement);
-                } else {
-                  document.documentElement.appendChild(titleElement);
-                }
-              }
-              titleElement.textContent = title;
-            },
-            args: [customTitle],
-            world: 'ISOLATED',
-          });
-        } catch (scriptError) {
-          console.warn(
-            '[background] Failed to enforce custom title:',
-            scriptError,
-          );
-        }
-      }
-    } catch (error) {
-      console.warn('[background] Could not enforce custom title:', error);
-    }
-  }
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
