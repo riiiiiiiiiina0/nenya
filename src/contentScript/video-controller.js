@@ -221,6 +221,58 @@
   }
 
   /**
+   * Set up PiP tracking event listeners on a video element
+   * This should be called for ALL videos to track PiP state, regardless of size
+   * @param {HTMLVideoElement} video
+   */
+  function setupPipTracking(video) {
+    // Only set up once per video
+    if (video.hasAttribute('data-pip-tracking')) {
+      console.log('[video-controller] PiP tracking already set up for video');
+      return;
+    }
+    video.setAttribute('data-pip-tracking', 'true');
+    console.log('[video-controller] Setting up PiP tracking for video');
+
+    // Track when PiP is entered (via any method - native button or custom button)
+    video.addEventListener('enterpictureinpicture', () => {
+      console.log('[video-controller] ✅ enterpictureinpicture event FIRED!');
+      
+      // Use callback-style messaging to ensure response is received
+      chrome.runtime.sendMessage(
+        { type: 'getCurrentTabId' },
+        (response) => {
+          console.log('[video-controller] Got tab ID response:', response);
+          if (chrome.runtime.lastError) {
+            console.error('[video-controller] Runtime error:', chrome.runtime.lastError);
+            return;
+          }
+          
+          if (response && response.tabId) {
+            console.log('[video-controller] PiP entered, storing pipTabId:', response.tabId);
+            chrome.storage.local.set({ pipTabId: response.tabId }).then(() => {
+              // Verify it was stored
+              chrome.storage.local.get('pipTabId').then((verify) => {
+                console.log('[video-controller] Verified stored pipTabId:', verify.pipTabId);
+              });
+            });
+          } else {
+            console.error('[video-controller] No tabId in response!');
+          }
+        }
+      );
+    });
+
+    video.addEventListener('leavepictureinpicture', () => {
+      console.log('[video-controller] leavepictureinpicture event fired');
+      chrome.storage.local.remove('pipTabId');
+      if (!video.paused) {
+        video.pause();
+      }
+    });
+  }
+
+  /**
    * @param {HTMLVideoElement} video
    */
   function addControls(video) {
@@ -229,6 +281,9 @@
     }
 
     video.setAttribute('data-video-controller', 'true');
+
+    // Ensure PiP tracking is set up for this video
+    setupPipTracking(video);
 
     const container = document.createElement('div');
     container.classList.add('video-controller-container');
@@ -247,14 +302,8 @@
           console.log(
             '[video-controller] Requesting Picture-in-Picture for video',
           );
+          // Just request PiP - the enterpictureinpicture event listener will handle storing the tab ID
           await video.requestPictureInPicture();
-          const response = await chrome.runtime.sendMessage({
-            type: 'getCurrentTabId',
-          });
-          if (response && response.tabId) {
-            console.log('[video-controller] Storing pipTabId:', response.tabId);
-            await chrome.storage.local.set({ pipTabId: response.tabId });
-          }
         }
       } catch (error) {
         console.error('[video-controller] PiP failed:', error);
@@ -276,13 +325,6 @@
 
     container.appendChild(pipButton);
     container.appendChild(fullscreenButton);
-
-    video.addEventListener('leavepictureinpicture', () => {
-      chrome.storage.local.remove('pipTabId');
-      if (!video.paused) {
-        video.pause();
-      }
-    });
 
     const parent = video.parentElement;
     if (parent) {
@@ -327,7 +369,23 @@
     addControls(video);
   }
 
+  /**
+   * Find and set up PiP tracking for all videos
+   */
+  function setupPipTrackingForAllVideos() {
+    const videos = document.querySelectorAll('video');
+    videos.forEach((video) => {
+      if (video instanceof HTMLVideoElement) {
+        setupPipTracking(video);
+      }
+    });
+  }
+
   const observer = new MutationObserver(async (_mutations) => {
+    // Set up PiP tracking for all videos (including new ones)
+    setupPipTrackingForAllVideos();
+    
+    // Add custom controls only for large videos
     const videos = await findAllLargeUnprocessedVideos();
     videos.forEach(processVideoElement);
   });
@@ -338,6 +396,8 @@
     // attributes: true,
   });
 
+  // Initial setup
+  setupPipTrackingForAllVideos();
   findAllLargeUnprocessedVideos().then((videos) =>
     videos.forEach(processVideoElement),
   );

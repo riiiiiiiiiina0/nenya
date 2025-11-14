@@ -1146,6 +1146,18 @@ async function handlePictureInPicture() {
             return { success: false, error: 'No valid video element found.' };
           }
 
+          // Set up event listeners for PiP if not already set up
+          if (!largestVideo.hasAttribute('data-pip-listeners-set')) {
+            largestVideo.setAttribute('data-pip-listeners-set', 'true');
+            
+            largestVideo.addEventListener('leavepictureinpicture', () => {
+              chrome.storage.local.remove('pipTabId');
+              if (!largestVideo.paused) {
+                largestVideo.pause();
+              }
+            });
+          }
+
           try {
             // Check if Picture-in-Picture is already active
             if (document.pictureInPictureElement) {

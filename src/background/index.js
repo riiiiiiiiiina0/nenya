@@ -275,20 +275,38 @@ chrome.commands.onCommand.addListener((command) => {
   if (command === 'pip-quit') {
     void (async () => {
       try {
-        const { pipTabId } = await chrome.storage.local.get('pipTabId');
+        console.log('[commands] 🔴 pip-quit command received!');
+        const storage = await chrome.storage.local.get('pipTabId');
+        console.log('[commands] Storage contents:', storage);
+        const { pipTabId } = storage;
+        console.log('[commands] pipTabId from storage:', pipTabId);
+        
         if (pipTabId) {
+          console.log('[commands] Found pipTabId, executing script on tab:', pipTabId);
           await chrome.scripting.executeScript({
             target: { tabId: pipTabId },
             func: () => {
+              console.log('[injected] Checking for PiP element:', document.pictureInPictureElement);
               if (document.pictureInPictureElement) {
+                const pipVideo = document.pictureInPictureElement;
+                console.log('[injected] Exiting PiP and pausing video');
                 document.exitPictureInPicture();
+                // Pause the video after exiting PiP
+                if (pipVideo && !pipVideo.paused) {
+                  pipVideo.pause();
+                }
+              } else {
+                console.log('[injected] No PiP element found!');
               }
             },
           });
           await chrome.storage.local.remove('pipTabId');
+          console.log('[commands] PiP quit successful, removed pipTabId from storage');
+        } else {
+          console.warn('[commands] ⚠️ No pipTabId found in storage! Cannot quit PiP.');
         }
       } catch (error) {
-        console.warn('[commands] Quit PiP failed:', error);
+        console.error('[commands] Quit PiP failed:', error);
       }
     })();
     return;
@@ -1953,9 +1971,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === GET_CURRENT_TAB_ID_MESSAGE) {
+    console.log('[background] GET_CURRENT_TAB_ID_MESSAGE received from sender:', sender);
+    console.log('[background] sender.tab:', sender.tab);
     if (sender.tab) {
+      console.log('[background] Responding with tabId:', sender.tab.id);
       sendResponse({ tabId: sender.tab.id });
     } else {
+      console.log('[background] No sender.tab, responding with null');
       sendResponse({ tabId: null });
     }
     return true;
