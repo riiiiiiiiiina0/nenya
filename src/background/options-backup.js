@@ -964,7 +964,9 @@ async function applyPinnedShortcuts(shortcuts) {
   }
   // Valid shortcut IDs (excluding openOptions which is always shown)
   const sanitized = shortcuts
-    .filter((id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id))
+    .filter(
+      (id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id),
+    )
     .slice(0, 6);
   suppressBackup('pinned-shortcuts');
   await chrome.storage.sync.set({
@@ -1145,15 +1147,16 @@ function normalizeDarkModeRules(value) {
         return;
       }
 
+      // Validate URLPattern but don't skip - content script handles invalid patterns
       try {
         new URLPattern(pattern);
       } catch (error) {
         console.warn(
-          '[options-backup] Ignoring invalid dark mode pattern:',
+          '[options-backup] Dark mode pattern may be invalid but will be backed up:',
           pattern,
           error,
         );
-        return;
+        // Don't return - continue to back up the pattern
       }
 
       let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
@@ -1188,17 +1191,17 @@ function normalizeDarkModeRules(value) {
  * @returns {Promise<DarkModeRuleSettings[]>}
  */
 async function collectDarkModeRules() {
-    const result = await chrome.storage.sync.get(DARK_MODE_RULES_KEY);
-    const { rules: sanitized, mutated } = normalizeDarkModeRules(
-        result?.[DARK_MODE_RULES_KEY],
-    );
-    if (mutated) {
-        suppressBackup('dark-mode-rules');
-        await chrome.storage.sync.set({
-        [DARK_MODE_RULES_KEY]: sanitized,
-        });
-    }
-    return sanitized;
+  const result = await chrome.storage.sync.get(DARK_MODE_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeDarkModeRules(
+    result?.[DARK_MODE_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('dark-mode-rules');
+    await chrome.storage.sync.set({
+      [DARK_MODE_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
 }
 
 /**
@@ -1207,11 +1210,11 @@ async function collectDarkModeRules() {
  * @returns {Promise<void>}
  */
 async function applyDarkModeRules(rules) {
-    const { rules: sanitized } = normalizeDarkModeRules(rules);
-    suppressBackup('dark-mode-rules');
-    await chrome.storage.sync.set({
-        [DARK_MODE_RULES_KEY]: sanitized,
-    });
+  const { rules: sanitized } = normalizeDarkModeRules(rules);
+  suppressBackup('dark-mode-rules');
+  await chrome.storage.sync.set({
+    [DARK_MODE_RULES_KEY]: sanitized,
+  });
 }
 
 /**
@@ -1593,17 +1596,18 @@ function normalizeCustomCodeRules(value) {
         return;
       }
 
+      // Validate URLPattern but don't skip - content script handles invalid patterns
       try {
         // @ts-ignore - URLPattern is a browser API
         // eslint-disable-next-line no-new
         new URLPattern(pattern);
       } catch (error) {
         console.warn(
-          '[options-backup] Ignoring invalid custom code pattern:',
+          '[options-backup] Custom code pattern may be invalid but will be backed up:',
           pattern,
           error,
         );
-        return;
+        // Don't return - continue to back up the pattern
       }
 
       const css = typeof raw.css === 'string' ? raw.css : '';
@@ -1726,13 +1730,13 @@ async function buildAuthProviderPayload(trigger) {
  * @returns {Promise<DarkModeRulesBackupPayload>}
  */
 async function buildDarkModeRulesPayload(trigger) {
-    const rules = await collectDarkModeRules();
-    const metadata = await buildMetadata(trigger);
-    return {
-        kind: 'dark-mode-rules',
-        rules,
-        metadata,
-    };
+  const rules = await collectDarkModeRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'dark-mode-rules',
+    rules,
+    metadata,
+  };
 }
 
 /**
@@ -2174,14 +2178,21 @@ function normalizeAutoGoogleLoginRules(value) {
         return;
       }
 
+      // Validate URLPattern but don't skip - content script handles invalid patterns
       try {
         // eslint-disable-next-line no-new
         new URLPattern(pattern);
-      } catch {
-        return;
+      } catch (error) {
+        console.warn(
+          '[options-backup] Auto Google login pattern may be invalid but will be backed up:',
+          pattern,
+          error,
+        );
+        // Don't return - continue to back up the pattern
       }
 
-      const email = typeof raw.email === 'string' ? raw.email.trim() : undefined;
+      const email =
+        typeof raw.email === 'string' ? raw.email.trim() : undefined;
       if (email) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
@@ -2294,7 +2305,9 @@ async function collectPinnedShortcuts() {
   }
   // Valid shortcut IDs (excluding openOptions which is always shown)
   return shortcuts
-    .filter((id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id))
+    .filter(
+      (id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id),
+    )
     .slice(0, 6);
 }
 
@@ -2581,58 +2594,58 @@ async function restoreCategoryFromChunks(
  * @returns {{ payload: DarkModeRulesBackupPayload | null, lastModified: number }}
  */
 function parseDarkModeRulesItem(item) {
-    const note = typeof item?.note === 'string' ? item.note : '';
-    if (!note) {
-        return { payload: null, lastModified: 0 };
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
     }
 
-    try {
-        const parsed = JSON.parse(note);
-        if (!parsed || typeof parsed !== 'object') {
-        return { payload: null, lastModified: 0 };
-        }
+    const normalizedRules = normalizeDarkModeRules(parsed?.rules).rules;
 
-        const normalizedRules = normalizeDarkModeRules(parsed?.rules).rules;
-
-        const payload = /** @type {DarkModeRulesBackupPayload} */ ({
-        kind: 'dark-mode-rules',
-        rules: normalizedRules,
-        metadata: {
-            version: Number.isFinite(parsed?.metadata?.version)
-            ? Number(parsed.metadata.version)
-            : STATE_VERSION,
-            lastModified: Number.isFinite(parsed?.metadata?.lastModified)
-            ? Number(parsed.metadata.lastModified)
-            : parseTimestamp(item?.lastUpdate),
-            device: {
-            id:
-                typeof parsed?.metadata?.device?.id === 'string'
-                ? parsed.metadata.device.id
-                : '',
-            platform:
-                typeof parsed?.metadata?.device?.platform === 'string'
-                ? parsed.metadata.device.platform
-                : 'unknown',
-            arch:
-                typeof parsed?.metadata?.device?.arch === 'string'
-                ? parsed.metadata.device.arch
-                : 'unknown',
-            },
-            trigger:
-            typeof parsed?.metadata?.trigger === 'string'
-                ? parsed.metadata.trigger
-                : 'unknown',
+    const payload = /** @type {DarkModeRulesBackupPayload} */ ({
+      kind: 'dark-mode-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
         },
-        });
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
 
-        const lastModified = Number.isFinite(payload.metadata.lastModified)
-        ? payload.metadata.lastModified
-        : parseTimestamp(item?.lastUpdate);
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
 
-        return { payload, lastModified };
-    } catch (error) {
-        return { payload: null, lastModified: 0 };
-    }
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
 }
 
 /**
@@ -3378,7 +3391,10 @@ function parsePinnedShortcutsItem(item) {
 
     // Valid shortcut IDs (excluding openOptions which is always shown)
     const normalizedShortcuts = parsed.shortcuts
-      .filter((id) => typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id))
+      .filter(
+        (id) =>
+          typeof id === 'string' && VALID_PINNED_SHORTCUT_IDS.includes(id),
+      )
       .slice(0, 6);
 
     const payload = /** @type {PinnedShortcutsBackupPayload} */ ({
@@ -3909,31 +3925,23 @@ async function performRestore(trigger, notifyOnError) {
         continue;
       }
 
+      // Always restore from remote (Raindrop is source of truth)
       if (remoteTimestamp < localTimestamp) {
-        // For manual restore, allow restoring even if remote is older
-        if (trigger === 'manual') {
-          console.log(
-            '[options-backup] Proceeding with manual restore for',
-            categoryId,
-            'even though remoteTimestamp < localTimestamp',
-          );
-        } else {
-          console.log(
-            '[options-backup] Skipping',
-            categoryId,
-            ': remoteTimestamp < localTimestamp (remote is older)',
-          );
-          continue;
-        }
-      }
-
-      if (remoteTimestamp === localTimestamp && trigger !== 'manual') {
         console.log(
-          '[options-backup] Skipping',
+          '[options-backup] Restoring',
           categoryId,
-          ': remoteTimestamp === localTimestamp and trigger !== manual',
+          'from remote even though remote is older (remote=',
+          new Date(remoteTimestamp).toISOString(),
+          ', local=',
+          new Date(localTimestamp).toISOString(),
+          ')',
         );
-        continue;
+      } else if (remoteTimestamp === localTimestamp) {
+        console.log(
+          '[options-backup] Restoring',
+          categoryId,
+          'from remote (timestamps are equal)',
+        );
       }
 
       console.log('[options-backup] Proceeding with restore for', categoryId);
@@ -3944,6 +3952,8 @@ async function performRestore(trigger, notifyOnError) {
         if (payload.kind === 'auth-provider-settings') {
           payloadToApply = payload.mirrorRootFolderSettings;
         } else if (payload.kind === 'auto-reload-rules') {
+          payloadToApply = payload.rules;
+        } else if (payload.kind === 'dark-mode-rules') {
           payloadToApply = payload.rules;
         } else if (payload.kind === 'bright-mode-settings') {
           payloadToApply = payload.settings;
@@ -3964,7 +3974,19 @@ async function performRestore(trigger, notifyOnError) {
         } else {
           payloadToApply = payload.preferences;
         }
+        console.log(
+          '[options-backup] Applying payload for',
+          categoryId,
+          '- payload kind:',
+          payload.kind,
+          ', data:',
+          payloadToApply,
+        );
         await config.applyPayload(payloadToApply);
+        console.log(
+          '[options-backup] Successfully applied payload for',
+          categoryId,
+        );
         const now = Date.now();
         await updateState((draft) => {
           const nextState = draft.categories[categoryId];
@@ -3987,6 +4009,12 @@ async function performRestore(trigger, notifyOnError) {
         }
         state.categories[categoryId] = localCategory;
       } catch (error) {
+        console.error(
+          '[options-backup] Failed to restore',
+          categoryId,
+          ':',
+          error,
+        );
         const message =
           error instanceof Error
             ? error.message
