@@ -308,6 +308,7 @@ const VALID_PINNED_SHORTCUT_IDS = [
   'splitPage',
   'autoReload',
   'brightMode',
+  'darkMode',
   'highlightText',
   'customCode',
   'pictureInPicture',
