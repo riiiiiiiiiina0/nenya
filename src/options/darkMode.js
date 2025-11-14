@@ -4,9 +4,17 @@ const getdarkModeRules = async () => {
     return darkModeRules || [];
   };
 
-  const savedarkModeRules = async (rules) => {
+  const savedarkModeRules = async (rules, skipSync = false) => {
+    if (!skipSync) {
+      syncing = true;
+    }
     await chrome.storage.sync.set({ darkModeRules: rules });
+    if (!skipSync) {
+      syncing = false;
+    }
   };
+
+  let syncing = false;
 
   const renderRules = async () => {
     const rules = await getdarkModeRules();
@@ -100,6 +108,20 @@ const getdarkModeRules = async () => {
         rules = rules.filter(rule => rule.id !== id);
         await savedarkModeRules(rules);
         await renderRules();
+      }
+    });
+
+    // Listen for storage changes to update UI when options are restored from backup
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') {
+        return;
+      }
+      if (syncing) {
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(changes, 'darkModeRules')) {
+        renderRules();
       }
     });
 
