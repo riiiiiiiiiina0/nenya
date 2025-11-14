@@ -392,21 +392,9 @@
       if (!tabInfo.exists) {
         // Tab doesn't exist anymore
         invalidTabIds.push(snapshot.tabId);
-        console.log(
-          '[tab-switcher] Tab no longer exists:',
-          snapshot.tabId,
-          snapshot.title,
-        );
       } else if (!skipWindowFilter && tabInfo.windowId !== currentWindowId) {
         // Tab exists but in a different window - skip it (unless window filter disabled)
         wrongWindowCount++;
-        console.log(
-          '[tab-switcher] Tab in different window:',
-          snapshot.tabId,
-          snapshot.title,
-          'window:',
-          tabInfo.windowId,
-        );
       } else {
         // Tab exists and is in current window (or window filter disabled)
         validSnapshots.push(snapshot);
@@ -415,23 +403,10 @@
 
     // Clean up invalid snapshots from storage
     if (invalidTabIds.length > 0) {
-      console.log(
-        '[tab-switcher] Cleaning up',
-        invalidTabIds.length,
-        'invalid snapshots',
-      );
       chrome.runtime.sendMessage({
         type: 'tab-switcher:cleanup',
         invalidTabIds: invalidTabIds,
       });
-    }
-
-    if (wrongWindowCount > 0) {
-      console.log(
-        '[tab-switcher] Filtered out',
-        wrongWindowCount,
-        'tabs from other windows',
-      );
     }
 
     return validSnapshots;
@@ -449,18 +424,12 @@
 
     // Get current window ID
     const currentWindowId = await getCurrentWindowId();
-    console.log('[tab-switcher] Current window ID:', currentWindowId);
 
     // Get current active tab ID
     const activeTabId = await getActiveTabId();
-    console.log('[tab-switcher] Active tab ID:', activeTabId);
 
     // Load snapshots
     let allSnapshots = await getSnapshots();
-    console.log(
-      '[tab-switcher] Total snapshots in storage:',
-      allSnapshots.length,
-    );
 
     // Filter out snapshots for tabs that no longer exist or are in other windows
     let validSnapshots = await filterValidSnapshots(
@@ -470,24 +439,6 @@
 
     // Sort snapshots: active tab first, then by timestamp descending
     snapshots = sortSnapshots(validSnapshots, activeTabId);
-
-    // Debug: Log snapshot data
-    console.log(
-      '[tab-switcher] Loaded snapshots for current window:',
-      snapshots.length,
-    );
-    snapshots.forEach((snapshot, index) => {
-      console.log(`[tab-switcher] Snapshot ${index}:`, {
-        tabId: snapshot.tabId,
-        title: snapshot.title,
-        isActive: snapshot.tabId === activeTabId,
-        hasThumbnail: Boolean(snapshot.thumbnail),
-        thumbnailLength: snapshot.thumbnail ? snapshot.thumbnail.length : 0,
-        thumbnailPreview: snapshot.thumbnail
-          ? snapshot.thumbnail.substring(0, 50)
-          : 'none',
-      });
-    });
 
     // Set default selection to second item (index 1) or first if only one
     selectedIndex = snapshots.length > 1 ? 1 : 0;
@@ -511,12 +462,6 @@
 
     isOpen = true;
     keyReleased = false;
-
-    console.log(
-      '[tab-switcher] Opened with',
-      snapshots.length,
-      'snapshots from current window',
-    );
   }
 
   /**
@@ -531,7 +476,6 @@
     }
     isOpen = false;
     keyReleased = true;
-    console.log('[tab-switcher] Closed');
   }
 
   /**
@@ -600,7 +544,6 @@
    */
   function handleVisibilityChange() {
     if (document.hidden && isOpen) {
-      console.log('[tab-switcher] Page hidden, closing switcher');
       closeSwitcher();
     }
   }
@@ -610,6 +553,4 @@
   document.addEventListener('keyup', handleKeyUp);
   document.addEventListener('visibilitychange', handleVisibilityChange);
   chrome.runtime.onMessage.addListener(handleMessage);
-
-  console.log('[tab-switcher] Content script loaded');
 })();

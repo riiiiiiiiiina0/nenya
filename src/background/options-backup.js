@@ -770,52 +770,16 @@ async function loadBackupItemMap(tokens, collectionId) {
   const normalizedTitle = (title) =>
     typeof title === 'string' ? title.trim().toLowerCase() : '';
 
-  console.log(
-    '[options-backup] Starting to pull items from Raindrop collection',
-    collectionId,
-  );
-
   while (shouldContinue) {
-    console.log(
-      '[options-backup] Fetching page',
-      page,
-      'from collection',
-      collectionId,
-    );
     const pageItems = await fetchRaindropItems(tokens, collectionId, page);
 
     if (!Array.isArray(pageItems)) {
-      console.log(
-        '[options-backup] Stopping pull: pageItems is not an array',
-        '(page:',
-        page,
-        ', collection:',
-        collectionId,
-        ')',
-      );
       break;
     }
 
     if (pageItems.length === 0) {
-      console.log(
-        '[options-backup] Stopping pull: no items returned',
-        '(page:',
-        page,
-        ', collection:',
-        collectionId,
-        ')',
-      );
       break;
     }
-
-    console.log(
-      '[options-backup] Fetched',
-      pageItems.length,
-      'items from page',
-      page,
-      'of collection',
-      collectionId,
-    );
 
     pageItems.forEach((item) => {
       const title = normalizedTitle(item?.title);
@@ -826,30 +790,11 @@ async function loadBackupItemMap(tokens, collectionId) {
     });
 
     if (pageItems.length < 100) {
-      console.log(
-        '[options-backup] Stopping pull: received',
-        pageItems.length,
-        'items (less than page size 100), last page reached',
-        '(page:',
-        page,
-        ', collection:',
-        collectionId,
-        ')',
-      );
       shouldContinue = false;
     } else {
       page += 1;
     }
   }
-
-  console.log(
-    '[options-backup] Finished pulling from collection',
-    collectionId,
-    '- total pages fetched:',
-    page + 1,
-    ', total unique items collected:',
-    map.size,
-  );
 
   return map;
 }
@@ -3551,35 +3496,24 @@ async function performCategoryBackup(categoryId, trigger, notifyOnError) {
  * @returns {void}
  */
 function queueCategoryBackup(categoryId, trigger) {
-  console.log(
-    `[options-backup] Queueing backup for ${categoryId} with trigger: ${trigger}`,
-  );
-
   if (isBackupSuppressed(categoryId)) {
-    console.log(`[options-backup] Backup suppressed for ${categoryId}`);
     return;
   }
 
   queuedBackupReasons.set(categoryId, trigger);
   if (runningBackups.has(categoryId)) {
-    console.log(`[options-backup] Backup already running for ${categoryId}`);
     return;
   }
 
-  console.log(`[options-backup] Starting backup for ${categoryId}`);
   runningBackups.add(categoryId);
   const notifyOnError = trigger !== 'manual';
   const runLoop = async () => {
     while (queuedBackupReasons.has(categoryId)) {
       const currentTrigger = queuedBackupReasons.get(categoryId) ?? trigger;
       queuedBackupReasons.delete(categoryId);
-      console.log(
-        `[options-backup] Executing backup for ${categoryId} with trigger: ${currentTrigger}`,
-      );
       await performCategoryBackup(categoryId, currentTrigger, notifyOnError);
     }
     runningBackups.delete(categoryId);
-    console.log(`[options-backup] Completed backup for ${categoryId}`);
   };
 
   void runLoop();
@@ -3870,18 +3804,6 @@ async function performRestore(trigger, notifyOnError) {
         itemsMap,
       );
 
-      console.log(
-        '[options-backup] Restore result for',
-        categoryId,
-        ': payload=',
-        payload ? 'present' : 'null',
-        ', lastModified=',
-        lastModified,
-        '(',
-        lastModified > 0 ? new Date(lastModified).toISOString() : 'invalid',
-        ')',
-      );
-
       if (!payload) {
         // Only add error if the category exists but data is invalid
         const titleKey = config.title.trim().toLowerCase();
@@ -3897,54 +3819,11 @@ async function performRestore(trigger, notifyOnError) {
       const remoteTimestamp = Number(lastModified);
       const localTimestamp = getLatestLocalTimestamp(categoryState);
 
-      console.log(
-        '[options-backup] Restore check for',
-        categoryId,
-        ': remoteTimestamp=',
-        remoteTimestamp,
-        '(',
-        remoteTimestamp > 0
-          ? new Date(remoteTimestamp).toISOString()
-          : 'invalid',
-        '), localTimestamp=',
-        localTimestamp,
-        '(',
-        localTimestamp > 0 ? new Date(localTimestamp).toISOString() : 'invalid',
-        '), trigger=',
-        trigger,
-        ', categoryState=',
-        categoryState,
-      );
-
       if (!remoteTimestamp || remoteTimestamp < 1) {
-        console.log(
-          '[options-backup] Skipping',
-          categoryId,
-          ': invalid remoteTimestamp',
-        );
         continue;
       }
 
       // Always restore from remote (Raindrop is source of truth)
-      if (remoteTimestamp < localTimestamp) {
-        console.log(
-          '[options-backup] Restoring',
-          categoryId,
-          'from remote even though remote is older (remote=',
-          new Date(remoteTimestamp).toISOString(),
-          ', local=',
-          new Date(localTimestamp).toISOString(),
-          ')',
-        );
-      } else if (remoteTimestamp === localTimestamp) {
-        console.log(
-          '[options-backup] Restoring',
-          categoryId,
-          'from remote (timestamps are equal)',
-        );
-      }
-
-      console.log('[options-backup] Proceeding with restore for', categoryId);
 
       try {
         // Handle different payload types correctly
@@ -3974,19 +3853,7 @@ async function performRestore(trigger, notifyOnError) {
         } else {
           payloadToApply = payload.preferences;
         }
-        console.log(
-          '[options-backup] Applying payload for',
-          categoryId,
-          '- payload kind:',
-          payload.kind,
-          ', data:',
-          payloadToApply,
-        );
         await config.applyPayload(payloadToApply);
-        console.log(
-          '[options-backup] Successfully applied payload for',
-          categoryId,
-        );
         const now = Date.now();
         await updateState((draft) => {
           const nextState = draft.categories[categoryId];
@@ -4169,15 +4036,12 @@ function handleWindowFocus(windowId) {
  * @returns {void}
  */
 export function initializeOptionsBackupService() {
-  console.log('[options-backup] Initializing options backup service...');
   if (initialized) {
-    console.log('[options-backup] Service already initialized');
     return;
   }
   initialized = true;
 
   if (chrome?.storage?.onChanged) {
-    console.log('[options-backup] Registering storage change listener');
     chrome.storage.onChanged.addListener(handleStorageChanges);
   } else {
     console.warn('[options-backup] chrome.storage.onChanged not available');

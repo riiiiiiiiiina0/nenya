@@ -49,8 +49,6 @@
 
         // Set up navigation event listeners
         this.setupNavigationListeners();
-
-        console.log('[BrightMode] Initialized successfully');
       } catch (error) {
         console.error('[BrightMode] Failed to initialize:', error);
       }
@@ -71,10 +69,6 @@
         ]);
 
         this.whitelistPatterns = result[WHITELIST_STORAGE_KEY] || [];
-
-        console.log('[BrightMode] Loaded patterns:', {
-          whitelist: this.whitelistPatterns.length,
-        });
       } catch (error) {
         console.error('[BrightMode] Failed to load patterns:', error);
       }
@@ -150,12 +144,6 @@
         '(prefers-color-scheme: light)',
       ).matches;
 
-      console.log('[BrightMode] Checking conditions:', {
-        currentUrl,
-        isInWhitelist,
-        isOSLightMode,
-      });
-
       // Apply bright mode if:
       // 1. OS is in light mode AND
       // 2. Page is in whitelist
@@ -190,8 +178,6 @@
 
       document.head.appendChild(style);
       this.isBrightModeActive = true;
-
-      console.log('[BrightMode] Applied bright mode styles');
     }
 
     /**
@@ -208,8 +194,6 @@
       }
 
       this.isBrightModeActive = false;
-
-      console.log('[BrightMode] Removed bright mode styles');
     }
 
     /**
@@ -219,7 +203,6 @@
       this.mediaQuery = window.matchMedia('(prefers-color-scheme: light)');
 
       this.handleThemeChange = () => {
-        console.log('[BrightMode] OS theme changed');
         this.checkAndApplyBrightMode();
       };
 
@@ -248,7 +231,6 @@
         const whitelistChanged = changes[WHITELIST_STORAGE_KEY];
 
         if (whitelistChanged) {
-          console.log('[BrightMode] Patterns updated, reloading...');
           this.loadPatterns().then(() => {
             this.checkAndApplyBrightMode();
           });
@@ -309,9 +291,6 @@
         });
 
         if (shouldReapply) {
-          console.log(
-            '[BrightMode] DOM changes detected, reapplying styles...',
-          );
           // Small delay to ensure DOM is stable
           setTimeout(() => {
             this.reapplyBrightModeStyles();
@@ -335,9 +314,6 @@
       // Create bound event handlers for proper cleanup
       this.handleVisibilityChange = () => {
         if (!document.hidden) {
-          console.log(
-            '[BrightMode] Page became visible, checking bright mode...',
-          );
           // Small delay to ensure page is fully loaded
           setTimeout(() => {
             this.checkAndApplyBrightMode();
@@ -346,9 +322,6 @@
       };
 
       this.handlePageShow = (event) => {
-        console.log('[BrightMode] Page show event, checking bright mode...', {
-          persisted: event.persisted,
-        });
         // Small delay to ensure page is fully loaded
         setTimeout(() => {
           this.checkAndApplyBrightMode();
@@ -356,7 +329,6 @@
       };
 
       this.handlePopState = () => {
-        console.log('[BrightMode] Popstate event, checking bright mode...');
         // Small delay to ensure page is fully loaded
         setTimeout(() => {
           this.checkAndApplyBrightMode();
@@ -364,7 +336,6 @@
       };
 
       this.handleHashChange = () => {
-        console.log('[BrightMode] Hash change event, checking bright mode...');
         // Small delay to ensure page is fully loaded
         setTimeout(() => {
           this.checkAndApplyBrightMode();

@@ -1354,82 +1354,25 @@ async function fetchAllProjectItems(tokens, collectionId) {
   let page = 0;
   let shouldContinue = true;
 
-  console.log(
-    '[projects] Starting to pull items from Raindrop collection',
-    collectionId,
-  );
-
   while (shouldContinue) {
-    console.log(
-      '[projects] Fetching page',
-      page,
-      'from collection',
-      collectionId,
-    );
     const pageItems = await fetchRaindropItems(tokens, collectionId, page);
     
     if (!pageItems) {
-      console.log(
-        '[projects] Stopping pull: pageItems is null/undefined',
-        '(page:',
-        page,
-        ', collection:',
-        collectionId,
-        ')',
-      );
       break;
     }
 
     if (pageItems.length === 0) {
-      console.log(
-        '[projects] Stopping pull: no items returned',
-        '(page:',
-        page,
-        ', collection:',
-        collectionId,
-        ')',
-      );
       break;
     }
-
-    console.log(
-      '[projects] Fetched',
-      pageItems.length,
-      'items from page',
-      page,
-      'of collection',
-      collectionId,
-    );
 
     items.push(...pageItems);
 
     if (pageItems.length < FETCH_PAGE_SIZE) {
-      console.log(
-        '[projects] Stopping pull: received',
-        pageItems.length,
-        'items (less than page size',
-        FETCH_PAGE_SIZE,
-        '), last page reached',
-        '(page:',
-        page,
-        ', collection:',
-        collectionId,
-        ')',
-      );
       shouldContinue = false;
     } else {
       page += 1;
     }
   }
-
-  console.log(
-    '[projects] Finished pulling from collection',
-    collectionId,
-    '- total pages fetched:',
-    page + 1,
-    ', total items collected:',
-    items.length,
-  );
 
   return items;
 }

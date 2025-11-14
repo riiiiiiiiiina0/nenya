@@ -83,8 +83,6 @@ const SWITCH_LLM_PROVIDER_MESSAGE = 'switch-llm-provider';
  * @returns {void}
  */
 chrome.commands.onCommand.addListener((command) => {
-  console.log('[commands] Received command:', command);
-
   if (
     command === 'tabs-activate-left-tab' ||
     command === 'tabs-activate-right-tab'
@@ -275,33 +273,24 @@ chrome.commands.onCommand.addListener((command) => {
   if (command === 'pip-quit') {
     void (async () => {
       try {
-        console.log('[commands] 🔴 pip-quit command received!');
         const storage = await chrome.storage.local.get('pipTabId');
-        console.log('[commands] Storage contents:', storage);
         const { pipTabId } = storage;
-        console.log('[commands] pipTabId from storage:', pipTabId);
         
         if (pipTabId) {
-          console.log('[commands] Found pipTabId, executing script on tab:', pipTabId);
           await chrome.scripting.executeScript({
             target: { tabId: pipTabId },
             func: () => {
-              console.log('[injected] Checking for PiP element:', document.pictureInPictureElement);
               if (document.pictureInPictureElement) {
                 const pipVideo = document.pictureInPictureElement;
-                console.log('[injected] Exiting PiP and pausing video');
                 document.exitPictureInPicture();
                 // Pause the video after exiting PiP
                 if (pipVideo && !pipVideo.paused) {
                   pipVideo.pause();
                 }
-              } else {
-                console.log('[injected] No PiP element found!');
               }
             },
           });
           await chrome.storage.local.remove('pipTabId');
-          console.log('[commands] PiP quit successful, removed pipTabId from storage');
         } else {
           console.warn('[commands] ⚠️ No pipTabId found in storage! Cannot quit PiP.');
         }
@@ -503,7 +492,6 @@ chrome.commands.onCommand.addListener((command) => {
           args: [markdownContent, filename],
         });
 
-        console.log('[commands] Markdown download triggered');
       } catch (error) {
         console.warn('[commands] Download markdown failed:', error);
       }
@@ -556,7 +544,6 @@ async function setupHeaderRemovalRules() {
         },
       ],
     });
-    console.log('Header removal rules installed successfully');
   } catch (error) {
     console.error('Failed to install header removal rules:', error);
   }
@@ -746,13 +733,6 @@ async function updateSplitPageGroupInfo(url, groupName) {
 
     // Save updated entries
     await chrome.storage.local.set({ splitPageUrls: updatedEntries });
-    console.log(
-      '[background] Updated split page group info:',
-      url,
-      existingGroupName ? `(was: ${existingGroupName})` : '(was: ungrouped)',
-      '->',
-      groupName ? `(now: ${groupName})` : '(now: ungrouped)',
-    );
   } catch (error) {
     console.warn('[background] Failed to update split page group info:', error);
   }
@@ -822,9 +802,6 @@ async function findTabGroupByName(groupName) {
 async function restoreSplitPages() {
   // Prevent concurrent restoration
   if (isRestoringSplitPages) {
-    console.log(
-      '[background] Split page restoration already in progress, skipping',
-    );
     return;
   }
 
@@ -859,11 +836,6 @@ async function restoreSplitPages() {
     const uniqueEntries = Array.from(urlMap.values());
 
     if (uniqueEntries.length !== normalizedEntries.length) {
-      console.log(
-        `[background] De-duplicated ${
-          normalizedEntries.length - uniqueEntries.length
-        } duplicate URL(s) from storage`,
-      );
       // Update storage with de-duplicated entries
       await chrome.storage.local.set({ splitPageUrls: uniqueEntries });
     }
@@ -882,13 +854,8 @@ async function restoreSplitPages() {
     );
 
     if (entriesToOpen.length === 0) {
-      console.log(
-        '[background] All split pages are already open, skipping restoration',
-      );
       return;
     }
-
-    console.log(`[background] Restoring ${entriesToOpen.length} split page(s)`);
 
     for (const entry of entriesToOpen) {
       try {
@@ -896,13 +863,11 @@ async function restoreSplitPages() {
         // Double-check the tab wasn't opened between the query and now
         const currentTabs = await chrome.tabs.query({ url });
         if (currentTabs.length > 0) {
-          console.log('[background] Split page already exists, skipping:', url);
           continue;
         }
 
         // Create the tab
         const tab = await chrome.tabs.create({ url, active: false });
-        console.log('[background] Restored split page:', url);
 
         // If entry has a group name, try to add it to that group
         if (entry.groupName && typeof entry.groupName === 'string' && tab.id) {
@@ -910,9 +875,6 @@ async function restoreSplitPages() {
             // Wait a bit for the tab to be fully created before grouping
             await new Promise((resolve) => setTimeout(resolve, 200));
 
-            console.log(
-              `[background] Looking for tab group "${entry.groupName}" to restore split page`,
-            );
             const groupId = await findTabGroupByName(entry.groupName);
 
             if (
@@ -920,9 +882,6 @@ async function restoreSplitPages() {
               chrome.tabs &&
               typeof chrome.tabs.group === 'function'
             ) {
-              console.log(
-                `[background] Found tab group "${entry.groupName}" with ID ${groupId}, adding tab ${tab.id}`,
-              );
               // Add tab to existing group
               await new Promise((resolve, reject) => {
                 chrome.tabs.group(
@@ -936,23 +895,10 @@ async function restoreSplitPages() {
                       reject(new Error(lastError.message));
                       return;
                     }
-                    console.log(
-                      `[background] Successfully added split page to group "${entry.groupName}" (group ID: ${resultGroupId})`,
-                    );
                     resolve(resultGroupId);
                   },
                 );
               });
-            } else {
-              if (groupId === null) {
-                console.log(
-                  `[background] Tab group "${entry.groupName}" not found, tab restored without group`,
-                );
-              } else {
-                console.log(
-                  `[background] Tab groups API not available, tab restored without group`,
-                );
-              }
             }
           } catch (error) {
             console.warn(
@@ -1099,9 +1045,6 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
       if (updatedEntries.length !== normalizedEntries.length) {
         await chrome.storage.local.set({ splitPageUrls: updatedEntries });
-        console.log(
-          '[background] Cleaned up closed split page URLs from storage',
-        );
       }
     } catch (error) {
       console.warn('[background] Failed to clean up split page URL:', error);
@@ -1196,10 +1139,6 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
           await updateSplitPageGroupInfo(updatedTab.url, groupName);
         } catch (error) {
           // Ignore errors - group info update is optional
-          console.log(
-            '[background] Could not update split page group info:',
-            error,
-          );
         }
       })();
     }
@@ -1266,12 +1205,8 @@ async function injectContentScripts(tabId) {
 
     // Determine which content extraction script to use
     if (isYouTubeVideoPage(tabUrl)) {
-      console.log(
-        '[background] Detected YouTube video page, using YouTube extractor',
-      );
       contentScriptFile = 'src/contentScript/getContent-youtube.js';
     } else if (isNotionPage(tabUrl)) {
-      console.log('[background] Detected Notion page, using Notion extractor');
       contentScriptFile = 'src/contentScript/getContent-notion.js';
     }
 
@@ -1462,28 +1397,13 @@ chrome.runtime.onConnect.addListener((port) => {
   // Check if this is a chat page connection
   if (port.name && port.name.startsWith('chat-')) {
     const sessionId = port.name.substring(5); // Remove 'chat-' prefix
-    console.log('[background] Chat page connected:', sessionId);
 
     port.onDisconnect.addListener(() => {
-      console.log('[background] Chat page disconnected:', sessionId);
-      console.log(
-        '[background] Sessions with sent content:',
-        Array.from(sessionsWithSentContent),
-      );
-      console.log(
-        '[background] Has sent content?:',
-        sessionsWithSentContent.has(sessionId),
-      );
-
       // Only clean up LLM tabs if content hasn't been sent yet
       // If content was sent, keep the LLM tabs open for the user to continue
       if (!sessionsWithSentContent.has(sessionId)) {
         const llmTabs = sessionToLLMTabs.get(sessionId);
         if (llmTabs) {
-          console.log(
-            '[background] Cleaning up unused LLM tabs for session:',
-            sessionId,
-          );
           for (const llmTabId of llmTabs.values()) {
             chrome.tabs.remove(llmTabId).catch(() => {
               // Tab might already be closed
@@ -1492,10 +1412,6 @@ chrome.runtime.onConnect.addListener((port) => {
           sessionToLLMTabs.delete(sessionId);
         }
       } else {
-        console.log(
-          '[background] Content was sent, keeping LLM tabs open for session:',
-          sessionId,
-        );
         // Clean up the sent content flag as it's no longer needed
         sessionsWithSentContent.delete(sessionId);
       }
@@ -1526,10 +1442,6 @@ async function injectLLMPageInjector(tabId) {
       files: ['src/contentScript/llmPageInjector.js'],
     });
 
-    console.log(
-      '[background] LLM page injector injected successfully for tab',
-      tabId,
-    );
     return true;
   } catch (error) {
     console.error('[background] Failed to inject LLM page injector:', error);
@@ -1737,8 +1649,6 @@ async function switchLLMProvider(sessionId, oldProviderId, newProviderId) {
  */
 async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
   try {
-    console.log('[background] reuseLLMTabs called with sessionId:', sessionId);
-
     if (!sessionId) {
       return { success: false, error: 'Session ID is required' };
     }
@@ -1746,22 +1656,15 @@ async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
     // Mark this session as having sent content IMMEDIATELY (before anything else)
     // This prevents auto-cleanup if the popup closes while we're processing
     sessionsWithSentContent.add(sessionId);
-    console.log(
-      '[background] Marked session as sent, sessionsWithSentContent:',
-      Array.from(sessionsWithSentContent),
-    );
 
     const llmTabs = sessionToLLMTabs.get(sessionId);
     if (!llmTabs) {
-      console.log('[background] No LLM tabs found for session');
       sessionsWithSentContent.delete(sessionId); // Clean up if we're failing
       return {
         success: false,
         error: 'No LLM tabs found for this chat session',
       };
     }
-
-    console.log('[background] Found LLM tabs:', Array.from(llmTabs.entries()));
 
     // Find the first valid tab and activate it immediately
     let firstTabId = null;
@@ -1808,7 +1711,6 @@ async function reuseLLMTabs(sessionId, selectedLLMProviders, contents) {
         // and message listener is set up (50ms should be enough)
         await new Promise((resolve) => setTimeout(resolve, 50));
 
-        console.log('[background] Sending data to LLM tab', tabId);
         await chrome.tabs.sendMessage(tabId, {
           type: 'inject-llm-data',
           tabs: contents,
@@ -1848,8 +1750,6 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
     for (const providerId of selectedLLMProviders) {
       const meta = LLM_PROVIDER_META[providerId];
       if (meta && currentTab.url.startsWith(meta.url)) {
-        console.log('[background] Reusing current tab for', providerId);
-
         // Found a match, reuse this tab
         const index = providersToOpen.indexOf(providerId);
         if (index > -1) {
@@ -1866,10 +1766,6 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
             // Small delay to ensure script is settled
             await new Promise((resolve) => setTimeout(resolve, 100));
 
-            console.log(
-              '[background] Sending data to current tab',
-              currentTab.id,
-            );
             await chrome.tabs.sendMessage(currentTab.id, {
               type: 'inject-llm-data',
               tabs: contents,
@@ -1888,8 +1784,6 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
   const tabCreationPromises = providersToOpen.map((providerId) => {
     const meta = LLM_PROVIDER_META[providerId];
     if (!meta) return Promise.resolve(null);
-
-    console.log('[background] Creating new tab for', providerId);
 
     return chrome.tabs.create({
       url: meta.url,
@@ -1918,7 +1812,6 @@ async function openOrReuseLLMTabs(currentTab, selectedLLMProviders, contents) {
         // Small delay to ensure script is settled
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        console.log('[background] Sending data to new tab', newTab.id);
         await chrome.tabs.sendMessage(newTab.id, {
           type: 'inject-llm-data',
           tabs: contents,
@@ -1971,13 +1864,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === GET_CURRENT_TAB_ID_MESSAGE) {
-    console.log('[background] GET_CURRENT_TAB_ID_MESSAGE received from sender:', sender);
-    console.log('[background] sender.tab:', sender.tab);
     if (sender.tab) {
-      console.log('[background] Responding with tabId:', sender.tab.id);
       sendResponse({ tabId: sender.tab.id });
     } else {
-      console.log('[background] No sender.tab, responding with null');
       sendResponse({ tabId: null });
     }
     return true;
@@ -2098,16 +1987,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blockElement:addSelector') {
-    console.log(
-      '[background] Received blockElement:addSelector message:',
-      message,
-    );
     const selector =
       typeof message.selector === 'string' ? message.selector : '';
     const url = typeof message.url === 'string' ? message.url : '';
 
     if (!selector || !url) {
-      console.log('[background] Invalid selector or URL:', { selector, url });
       sendResponse({ success: false, error: 'Invalid selector or URL' });
       return false;
     }
@@ -2117,7 +2001,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // Extract URL pattern from the URL
         const urlObj = new URL(url);
         const urlPattern = `${urlObj.protocol}//${urlObj.hostname}/*`;
-        console.log('[background] Generated URL pattern:', urlPattern);
 
         // Load existing rules
         const STORAGE_KEY = 'blockElementRules';
@@ -2125,7 +2008,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const rules = Array.isArray(stored?.[STORAGE_KEY])
           ? stored[STORAGE_KEY]
           : [];
-        console.log('[background] Loaded existing rules:', rules.length);
 
         // Find existing rule for this URL pattern or create new one
         let rule = rules.find((r) => r.urlPattern === urlPattern);
@@ -2136,9 +2018,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (!rule.selectors.includes(selector)) {
             rule.selectors.push(selector);
             rule.updatedAt = now;
-            console.log('[background] Added selector to existing rule:', rule);
-          } else {
-            console.log('[background] Selector already exists in rule');
           }
         } else {
           // Create new rule
@@ -2158,15 +2037,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             updatedAt: now,
           };
           rules.push(rule);
-          console.log('[background] Created new rule:', rule);
         }
 
         // Save rules
-        console.log('[background] Saving rules to storage:', rules);
         await chrome.storage.sync.set({
           [STORAGE_KEY]: rules,
         });
-        console.log('[background] Successfully saved rules to storage');
 
         sendResponse({ success: true, rule });
       } catch (error) {
@@ -2224,20 +2100,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // Collect content from each tab
         const contents = await collectPageContentFromTabs(tabIds);
-
-        // Log the results
-        console.log('========================================');
-        console.log('📝 Page Content Collection Results');
-        console.log('========================================');
-        contents.forEach((content, index) => {
-          console.log(`\n--- Page ${index + 1} of ${contents.length} ---`);
-          console.log('Title:', content.title || '(no title)');
-          console.log('URL:', content.url || '(no url)');
-          console.log('\nMarkdown Content:');
-          console.log(content.content || '(no content)');
-          console.log('---\n');
-        });
-        console.log('========================================');
 
         sendResponse({ success: true, contents });
       } catch (error) {
@@ -2437,23 +2299,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Use reuseLLMTabs if requested and session ID is provided
-        console.log(
-          '[background] useReuseTabs:',
-          useReuseTabs,
-          'sessionId:',
-          sessionId,
-        );
         if (useReuseTabs && sessionId) {
-          console.log('[background] Using reuseLLMTabs');
           const result = await reuseLLMTabs(
             sessionId,
             llmProviders,
             collectedContents,
           );
-          console.log('[background] reuseLLMTabs result:', result);
           sendResponse(result);
         } else {
-          console.log('[background] Using openOrReuseLLMTabs (fallback)');
           // Fallback to old behavior for backward compatibility
           await openOrReuseLLMTabs(currentTab, llmProviders, collectedContents);
           sendResponse({ success: true });
@@ -2682,7 +2535,6 @@ function handleIframeMonitorInjection(message, sender, sendResponse) {
             if (currentUrl !== lastUrl || currentTitle !== lastTitle) {
               lastUrl = currentUrl;
               lastTitle = currentTitle;
-              console.log('sendUpdate', currentUrl, currentTitle);
 
               window.parent.postMessage(
                 {
@@ -2811,7 +2663,6 @@ async function handleSplitTabsContextMenu(tab) {
       .slice(0, 4);
 
     if (httpTabs.length < 1) {
-      console.log('No HTTP(S) tabs found to split');
       return;
     }
 
@@ -2850,7 +2701,6 @@ async function handleSplitTabsContextMenu(tab) {
 async function handleUnsplitTabsContextMenu(tab) {
   try {
     if (!tab || typeof tab.id !== 'number') {
-      console.log('No valid tab for unsplitting');
       return;
     }
 
@@ -2864,7 +2714,6 @@ async function handleUnsplitTabsContextMenu(tab) {
     ).filter((url) => typeof url === 'string' && url.length > 0);
 
     if (urls.length === 0) {
-      console.log('No URLs received from split page, closing split tab');
       await chrome.tabs.remove(tab.id);
       return;
     }
@@ -3091,12 +2940,6 @@ if (chrome.webNavigation) {
 
       // If URL was modified, update the tab
       if (processedUrl !== details.url) {
-        console.log(
-          '[urlProcessor] Processing URL on tab open:',
-          details.url,
-          '->',
-          processedUrl,
-        );
         await chrome.tabs.update(details.tabId, { url: processedUrl });
       }
     } catch (error) {

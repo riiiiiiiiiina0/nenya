@@ -240,10 +240,6 @@
             .includes('unavailable');
 
         if (isAvailable) {
-          console.log(
-            '[getContent-youtube] Captions are available, extracting...',
-          );
-
           // Try to expand description area to reveal transcript button
           const descriptionExpander = /** @type {HTMLElement | null} */ (
             document.querySelector(
@@ -266,9 +262,6 @@
           );
 
           if (transcriptButton) {
-            console.log(
-              '[getContent-youtube] Found transcript button, clicking...',
-            );
             transcriptButton.click();
             await sleep(800);
 
@@ -279,8 +272,6 @@
             );
 
             if (transcriptPanel) {
-              console.log('[getContent-youtube] Transcript panel opened');
-
               // Wait for transcript items to load
               await sleep(500);
 
@@ -316,10 +307,6 @@
                     })
                     .filter(Boolean)
                     .join('\n');
-
-                  console.log(
-                    `[getContent-youtube] Extracted ${segments.length} transcript segments`,
-                  );
                 } else {
                   console.warn(
                     '[getContent-youtube] No transcript segments found',
@@ -340,10 +327,6 @@
             console.warn('[getContent-youtube] Transcript button not found');
             captions = 'Transcript button not found on page';
           }
-        } else {
-          console.log(
-            '[getContent-youtube] Captions not available for this video',
-          );
         }
       } catch (err) {
         console.error('[getContent-youtube] Error extracting captions:', err);
@@ -372,6 +355,4 @@
 
   // Register the content getter function
   window['getContent'] = getYouTubeContent;
-
-  console.log('[getContent-youtube] YouTube content extraction registered');
 })();

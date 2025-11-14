@@ -44,8 +44,6 @@
 
         // Set up storage change listener
         this.setupStorageListener();
-
-        console.log('[CustomCode] Initialized successfully');
       } catch (error) {
         console.error('[CustomCode] Failed to initialize:', error);
       }
@@ -63,8 +61,6 @@
       try {
         const result = await chrome.storage.local.get(STORAGE_KEY);
         this.rules = result[STORAGE_KEY] || [];
-        
-        console.log('[CustomCode] Loaded rules:', this.rules.length);
       } catch (error) {
         console.error('[CustomCode] Failed to load rules:', error);
       }
@@ -126,7 +122,6 @@
       }
 
       this.injectedStyles.add(styleId);
-      console.log('[CustomCode] Injected CSS for rule:', ruleId);
     }
 
     /**
@@ -143,7 +138,6 @@
       
       // Check if script already injected
       if (this.injectedScripts.has(scriptId)) {
-        console.log('[CustomCode] Script already injected for rule:', ruleId);
         return;
       }
 
@@ -158,7 +152,6 @@
 
         if (response?.success) {
           this.injectedScripts.add(scriptId);
-          console.log('[CustomCode] Injected JS for rule:', ruleId);
         } else {
           console.error('[CustomCode] Failed to inject JS for rule:', ruleId, response?.error);
         }
@@ -178,7 +171,6 @@
       if (styleElement) {
         styleElement.remove();
         this.injectedStyles.delete(styleId);
-        console.log('[CustomCode] Removed CSS for rule:', ruleId);
       }
     }
 
@@ -193,7 +185,6 @@
       if (scriptElement) {
         scriptElement.remove();
         this.injectedScripts.delete(scriptId);
-        console.log('[CustomCode] Removed JS for rule:', ruleId);
       }
     }
 
@@ -245,7 +236,6 @@
         }
 
         if (Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) {
-          console.log('[CustomCode] Rules updated in storage');
           this.rules = changes[STORAGE_KEY]?.newValue || [];
           
           // Reapply rules with new configuration

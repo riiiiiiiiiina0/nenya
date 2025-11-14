@@ -80,10 +80,7 @@ async function captureTabScreenshot(windowId) {
       quality: 90,
     });
 
-    console.log('[tab-snapshots] Captured screenshot, size:', dataUrl.length);
-
     const thumbnail = await resizeImage(dataUrl, SNAPSHOT_WIDTH);
-    console.log('[tab-snapshots] Resized thumbnail, size:', thumbnail.length);
     return thumbnail;
   } catch (error) {
     console.error('[tab-snapshots] Failed to capture screenshot:', error);
@@ -103,26 +100,15 @@ async function captureTabScreenshot(windowId) {
  */
 async function createSnapshot(tabId) {
   try {
-    console.log('[tab-snapshots] Creating snapshot for tab:', tabId);
     const tab = await chrome.tabs.get(tabId);
-
-    console.log('[tab-snapshots] Tab info:', {
-      id: tab.id,
-      url: tab.url,
-      status: tab.status,
-      active: tab.active,
-      windowId: tab.windowId,
-    });
 
     // Validate tab ID
     if (typeof tab.id !== 'number') {
-      console.log('[tab-snapshots] Invalid tab ID');
       return null;
     }
 
     // Only capture snapshots for loaded tabs
     if (tab.status !== 'complete') {
-      console.log('[tab-snapshots] Tab not complete, skipping');
       return null;
     }
 
@@ -134,23 +120,15 @@ async function createSnapshot(tabId) {
       tab.url.startsWith('about:') ||
       tab.url === ''
     ) {
-      console.log('[tab-snapshots] Internal URL, skipping');
       return null;
     }
 
     // Ensure tab is active before capturing
     if (!tab.active) {
-      console.log('[tab-snapshots] Tab is not active, skipping screenshot');
       return null;
     }
 
-    console.log('[tab-snapshots] Attempting to capture screenshot...');
     const thumbnail = await captureTabScreenshot(tab.windowId);
-
-    console.log(
-      '[tab-snapshots] Screenshot captured, length:',
-      thumbnail.length,
-    );
 
     // Check if thumbnail is actually captured
     if (!thumbnail || thumbnail.length === 0) {
@@ -169,7 +147,6 @@ async function createSnapshot(tabId) {
       timestamp: Date.now(),
     };
 
-    console.log('[tab-snapshots] Snapshot created successfully');
     return snapshot;
   } catch (error) {
     console.warn(
@@ -232,13 +209,6 @@ async function saveSnapshot(snapshot) {
     await chrome.storage.local.set({
       [SNAPSHOTS_STORAGE_KEY]: snapshots,
     });
-
-    console.log(
-      '[tab-snapshots] Saved snapshot for tab',
-      snapshot.tabId,
-      'Total snapshots:',
-      snapshots.length,
-    );
   } catch (error) {
     console.error('[tab-snapshots] Failed to save snapshot:', error);
   }
@@ -281,18 +251,8 @@ async function saveTabMetadata(tabId) {
     };
 
     await saveSnapshot(metadataSnapshot);
-    console.log(
-      '[tab-snapshots] Saved metadata for tab',
-      tabId,
-      '(without screenshot)',
-    );
   } catch (error) {
     // Tab might have been closed already, ignore error
-    console.log(
-      '[tab-snapshots] Could not save metadata for tab',
-      tabId,
-      error,
-    );
   }
 }
 
@@ -382,13 +342,6 @@ async function handleTabRemoved(tabId) {
       await chrome.storage.local.set({
         [SNAPSHOTS_STORAGE_KEY]: snapshots,
       });
-
-      console.log(
-        '[tab-snapshots] Removed snapshot for closed tab',
-        tabId,
-        'Remaining snapshots:',
-        snapshots.length,
-      );
     }
   } catch (error) {
     console.warn('[tab-snapshots] Failed to handle tab removal:', error);
@@ -431,8 +384,6 @@ export function initializeTabSnapshots() {
   chrome.tabs.onRemoved.addListener((tabId) => {
     void handleTabRemoved(tabId);
   });
-
-  console.log('[tab-snapshots] Feature initialized');
 }
 
 /**
@@ -458,7 +409,6 @@ export async function getSnapshots() {
 export async function clearSnapshots() {
   try {
     await chrome.storage.local.remove(SNAPSHOTS_STORAGE_KEY);
-    console.log('[tab-snapshots] All snapshots cleared');
   } catch (error) {
     console.error('[tab-snapshots] Failed to clear snapshots:', error);
   }

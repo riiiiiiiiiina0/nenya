@@ -101,10 +101,6 @@
     for (const method of methods) {
       try {
         if (method(editor, promptText)) {
-          console.log(
-            '[llmPageInjector] Successfully injected prompt using',
-            method.name,
-          );
           return;
         }
       } catch (error) {
@@ -130,7 +126,7 @@
         return true;
       }
     } catch (error) {
-      console.log('[llmPageInjector] execCommand failed', error);
+      // Method failed, try next one
     }
     return false;
   }
@@ -161,7 +157,7 @@
 
       return true;
     } catch (error) {
-      console.log('[llmPageInjector] Selection API failed', error);
+      // Method failed, try next one
     }
     return false;
   }
@@ -178,7 +174,7 @@
       editor.dispatchEvent(new Event('input', { bubbles: true }));
       return true;
     } catch (error) {
-      console.log('[llmPageInjector] textContent failed', error);
+      // Method failed, try next one
     }
     return false;
   }
@@ -208,7 +204,7 @@
 
       return true;
     } catch (error) {
-      console.log('[llmPageInjector] Framework events failed', error);
+      // Method failed, try next one
     }
     return false;
   }
@@ -221,12 +217,9 @@
   async function autoTriggerSend(selector) {
     if (!selector) return;
 
-    console.log('[llmPageInjector] Waiting for send button:', selector);
-
     // Wait for send button to become enabled
     const sendButton = await waitForElement(selector, 10000);
     if (sendButton) {
-      console.log('[llmPageInjector] Clicking send button');
       /** @type {HTMLElement} */ (sendButton).click();
     } else {
       console.warn('[llmPageInjector] Send button not found or not enabled');
@@ -238,8 +231,6 @@
    */
   chrome.runtime.onMessage.addListener(async (message) => {
     if (message.type !== 'inject-llm-data') return;
-
-    console.log('[llmPageInjector] Received inject-llm-data message', message);
 
     const { tabs, promptContent, files, sendButtonSelector } = message;
 
@@ -255,11 +246,8 @@
       return;
     }
 
-    console.log('[llmPageInjector] Found editor, starting injection');
-
     // 1. Attach local files (screenshots, PDFs, etc.)
     if (files && files.length > 0) {
-      console.log('[llmPageInjector] Attaching', files.length, 'local files');
       for (const f of files) {
         try {
           const blob = await (await fetch(f.dataUrl)).blob();
@@ -275,7 +263,6 @@
             cancelable: true,
           });
           editor.dispatchEvent(pasteEvt);
-          console.log('[llmPageInjector] Attached file:', f.name);
         } catch (err) {
           console.error(
             '[llmPageInjector] Failed to attach local file',
@@ -288,7 +275,6 @@
 
     // 2. Attach tab contents as markdown files
     if (tabs && tabs.length > 0) {
-      console.log('[llmPageInjector] Attaching', tabs.length, 'markdown files');
       tabs.forEach((tab, idx) => {
         const { title, url, content } = tab;
         if (!content) return;
@@ -320,25 +306,21 @@ ${content || '<no content>'}`;
           cancelable: true,
         });
         editor.dispatchEvent(pasteEvent);
-        console.log('[llmPageInjector] Attached markdown file:', fileName);
       });
     }
 
     // Wait for file uploads to complete
     if ((files && files.length > 0) || (tabs && tabs.length > 0)) {
-      console.log('[llmPageInjector] Waiting for uploads to complete...');
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
     // 3. Inject prompt content into editor
     if (promptContent) {
-      console.log('[llmPageInjector] Injecting prompt content');
       const normalizedPrompt = promptContent.replace(/[\r\n]+/g, ' ');
       injectPromptContent(editor, normalizedPrompt);
 
       // 4. Auto-trigger send button
       if (sendButtonSelector) {
-        console.log('[llmPageInjector] Auto-triggering send');
         await new Promise((resolve) => setTimeout(resolve, 500));
         await autoTriggerSend(sendButtonSelector);
       }
@@ -346,8 +328,5 @@ ${content || '<no content>'}`;
 
     // Notify background script that injection is complete
     chrome.runtime.sendMessage({ type: 'llm-injection-complete' });
-    console.log('[llmPageInjector] Injection complete');
   });
-
-  console.log('[llmPageInjector] Content script loaded and ready');
 })();

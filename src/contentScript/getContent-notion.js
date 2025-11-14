@@ -35,8 +35,6 @@
         return '';
       }
 
-      console.log('[getContent-notion] Fetching content for page ID:', pageId);
-
       // Helper function to make API requests to Notion
       async function notionApiRequest(endpoint, payload) {
         try {
@@ -417,11 +415,6 @@
 
       // 3. Fetch missing blocks if any
       if (missingBlockIds.size > 0) {
-        console.log(
-          '[getContent-notion] Fetching missing blocks:',
-          Array.from(missingBlockIds),
-        );
-
         const missingBlocksResponse = await notionApiRequest(
           'getRecordValues',
           {
@@ -497,9 +490,6 @@
       // Add page title at the top
       const finalMarkdown = `# ${pageTitle}\n\n${markdown}`;
 
-      console.log(
-        '[getContent-notion] Successfully converted Notion page to markdown',
-      );
       return finalMarkdown.trim();
     } catch (error) {
       console.error('[getContent-notion] Error fetching content:', error);
@@ -509,6 +499,4 @@
 
   // Register the content getter function for the shared collector
   window['getContent'] = getNotionPageContent;
-
-  console.log('[getContent-notion] Notion content extraction registered');
 })();

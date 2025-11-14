@@ -53,8 +53,6 @@
         subtree: true,
       });
     }
-
-    console.log('[youtube-fixes] CSS injected to hide .ytp-cards-button');
   }
 
   // Inject CSS fixes immediately

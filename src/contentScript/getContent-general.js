@@ -82,7 +82,5 @@
 
   // Register the content getter function
   window['getContent'] = getGeneralPageContent;
-
-  console.log('[getContent] General content extraction registered');
 })();
 

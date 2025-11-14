@@ -53,8 +53,6 @@
         ...result,
         content: formattedContent.join('\n\n'),
       });
-
-      console.log('[pageContentCollector] Content collected and sent');
     } catch (error) {
       console.error('[pageContentCollector] Error collecting content:', error);
       chrome.runtime.sendMessage(result);

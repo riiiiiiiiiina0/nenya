@@ -228,34 +228,23 @@
   function setupPipTracking(video) {
     // Only set up once per video
     if (video.hasAttribute('data-pip-tracking')) {
-      console.log('[video-controller] PiP tracking already set up for video');
       return;
     }
     video.setAttribute('data-pip-tracking', 'true');
-    console.log('[video-controller] Setting up PiP tracking for video');
 
     // Track when PiP is entered (via any method - native button or custom button)
     video.addEventListener('enterpictureinpicture', () => {
-      console.log('[video-controller] ✅ enterpictureinpicture event FIRED!');
-      
       // Use callback-style messaging to ensure response is received
       chrome.runtime.sendMessage(
         { type: 'getCurrentTabId' },
         (response) => {
-          console.log('[video-controller] Got tab ID response:', response);
           if (chrome.runtime.lastError) {
             console.error('[video-controller] Runtime error:', chrome.runtime.lastError);
             return;
           }
           
           if (response && response.tabId) {
-            console.log('[video-controller] PiP entered, storing pipTabId:', response.tabId);
-            chrome.storage.local.set({ pipTabId: response.tabId }).then(() => {
-              // Verify it was stored
-              chrome.storage.local.get('pipTabId').then((verify) => {
-                console.log('[video-controller] Verified stored pipTabId:', verify.pipTabId);
-              });
-            });
+            chrome.storage.local.set({ pipTabId: response.tabId });
           } else {
             console.error('[video-controller] No tabId in response!');
           }
@@ -264,7 +253,6 @@
     });
 
     video.addEventListener('leavepictureinpicture', () => {
-      console.log('[video-controller] leavepictureinpicture event fired');
       chrome.storage.local.remove('pipTabId');
       if (!video.paused) {
         video.pause();
@@ -293,15 +281,10 @@
     pipButton.classList.add('video-controller-button');
     pipButton.addEventListener('click', async (e) => {
       e.stopPropagation();
-      console.log('[video-controller] PiP button clicked');
       try {
         if (document.pictureInPictureElement) {
-          console.log('[video-controller] Exiting Picture-in-Picture');
           await document.exitPictureInPicture();
         } else {
-          console.log(
-            '[video-controller] Requesting Picture-in-Picture for video',
-          );
           // Just request PiP - the enterpictureinpicture event listener will handle storing the tab ID
           await video.requestPictureInPicture();
         }

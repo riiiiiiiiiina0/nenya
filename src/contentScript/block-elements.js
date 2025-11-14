@@ -138,15 +138,6 @@
       } else if (document.documentElement) {
         document.documentElement.appendChild(styleElement);
       }
-
-      console.log(
-        '[block-elements] Applied',
-        selectors.length,
-        'blocking selector(s) with high specificity for',
-        url,
-      );
-    } else {
-      console.log('[block-elements] No blocking selectors for', url);
     }
   }
 
@@ -191,12 +182,6 @@
           rule.selectors.length > 0
         );
       });
-
-      console.log(
-        '[block-elements] Loaded',
-        cachedRules.length,
-        'blocking rule(s) from storage',
-      );
     } catch (error) {
       console.warn('[block-elements] Failed to load rules:', error);
       cachedRules = [];
@@ -240,7 +225,6 @@
       const newUrl = getCurrentUrl();
       if (newUrl !== lastUrl) {
         lastUrl = newUrl;
-        console.log('[block-elements] URL changed (pushState):', newUrl);
         applyBlockingCss();
       }
     };
@@ -250,7 +234,6 @@
       const newUrl = getCurrentUrl();
       if (newUrl !== lastUrl) {
         lastUrl = newUrl;
-        console.log('[block-elements] URL changed (replaceState):', newUrl);
         applyBlockingCss();
       }
     };
@@ -260,7 +243,6 @@
       const newUrl = getCurrentUrl();
       if (newUrl !== lastUrl) {
         lastUrl = newUrl;
-        console.log('[block-elements] URL changed (popstate):', newUrl);
         applyBlockingCss();
       }
     });
@@ -270,7 +252,6 @@
       const newUrl = getCurrentUrl();
       if (newUrl !== lastUrl) {
         lastUrl = newUrl;
-        console.log('[block-elements] URL changed (hashchange):', newUrl);
         applyBlockingCss();
       }
     });
@@ -294,7 +275,6 @@
         return;
       }
 
-      console.log('[block-elements] Storage changed, reloading rules...');
       void loadRules().then(() => {
         applyBlockingCss();
       });
@@ -306,8 +286,6 @@
    * @returns {Promise<void>}
    */
   async function init() {
-    console.log('[block-elements] Initializing...');
-
     // Load rules from storage
     await loadRules();
 
@@ -318,8 +296,6 @@
     setupUrlChangeListeners();
     setupMutationObserver();
     setupStorageListener();
-
-    console.log('[block-elements] Initialized successfully');
   }
 
   // Run initialization when DOM is ready

@@ -10,7 +10,6 @@
 
   // Prevent double-injection
   if (/** @type {any} */ (window).__nenyaPickerActive) {
-    console.log('[epicker] Picker already active');
     return;
   }
   /** @type {any} */ (window).__nenyaPickerActive = true;
@@ -626,8 +625,6 @@
         togglePreview(true, msg.selector);
         break;
       case 'confirmSelector':
-        // Log the selector and quit
-        console.log('[epicker] Final selector:', msg.selector);
         // Send selector to background script to save
         if (chrome?.runtime?.sendMessage) {
           chrome.runtime
