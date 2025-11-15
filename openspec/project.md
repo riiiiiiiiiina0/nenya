@@ -20,12 +20,12 @@ Vanilla JavaScript Chrome extension (Manifest V3).
 ## Project Conventions
 
 ### Code Style
-- Use **vanilla JavaScript** (no TypeScript).
-- **No build steps**; plain source files only.
-- Use **JSDoc** to type all JavaScript source code.
-- Use **single quotes** for all string literals.
+- Use vanilla JavaScript (no TypeScript).
+- No build steps; plain source files only.
+- Use JSDoc to type all JavaScript source code.
+- Use single quotes for all string literals.
 - Follow clear, readable code conventions (avoid unnecessary abstractions).
-- **Wrap all content scripts in IIFEs** (Immediately Invoking Function Expressions) to prevent global variable pollution and ensure proper encapsulation.
+- Wrap all content scripts in IIFEs (Immediately Invoking Function Expressions) to prevent global variable pollution and ensure proper encapsulation.
 
 ### Architecture Patterns
 The project follows a typical browser extension architecture, separating concerns into distinct directories within `src/`:
@@ -35,20 +35,20 @@ The project follows a typical browser extension architecture, separating concern
 -   **`options/`**: Manages the extension's settings and configuration UI, with files like `autoGoogleLogin.js`, `bookmarks.js`, `customCode.js`, `darkMode.js`, `index.html`, and `options.js`.
 -   **`popup/`**: Contains the HTML and JavaScript for the extension's browser action popup, including `chat.html`, `index.html`, `popup.js`, and `projects.js`.
 -   **`shared/`**: Provides common utilities, helper functions, and shared constants used across different parts of the extension, such as `bookmarkFolders.js`, `icons.js`, `llmProviders.js`, and `urlProcessor.js`.
--   **`split/`**: Likely contains logic and UI components related to the "split page" feature, with files like `entry.js`, `iframe-monitor.js`, `split.html`, and `tab-picker.js`.
+-   **`split/`**: Contains logic and UI components related to the "split page" feature, with files like `entry.js`, `iframe-monitor.js`, `split.html`, and `tab-picker.js`.
 
 ### Preferred Frameworks & Libraries
 #### What to do when a framework/library is needed?
-- When a JavaScript library is required, **download the CDN (browser-ready) version** and place it in `src/libs`.
+- When a JavaScript library is required, download the CDN (browser-ready) version and place it in `src/libs`.
   - Example: For `lodash`, download the minified CDN file (e.g., `lodash.min.js`) and save it as `src/libs/lodash.min.js`.
 - Reference these local files in HTML or JavaScript as needed (e.g., via `<script src="./libs/lodash.min.js"></script>`).
-- Do **not** use npm packages or require a build step for library usage.
-- Always prefer the **browser-ready, standalone** version from a reputable CDN (such as jsDelivr or unpkg).
+- Do not use npm packages or require a build step for library usage.
+- Always prefer the browser-ready, standalone version from a reputable CDN (such as jsDelivr or unpkg).
 
 #### Preferred frameworks & libraries
-- **TailwindCSS** for utility-first styling.
-- **DaisyUI** for ready-made UI components.
-- **Day.js** as needed for date and time manipulations.
+- TailwindCSS for utility-first styling.
+- DaisyUI for ready-made UI components.
+- Day.js as needed for date and time manipulations.
 
 ### Testing Strategy
 Currently, testing is performed manually by loading the extension into a browser. There is a desire to integrate automated testing in the future.
