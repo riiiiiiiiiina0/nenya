@@ -22,6 +22,12 @@ The system MUST provide a mechanism to mirror a user's Raindrop.io collections a
 - **When** a periodic or manual sync is triggered,
 - **Then** the system MUST update the corresponding bookmark folders and bookmarks to reflect the changes.
 
+#### Scenario: User Changes Parent Bookmark Folder or Root Folder Name
+- **Given** a user has previously mirrored their Raindrop.io data,
+- **When** the user changes the parent bookmark folder or the root folder name from the options page,
+- **Then** the system MUST immediately update the root bookmark folder name or move the root bookmark folder to the new parent folder.
+- **And** the system MUST ensure that all mirrored Raindrop.io collections and bookmarks remain within the updated root folder.
+
 #### Scenario: Synchronizing Deletions from Raindrop.io
 - **Given** a user has previously mirrored their Raindrop.io data,
 - **And** bookmarks or collections have been deleted from their Raindrop.io account,
