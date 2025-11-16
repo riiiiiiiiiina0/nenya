@@ -1,52 +1,85 @@
 ## Raindrop Pull Specification
 
-### Requirement: Mirror Raindrop.io Data to Local Bookmarks
-The system MUST provide a mechanism to mirror a user's Raindrop.io collections and bookmarks to the browser's local bookmark structure. This process, referred to as a "pull" or "sync," ensures that the user's Raindrop.io data is accessible and backed up as native browser bookmarks.
+### Requirement: Users MUST be able to trigger a Raindrop pull on demand
+Once authenticated, users can initiate a mirror sync from multiple entry points.
 
-#### Scenario: Initial Mirroring of Raindrop.io Data
-- **Given** a user has authenticated their Raindrop.io account with the extension,
-- **And** they initiate a "pull" or "sync" for the first time,
-- **Then** the system MUST create a root bookmark folder (e.g., "Raindrop") in a user-configurable location (defaulting to the Bookmarks Bar).
-- **And** the system MUST replicate the user's Raindrop.io collection hierarchy as nested bookmark folders within the root folder.
-- **And** the system MUST create bookmarks within the corresponding folders for each item in the user's Raindrop.io collections, preserving the title and URL.
+#### Scenario: Manual pull from popup shortcut or keyboard command
+- **GIVEN** the user is logged into a bookmark provider,
+- **WHEN** they click the popup shortcut or press the `bookmarks-pull-raindrop` command,
+- **THEN** the background script MUST invoke `runMirrorPull('manual')`,
+- **AND** an action badge animation MUST indicate progress until the pull resolves with ✅ on success or ❌ on failure,
+- **AND** the popup MUST present the returned stats string (bookmarks/folders created, updated, moved, deleted).
 
-#### Scenario: Synchronizing Changes from Raindrop.io
-- **Given** a user has previously mirrored their Raindrop.io data,
-- **And** new bookmarks or collections have been added to their Raindrop.io account,
-- **When** a periodic or manual sync is triggered,
-- **Then** the system MUST add the new collections as bookmark folders and the new items as bookmarks in the corresponding locations.
+#### Scenario: Pull now button in options
+- **GIVEN** the user is on the options page, logged in, and presses “Pull now,”
+- **THEN** the page MUST send `{ type: 'mirror:pull' }` to the background,
+- **AND** show a toast summarizing whether the sync created, updated, moved, or deleted any bookmarks/folders.
 
-#### Scenario: Synchronizing Updates from Raindrop.io
-- **Given** a user has previously mirrored their Raindrop.io data,
-- **And** existing bookmarks or collections have been updated (e.g., renamed) in their Raindrop.io account,
-- **When** a periodic or manual sync is triggered,
-- **Then** the system MUST update the corresponding bookmark folders and bookmarks to reflect the changes.
+#### Scenario: Prevent concurrent pulls
+- **GIVEN** a pull is already running,
+- **WHEN** another manual, reset, command, or alarm-triggered pull starts,
+- **THEN** the background MUST reject it with `ok: false` and `error: 'Sync already in progress.'`.
 
-#### Scenario: User Changes Parent Bookmark Folder or Root Folder Name
-- **Given** a user has previously mirrored their Raindrop.io data,
-- **When** the user changes the parent bookmark folder or the root folder name from the options page,
-- **Then** the system MUST immediately update the root bookmark folder name or move the root bookmark folder to the new parent folder.
-- **And** the system MUST ensure that all mirrored Raindrop.io collections and bookmarks remain within the updated root folder.
+### Requirement: Raindrop data MUST mirror into a configurable root folder
+Every pull replicates the remote collection hierarchy (including Unsorted) under a user-selected root bookmark folder.
 
-#### Scenario: Synchronizing Deletions from Raindrop.io
-- **Given** a user has previously mirrored their Raindrop.io data,
-- **And** bookmarks or collections have been deleted from their Raindrop.io account,
-- **When** a periodic or manual sync is triggered,
-- **Then** the system MUST remove the corresponding bookmark folders and bookmarks from the local mirror.
+#### Scenario: Initial mirroring
+- **GIVEN** a logged-in user runs a pull for the first time,
+- **THEN** the system MUST ensure the configured parent folder exists (default Bookmarks Bar) and create the root folder using the stored or default name,
+- **AND** fetch `/user`, `/collections`, and `/collections/childrens` to build the collection tree,
+- **AND** create/update/delete folders locally so the structure matches Raindrop,
+- **AND** create bookmarks with normalized titles/URLs for every Raindrop item, including Unsorted items placed in a dedicated `Unsorted` subfolder.
 
-#### Scenario: Handling of Unsorted Raindrop.io Items
-- **Given** a user has items in their "Unsorted" Raindrop.io collection,
-- **When** a sync is performed,
-- **Then** the system MUST create a dedicated "Unsorted" bookmark folder within the root mirror folder.
-- **And** the system MUST create bookmarks for all items from the "Unsorted" collection within this "Unsorted" folder.
+#### Scenario: Synchronize additions, updates, moves, and deletions
+- **GIVEN** the user has mirrored once,
+- **WHEN** later pulls detect new, updated, moved, or deleted collections/items in Raindrop,
+- **THEN** the mirror MUST create/move/delete bookmark folders and update/move/delete bookmarks to match the API responses, tracking counts in `MirrorStats`.
 
-#### Scenario: Automatic Periodic Synchronization
-- **Given** the user has enabled the Raindrop.io integration,
-- **Then** the system MUST automatically perform a sync operation at a predefined interval (e.g., every 10 minutes) to keep the local bookmark mirror up-to-date.
-- **And** the system MUST provide a visual indicator (e.g., a badge on the extension icon) when a sync is in progress.
+#### Scenario: Mirror the Unsorted collection
+- **GIVEN** the remote Unsorted collection contains items,
+- **THEN** every pull MUST ensure an `Unsorted` folder exists directly under the root folder,
+- **AND** every Unsorted item MUST become a bookmark within that folder, deduplicated by normalized URL.
 
-#### Scenario: Reset and Re-pull of Raindrop.io Data
-- **Given** a user has previously mirrored their Raindrop.io data,
-- **And** they initiate a "reset and re-pull" action,
-- **Then** the system MUST delete the existing root bookmark folder and all its contents.
-- **And** the system MUST then perform a full initial mirroring of all Raindrop.io data as described in the "Initial Mirroring of Raindrop.io Data" scenario.
+### Requirement: Mirror placement MUST follow root-folder settings from the options page
+Users can change the parent folder or the root folder name at any time; pulls must honor the latest settings.
+
+#### Scenario: Parent folder changed in options
+- **GIVEN** the user selects a different parent folder in options and saves,
+- **THEN** the options page MUST move the existing mirror root to the new parent immediately,
+- **AND** subsequent pulls MUST continue mirroring inside the moved root folder, preserving all mirrored data.
+
+#### Scenario: Root folder renamed in options
+- **GIVEN** the user renames the root folder in options and saves,
+- **THEN** the options page MUST rename the existing root folder instantly,
+- **AND** pulls MUST keep using the renamed folder so all mirrored content stays within the updated name.
+
+#### Scenario: Invalid parent folder recovered automatically
+- **GIVEN** the saved parent folder ID no longer exists,
+- **THEN** a pull MUST fall back to the Bookmarks Bar parent, persist that fix, and continue mirroring under the fallback.
+
+### Requirement: Pulls MUST run automatically on a schedule and support reset
+The background alarm keeps data fresh, and users can request a clean slate.
+
+#### Scenario: Automatic periodic synchronization
+- **GIVEN** the user is logged in,
+- **THEN** the background alarm MUST invoke `runMirrorPull('alarm')` every `MIRROR_PULL_INTERVAL_MINUTES` (10 minutes),
+- **AND** skip showing notifications when the alarm pull detects zero changes.
+
+#### Scenario: Reset & Re-pull
+- **GIVEN** the user clicks “Reset & Re-pull” in options,
+- **THEN** the extension MUST remove the existing root mirror folder plus stored timestamps, persist corrected settings when needed, and immediately perform a full pull identical to the first-run scenario.
+
+### Requirement: Users MUST be notified of pull outcomes
+Pull completion should respect notification preferences and report meaningful status.
+
+#### Scenario: Success notification
+- **GIVEN** notifications are enabled (global + bookmark pull toggle),
+- **THEN** a successful manual/reset pull MUST trigger `notifyMirrorPullSuccess` with the stats summary and link the user to the mirrored root folder.
+
+#### Scenario: Failure notification
+- **GIVEN** a pull fails due to API errors, auth issues, or other exceptions,
+- **THEN** the system MUST trigger `notifyMirrorPullFailure` with the sanitized error message and set the badge to ❌.
+
+#### Scenario: Token validation
+- **GIVEN** a pull starts without valid (non-expired) Raindrop tokens,
+- **THEN** the system MUST stop immediately, return an error stating that the user must reconnect, and avoid mutating bookmarks.
