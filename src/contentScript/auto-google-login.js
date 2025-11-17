@@ -190,17 +190,11 @@
     const candidates = document.querySelectorAll(
       'button, a[href], [role="button"], input[type="button"], input[type="submit"]',
     );
-    console.log(
-      '[auto-google-login] Checking',
-      candidates.length,
-      'candidate elements',
-    );
 
     for (const candidate of candidates) {
       const element = /** @type {HTMLElement} */ (candidate);
       const isMatch = isGoogleLoginButton(element);
       if (isMatch) {
-        console.log('[auto-google-login] Found matching button:', element);
         buttons.push(element);
       }
     }
@@ -236,7 +230,6 @@
    */
   async function clickGoogleLoginButton(button, rule) {
     if (loginInProgress) {
-      console.log('[auto-google-login] Login already in progress');
       return;
     }
 
@@ -244,8 +237,6 @@
     const email = rule.email || 'configured account';
 
     try {
-      console.log('[auto-google-login] Clicking Google login button');
-
       // Check if button opens a popup or redirects
       const href = button.getAttribute('href');
       const onClick = button.getAttribute('onclick');
@@ -263,10 +254,6 @@
               [TEMP_EMAIL_STORAGE_KEY]: email,
               [AUTO_LOGIN_INITIATED_KEY]: true,
             });
-            console.log(
-              '[auto-google-login] Stored email and auto login flag before redirect:',
-              email,
-            );
           }
         } catch (error) {
           console.warn(
@@ -292,10 +279,6 @@
             [TEMP_EMAIL_STORAGE_KEY]: email,
             [AUTO_LOGIN_INITIATED_KEY]: true,
           });
-          console.log(
-            '[auto-google-login] Stored email and auto login flag in chrome.storage.local:',
-            email,
-          );
         }
       } catch (error) {
         console.warn(
@@ -340,8 +323,6 @@
    * @returns {boolean} True if button was clicked
    */
   function tryClickContinueButton() {
-    console.log('[auto-google-login] Looking for Continue button...');
-
     // Strategy 1: Find button by text content "Continue"
     const buttons = document.querySelectorAll('button');
     for (const button of buttons) {
@@ -352,10 +333,6 @@
         htmlButton.offsetParent !== null &&
         !htmlButton.disabled
       ) {
-        console.log(
-          '[auto-google-login] Found Continue button by text, clicking:',
-          htmlButton,
-        );
         return clickElement(htmlButton);
       }
     }
@@ -365,10 +342,6 @@
     if (continueButton) {
       const htmlButton = /** @type {HTMLButtonElement} */ (continueButton);
       if (htmlButton.offsetParent !== null && !htmlButton.disabled) {
-        console.log(
-          '[auto-google-login] Found Continue button by jsname, clicking:',
-          htmlButton,
-        );
         return clickElement(htmlButton);
       }
     }
@@ -385,10 +358,6 @@
         htmlButton.offsetParent !== null &&
         !htmlButton.disabled
       ) {
-        console.log(
-          '[auto-google-login] Found Continue button by aria-label, clicking:',
-          htmlButton,
-        );
         return clickElement(htmlButton);
       }
     }
@@ -402,17 +371,12 @@
         if (button) {
           const htmlButton = /** @type {HTMLButtonElement} */ (button);
           if (htmlButton.offsetParent !== null && !htmlButton.disabled) {
-            console.log(
-              '[auto-google-login] Found Continue button via span text, clicking:',
-              htmlButton,
-            );
             return clickElement(htmlButton);
           }
         }
       }
     }
 
-    console.log('[auto-google-login] Could not find Continue button');
     return false;
   }
 
@@ -444,7 +408,6 @@
     try {
       if (chrome?.storage?.local) {
         await chrome.storage.local.remove(AUTO_LOGIN_INITIATED_KEY);
-        console.log('[auto-google-login] Cleared auto login initiated flag');
       }
     } catch (error) {
       console.warn(
@@ -462,22 +425,12 @@
     // Only proceed if auto login was initiated by a matching rule
     const initiated = await wasAutoLoginInitiated();
     if (!initiated) {
-      console.log(
-        '[auto-google-login] Skipping OAuth confirmation - auto login was not initiated by a matching rule',
-      );
       return;
     }
-
-    console.log(
-      '[auto-google-login] On OAuth confirmation page, attempting to click Continue',
-    );
 
     // Try immediately
     let clicked = tryClickContinueButton();
     if (clicked) {
-      console.log(
-        '[auto-google-login] Successfully clicked Continue button immediately',
-      );
       return;
     }
 
@@ -493,9 +446,6 @@
       const observer = new MutationObserver(() => {
         const found = tryClickContinueButton();
         if (found) {
-          console.log(
-            '[auto-google-login] Found and clicked Continue button via MutationObserver',
-          );
           resolve(true);
           observer.disconnect();
         }
@@ -524,17 +474,8 @@
     const pollingPromise = (async () => {
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         await new Promise((resolve) => setTimeout(resolve, retryDelay));
-        console.log(
-          `[auto-google-login] Attempt ${
-            attempt + 1
-          }/${maxRetries} to click Continue button`,
-        );
-
         clicked = tryClickContinueButton();
         if (clicked) {
-          console.log(
-            '[auto-google-login] Successfully clicked Continue button',
-          );
           return true;
         }
       }
@@ -592,10 +533,6 @@
       const initiated = await wasAutoLoginInitiated();
       if (initiated) {
         void handleOAuthConfirmation();
-      } else {
-        console.log(
-          '[auto-google-login] Skipping OAuth confirmation in monitorGoogleOAuthFlow - auto login was not initiated by a matching rule',
-        );
       }
       return;
     }
@@ -605,9 +542,6 @@
       // Only proceed if auto login was initiated by a matching rule
       const initiated = await wasAutoLoginInitiated();
       if (!initiated) {
-        console.log(
-          '[auto-google-login] Skipping account selection - auto login was not initiated by a matching rule',
-        );
         return;
       }
 
@@ -616,10 +550,6 @@
           const result = await chrome.storage.local.get(TEMP_EMAIL_STORAGE_KEY);
           const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
           if (storedEmail) {
-            console.log(
-              '[auto-google-login] Found stored email in monitorGoogleOAuthFlow, attempting account selection:',
-              storedEmail,
-            );
             void handleGoogleAccountSelection(storedEmail);
             return;
           }
@@ -632,10 +562,6 @@
       }
       // Fallback to rule email if storage doesn't have it (only if we have a rule)
       if (rule && rule.email) {
-        console.log(
-          '[auto-google-login] Using rule email as fallback:',
-          rule.email,
-        );
         void handleGoogleAccountSelection(rule);
       }
     };
@@ -655,10 +581,6 @@
               const initiated = await wasAutoLoginInitiated();
               if (initiated) {
                 void handleOAuthConfirmation();
-              } else {
-                console.log(
-                  '[auto-google-login] Skipping OAuth confirmation in monitorGoogleOAuthFlow URL check - auto login was not initiated by a matching rule',
-                );
               }
             })();
           } else if (
@@ -732,31 +654,6 @@
    */
   function tryClickAccount(email) {
     const emailLower = email.toLowerCase().trim();
-    console.log('[auto-google-login] Searching for account:', emailLower);
-
-    // Debug: Log all elements with data-email or data-identifier
-    const allDataEmail = document.querySelectorAll('[data-email]');
-    const allDataIdentifier = document.querySelectorAll('[data-identifier]');
-    console.log(
-      `[auto-google-login] Found ${allDataEmail.length} elements with data-email, ${allDataIdentifier.length} with data-identifier`,
-    );
-
-    if (allDataEmail.length > 0) {
-      console.log(
-        '[auto-google-login] Sample data-email values:',
-        Array.from(allDataEmail)
-          .slice(0, 3)
-          .map((el) => el.getAttribute('data-email')),
-      );
-    }
-    if (allDataIdentifier.length > 0) {
-      console.log(
-        '[auto-google-login] Sample data-identifier values:',
-        Array.from(allDataIdentifier)
-          .slice(0, 3)
-          .map((el) => el.getAttribute('data-identifier')),
-      );
-    }
 
     // Strategy 1: Find div[role="link"] with data-identifier (most common clickable element)
     const linkElements = document.querySelectorAll(
@@ -768,12 +665,6 @@
         .toLowerCase()
         .trim();
       if (identifier === emailLower && htmlElement.offsetParent !== null) {
-        console.log(
-          '[auto-google-login] Found account via div[role="link"][data-identifier] (exact match), clicking:',
-          htmlElement,
-          'identifier:',
-          identifier,
-        );
         return clickElement(htmlElement);
       }
     }
@@ -791,20 +682,8 @@
           htmlElement.closest('div[role="link"]')
         );
         if (roleLink && roleLink.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-identifier, clicking parent div[role="link"]:',
-            roleLink,
-            'identifier:',
-            identifier,
-          );
           return clickElement(roleLink);
         }
-        console.log(
-          '[auto-google-login] Found account via data-identifier (exact match), clicking:',
-          htmlElement,
-          'identifier:',
-          identifier,
-        );
         return clickElement(htmlElement);
       }
     }
@@ -822,24 +701,12 @@
           htmlElement.closest('div[role="link"]')
         );
         if (roleLink && roleLink.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-email (exact match), clicking parent div[role="link"]:',
-            roleLink,
-            'email:',
-            dataEmail,
-          );
           return clickElement(roleLink);
         }
 
         // Fallback: try parent li element
         const parentLi = htmlElement.closest('li');
         if (parentLi && parentLi.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-email (exact match), clicking parent li:',
-            parentLi,
-            'email:',
-            dataEmail,
-          );
           return clickElement(parentLi);
         }
 
@@ -849,10 +716,6 @@
             htmlElement.closest('li, button, a, [role="button"], [role="link"]')
           ) || htmlElement;
         if (clickable && clickable.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-email, clicking closest:',
-            clickable,
-          );
           return clickElement(clickable);
         }
       }
@@ -870,12 +733,6 @@
         identifier.length > 0 &&
         htmlElement.offsetParent !== null
       ) {
-        console.log(
-          '[auto-google-login] Found account via div[role="link"][data-identifier] (partial match), clicking:',
-          htmlElement,
-          'identifier:',
-          identifier,
-        );
         return clickElement(htmlElement);
       }
     }
@@ -897,20 +754,8 @@
           htmlElement.closest('div[role="link"]')
         );
         if (roleLink && roleLink.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-identifier (partial match), clicking parent div[role="link"]:',
-            roleLink,
-            'identifier:',
-            identifier,
-          );
           return clickElement(roleLink);
         }
-        console.log(
-          '[auto-google-login] Found account via data-identifier (partial match), clicking:',
-          htmlElement,
-          'identifier:',
-          identifier,
-        );
         return clickElement(htmlElement);
       }
     }
@@ -930,22 +775,10 @@
           htmlElement.closest('div[role="link"]')
         );
         if (roleLink && roleLink.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-email (partial match), clicking parent div[role="link"]:',
-            roleLink,
-            'email:',
-            dataEmail,
-          );
           return clickElement(roleLink);
         }
         const parentLi = htmlElement.closest('li');
         if (parentLi && parentLi.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via data-email (partial match), clicking parent li:',
-            parentLi,
-            'email:',
-            dataEmail,
-          );
           return clickElement(parentLi);
         }
       }
@@ -964,10 +797,6 @@
             htmlElement.closest('li, button, a, [role="button"]')
           ) || htmlElement;
         if (clickable && clickable.offsetParent !== null) {
-          console.log(
-            '[auto-google-login] Found account via aria-label, clicking:',
-            clickable,
-          );
           return clickElement(clickable);
         }
       }
@@ -988,18 +817,11 @@
           text,
         );
         if (hasEmailPattern) {
-          console.log(
-            '[auto-google-login] Found account via text content in li, clicking:',
-            htmlElement,
-            'text:',
-            text.substring(0, 100),
-          );
           return clickElement(htmlElement);
         }
       }
     }
 
-    console.log('[auto-google-login] Could not find matching account element');
     return false;
   }
 
@@ -1021,14 +843,9 @@
       return;
     }
 
-    console.log('[auto-google-login] Attempting to select account:', email);
-
     // Try to click immediately if elements are already loaded
     let accountSelected = tryClickAccount(email);
     if (accountSelected) {
-      console.log(
-        '[auto-google-login] Successfully clicked account immediately',
-      );
       setTimeout(() => {
         loginInProgress = false;
       }, 5000);
@@ -1053,9 +870,6 @@
       const observer = new MutationObserver(() => {
         const found = tryClickAccount(email);
         if (found) {
-          console.log(
-            '[auto-google-login] Found and clicked account via MutationObserver',
-          );
           resolve(true);
           observer.disconnect();
         }
@@ -1087,25 +901,10 @@
           await new Promise((resolve) => setTimeout(resolve, retryDelay));
         }
 
-        console.log(
-          `[auto-google-login] Attempt ${
-            attempt + 1
-          }/${maxRetries} to select account`,
-        );
-
         accountSelected = tryClickAccount(email);
         if (accountSelected) {
-          console.log('[auto-google-login] Successfully clicked account');
           return true;
         }
-
-        // Log what we found for debugging
-        const allDataEmail = document.querySelectorAll('[data-email]');
-        const allDataIdentifier =
-          document.querySelectorAll('[data-identifier]');
-        console.log(
-          `[auto-google-login] Found ${allDataEmail.length} data-email and ${allDataIdentifier.length} data-identifier elements`,
-        );
       }
       return false;
     })();
@@ -1151,7 +950,6 @@
     try {
       // First check if the window has focus
       if (!document.hasFocus()) {
-        console.log('[auto-google-login] Window does not have focus');
         return false;
       }
 
@@ -1172,9 +970,6 @@
               response && typeof response.isActive === 'boolean'
                 ? response.isActive
                 : false;
-            if (!isActive) {
-              console.log('[auto-google-login] Tab is not active');
-            }
             resolve(isActive);
           },
         );
@@ -1196,10 +991,6 @@
     const url = getCurrentUrl();
     const matchingRule = findMatchingRule(url);
 
-    console.log('[auto-google-login] Checking page:', url);
-    console.log('[auto-google-login] Matching rule:', matchingRule);
-    console.log('[auto-google-login] Cached rules:', cachedRules);
-
     if (!matchingRule) {
       // No matching rule, reset alert state
       lastAlertedRuleId = null;
@@ -1209,42 +1000,22 @@
 
     // If we already processed this rule, don't process again
     if (lastAlertedRuleId === matchingRule.id && loginInProgress) {
-      console.log('[auto-google-login] Already processing login for this rule');
       return;
     }
 
     // Check if the current tab is active before proceeding
     const tabIsActive = await isCurrentTabActive();
     if (!tabIsActive) {
-      console.log(
-        '[auto-google-login] Skipping auto login - tab is not active in focused window',
-      );
       return;
     }
 
     const googleLoginButtons = findGoogleLoginButtons();
-    console.log(
-      '[auto-google-login] Found Google login buttons:',
-      googleLoginButtons.length,
-    );
 
     if (googleLoginButtons.length > 0) {
       const email = matchingRule.email || 'configured account';
       lastAlertedRuleId = matchingRule.id;
-
-      console.log(
-        '[auto-google-login] Found Google login button on',
-        url,
-        'for rule:',
-        matchingRule.pattern,
-        'email:',
-        email,
-      );
-
       // Click the first matching button
       await clickGoogleLoginButton(googleLoginButtons[0], matchingRule);
-    } else {
-      console.log('[auto-google-login] No Google login buttons found on page');
     }
   }
 
@@ -1290,11 +1061,6 @@
 
       if (Array.isArray(rules)) {
         cachedRules = rules;
-        console.log(
-          '[auto-google-login] Loaded',
-          cachedRules.length,
-          'auto Google login rule(s)',
-        );
       } else {
         cachedRules = [];
       }
@@ -1318,15 +1084,10 @@
     );
 
     if (isOAuthConfirmationPage) {
-      console.log('[auto-google-login] Already on OAuth confirmation page');
       // Only handle if auto login was initiated by a matching rule
       const initiated = await wasAutoLoginInitiated();
       if (initiated) {
         void handleOAuthConfirmation();
-      } else {
-        console.log(
-          '[auto-google-login] Skipping OAuth confirmation - auto login was not initiated by a matching rule',
-        );
       }
     }
 
@@ -1338,17 +1099,11 @@
       !isOAuthConfirmationPage;
 
     if (isGoogleAccountSelectionPage) {
-      console.log(
-        '[auto-google-login] Already on Google account selection page',
-      );
       // Wait a bit for the page to load before attempting account selection
       setTimeout(async () => {
         // Only proceed if auto login was initiated by a matching rule
         const initiated = await wasAutoLoginInitiated();
         if (!initiated) {
-          console.log(
-            '[auto-google-login] Skipping account selection - auto login was not initiated by a matching rule',
-          );
           return;
         }
 
@@ -1360,20 +1115,12 @@
             );
             const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
             if (storedEmail) {
-              console.log(
-                '[auto-google-login] Found stored email, attempting account selection:',
-                storedEmail,
-              );
               void handleGoogleAccountSelection(storedEmail);
               // Clear the stored email and flag after using it (with delay to allow retries)
               setTimeout(() => {
                 void chrome.storage.local.remove(TEMP_EMAIL_STORAGE_KEY);
                 void clearAutoLoginFlag();
               }, 15000);
-            } else {
-              console.log(
-                '[auto-google-login] No stored email found in chrome.storage.local',
-              );
             }
           }
         } catch (error) {
@@ -1389,11 +1136,8 @@
     // Many modern web apps load login buttons dynamically
     const delays = [500, 2000, 5000]; // ms - check at 0.5s, 2s, and 5s after page load
 
-    delays.forEach((delay, index) => {
+    delays.forEach((delay) => {
       setTimeout(() => {
-        console.log(
-          `[auto-google-login] Scheduled check #${index + 1} after ${delay}ms`,
-        );
         lastCheckTime = Date.now();
         void checkAndAlert();
       }, delay);
@@ -1472,18 +1216,11 @@
 
         // Check if we navigated to OAuth confirmation page
         if (currentUrl.includes('accounts.google.com/signin/oauth/id')) {
-          console.log(
-            '[auto-google-login] Navigated to OAuth confirmation page',
-          );
           // Only handle if auto login was initiated by a matching rule
           void (async () => {
             const initiated = await wasAutoLoginInitiated();
             if (initiated) {
               void handleOAuthConfirmation();
-            } else {
-              console.log(
-                '[auto-google-login] Skipping OAuth confirmation - auto login was not initiated by a matching rule',
-              );
             }
           })();
         }
@@ -1501,9 +1238,6 @@
             // Only proceed if auto login was initiated by a matching rule
             const initiated = await wasAutoLoginInitiated();
             if (!initiated) {
-              console.log(
-                '[auto-google-login] Skipping account selection - auto login was not initiated by a matching rule',
-              );
               return;
             }
 
@@ -1514,10 +1248,6 @@
                 );
                 const storedEmail = result?.[TEMP_EMAIL_STORAGE_KEY];
                 if (storedEmail) {
-                  console.log(
-                    '[auto-google-login] Found stored email after navigation, attempting account selection:',
-                    storedEmail,
-                  );
                   void handleGoogleAccountSelection(storedEmail);
                   // Clear the flag after use (with delay to allow retries)
                   setTimeout(() => {
@@ -1537,13 +1267,8 @@
         lastAlertedRuleId = null;
         // Schedule delayed checks again on URL change
         const delays = [500, 2000, 5000];
-        delays.forEach((delay, index) => {
+        delays.forEach((delay) => {
           setTimeout(() => {
-            console.log(
-              `[auto-google-login] Scheduled check #${
-                index + 1
-              } after URL change (${delay}ms)`,
-            );
             lastCheckTime = Date.now();
             void checkAndAlert();
           }, delay);
@@ -1568,7 +1293,6 @@
         return;
       }
 
-      console.log('[auto-google-login] Rules updated, reloading...');
       void loadRules().then(() => {
         lastAlertedRuleId = null;
         debouncedCheck();
