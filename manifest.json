@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtpvO0tRT1thlVOMgoOlhlhBHZAQD4x3QJKyvFlEPHJ9RiazqqxqtRVXg8lSbzIS3KgsIlBjzCZQdITVP5CF8gxS7xbJqQzc2TwFXUUeiHuPe0lruViQPWgabbUscUNdD3je179/z9eNbILuKfLpp5WoDIxjZcW1fc9XJd22iUDciiedkkKOA37fq0IMYGNykkRtVU9phee2VJVyxU3YbBj7q5nD5fWwgJjXZng3uFeFEqzozl8VmYKn0B0sti/LB+wJ3/eqjJd2ejg5O1oGzLNSS5pSowZxxo5y4HuwsWfONr0vQSZSdtwti2/wozTcvOssJivO+b61tKznqO03yJQIDAQAB",
   "name": "Nenya",
-  "version": "0.76.0",
+  "version": "0.77.0",
   "description": "",
   "icons": {
     "16": "assets/icons/icon-16x16.png",
