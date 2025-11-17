@@ -588,7 +588,7 @@ function handleLifecycleEvent(trigger) {
           error instanceof Error ? error.message : error,
         );
       });
-    }, 5000);
+    }, 2000);
     return;
   }
 
