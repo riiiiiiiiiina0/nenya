@@ -579,6 +579,19 @@ function handleLifecycleEvent(trigger) {
         error instanceof Error ? error.message : error,
       );
     });
+  // Delay startup pull to avoid race condition with network initialization
+  if (trigger === 'startup') {
+    setTimeout(() => {
+      void runMirrorPull(trigger).catch((error) => {
+        console.warn(
+          '[mirror] Initial pull skipped:',
+          error instanceof Error ? error.message : error,
+        );
+      });
+    }, 5000);
+    return;
+  }
+
   void runMirrorPull(trigger).catch((error) => {
     console.warn(
       '[mirror] Initial pull skipped:',
