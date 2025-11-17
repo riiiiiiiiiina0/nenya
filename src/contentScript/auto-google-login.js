@@ -252,7 +252,10 @@
           if (chrome?.storage?.local) {
             await chrome.storage.local.set({
               [TEMP_EMAIL_STORAGE_KEY]: email,
-              [AUTO_LOGIN_INITIATED_KEY]: true,
+              [AUTO_LOGIN_INITIATED_KEY]: {
+                initiated: true,
+                timestamp: Date.now(),
+              },
             });
           }
         } catch (error) {
@@ -277,7 +280,10 @@
         if (chrome?.storage?.local) {
           await chrome.storage.local.set({
             [TEMP_EMAIL_STORAGE_KEY]: email,
-            [AUTO_LOGIN_INITIATED_KEY]: true,
+            [AUTO_LOGIN_INITIATED_KEY]: {
+              initiated: true,
+              timestamp: Date.now(),
+            },
           });
         }
       } catch (error) {
@@ -381,7 +387,7 @@
   }
 
   /**
-   * Check if auto login was initiated by a matching rule
+   * Check if auto login was initiated by a matching rule within the last 10 seconds
    * @returns {Promise<boolean>}
    */
   async function wasAutoLoginInitiated() {
@@ -390,7 +396,35 @@
         return false;
       }
       const result = await chrome.storage.local.get(AUTO_LOGIN_INITIATED_KEY);
-      return result?.[AUTO_LOGIN_INITIATED_KEY] === true;
+      const flagData = result?.[AUTO_LOGIN_INITIATED_KEY];
+
+      if (
+        flagData &&
+        typeof flagData === 'object' &&
+        flagData.initiated === true &&
+        typeof flagData.timestamp === 'number'
+      ) {
+        const age = Date.now() - flagData.timestamp;
+        if (age < 10000) {
+          // 10 seconds
+          console.log(
+            '[auto-google-login] Auto login initiated flag is valid (age:',
+            age,
+            'ms)',
+          );
+          return true;
+        } else {
+          console.log(
+            '[auto-google-login] Auto login initiated flag is stale (age:',
+            age,
+            'ms)',
+          );
+          // Clear the stale flag
+          void clearAutoLoginFlag();
+          return false;
+        }
+      }
+      return false;
     } catch (error) {
       console.warn(
         '[auto-google-login] Failed to check auto login initiated flag:',
