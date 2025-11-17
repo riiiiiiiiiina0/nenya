@@ -603,4 +603,3 @@ export async function loadRules() {
     return [];
   }
 }
-
