@@ -13,6 +13,10 @@ import {
 } from '../shared/bookmarkFolders.js';
 import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
 import { evaluateAllTabs } from './auto-reload.js';
+import {
+  syncWithRemote,
+  applyStorageChangesToDoc,
+} from './automerge-options-sync.js';
 
 /**
  * @typedef {Object} StoredProviderTokens
@@ -273,10 +277,23 @@ import { evaluateAllTabs } from './auto-reload.js';
  */
 
 /**
+ * @typedef {Object} AutomergeSyncState
+ * @property {boolean} enabled
+ * @property {number | undefined} lastSyncAt
+ * @property {number | undefined} lastMergeAt
+ * @property {number | undefined} conflictsResolved
+ * @property {number | undefined} documentSize
+ * @property {number | undefined} chunkCount
+ * @property {string | undefined} lastSyncError
+ * @property {number | undefined} lastSyncErrorAt
+ */
+
+/**
  * @typedef {Object} BackupState
  * @property {number} version
  * @property {string} deviceId
  * @property {Record<string, BackupCategoryState>} categories
+ * @property {AutomergeSyncState | undefined} automerge
  */
 
 const STATE_STORAGE_KEY = 'optionsBackupState';
@@ -351,6 +368,10 @@ const backupSuppressionUntil = new Map();
 const lastAutoNotificationAt = new Map();
 let restoreInProgress = false;
 let lastAutoRestoreAttemptAt = 0;
+
+// Automerge sync state
+let automergeSyncQueued = false;
+let automergeSyncRunning = false;
 
 const CATEGORY_IDS = [
   'auth-provider-settings',
@@ -3520,6 +3541,86 @@ function queueCategoryBackup(categoryId, trigger) {
 }
 
 /**
+ * Update Automerge sync state in storage.
+ * @param {Partial<AutomergeSyncState>} updates - State updates
+ * @returns {Promise<void>}
+ */
+async function updateAutomergeState(updates) {
+  await updateState((state) => {
+    if (!state.automerge) {
+      state.automerge = {
+        enabled: true,
+        lastSyncAt: undefined,
+        lastMergeAt: undefined,
+        conflictsResolved: 0,
+        documentSize: undefined,
+        chunkCount: undefined,
+        lastSyncError: undefined,
+        lastSyncErrorAt: undefined,
+      };
+    }
+    Object.assign(state.automerge, updates);
+  });
+}
+
+/**
+ * Queue an Automerge sync operation (debounced).
+ * @param {string} trigger - Reason for sync ('storage', 'manual', 'alarm', etc.)
+ * @returns {void}
+ */
+function queueAutomergeSync(trigger) {
+  automergeSyncQueued = true;
+
+  if (automergeSyncRunning) {
+    console.log('[automerge] Sync already running, will retry after completion');
+    return;
+  }
+
+  automergeSyncRunning = true;
+
+  const runLoop = async () => {
+    while (automergeSyncQueued) {
+      automergeSyncQueued = false;
+      try {
+        const syncInfo = await syncWithRemote({ forceRestore: false });
+        console.log('[automerge] Sync completed successfully');
+        
+        // Update state
+        await updateAutomergeState({
+          lastSyncAt: Date.now(),
+          lastMergeAt: syncInfo?.merged ? Date.now() : undefined,
+          conflictsResolved: syncInfo?.conflictsResolved || 0,
+          documentSize: syncInfo?.documentSize || undefined,
+          chunkCount: syncInfo?.chunkCount || undefined,
+          lastSyncError: undefined,
+          lastSyncErrorAt: undefined,
+        });
+      } catch (error) {
+        console.error('[automerge] Sync failed:', error);
+        
+        // Update error state
+        await updateAutomergeState({
+          lastSyncError: error.message || 'Sync failed',
+          lastSyncErrorAt: Date.now(),
+        });
+        
+        // Optionally notify user on error
+        if (trigger === 'manual') {
+          void pushNotification(
+            'options-backup-error',
+            'Options Sync Failed',
+            `Failed to sync settings: ${error.message}`
+          );
+        }
+      }
+    }
+    automergeSyncRunning = false;
+  };
+
+  void runLoop();
+}
+
+/**
  * Perform backups for all categories immediately using bulk operations.
  * Simple approach: delete all existing, create all new.
  * @param {string} trigger
@@ -3941,16 +4042,26 @@ async function performRestore(trigger, notifyOnError) {
  * @returns {void}
  */
 function handleStorageChanges(changes, areaName) {
-  // Handle sync storage changes
+  // Handle sync storage changes with Automerge
   if (areaName === 'sync') {
+    // Apply changes to Automerge document
+    void applyStorageChangesToDoc(changes).catch((error) => {
+      console.error('[options-backup] Failed to apply changes to Automerge:', error);
+    });
+
+    // Queue sync with remote (debounced)
+    queueAutomergeSync('storage');
+
+    // OLD IMPLEMENTATION (kept for reference during transition):
+    // Each feature category triggers its own backup
     if (ROOT_FOLDER_SETTINGS_KEY in changes) {
-      queueCategoryBackup('auth-provider-settings', 'storage');
+      // queueCategoryBackup('auth-provider-settings', 'storage');
     }
     if (NOTIFICATION_PREFERENCES_KEY in changes) {
-      queueCategoryBackup('notification-preferences', 'storage');
+      // queueCategoryBackup('notification-preferences', 'storage');
     }
     if (AUTO_RELOAD_RULES_KEY in changes) {
-      queueCategoryBackup('auto-reload-rules', 'storage');
+      // queueCategoryBackup('auto-reload-rules', 'storage');
     }
     if (DARK_MODE_RULES_KEY in changes) {
       queueCategoryBackup('dark-mode-rules', 'storage');
@@ -4062,7 +4173,16 @@ export function initializeOptionsBackupService() {
  */
 export async function handleOptionsBackupLifecycle(trigger) {
   initializeOptionsBackupService();
-  await performRestore(trigger, true);
+  
+  // Use Automerge sync for lifecycle restore
+  try {
+    await syncWithRemote({ forceRestore: false });
+    console.log('[options-backup] Lifecycle sync completed');
+  } catch (error) {
+    console.error('[options-backup] Lifecycle sync failed:', error);
+    // Fallback to old restore if Automerge fails
+    // await performRestore(trigger, true);
+  }
 }
 
 /**
@@ -4071,13 +4191,24 @@ export async function handleOptionsBackupLifecycle(trigger) {
  */
 export async function runManualBackup() {
   initializeOptionsBackupService();
-  const result = await performFullBackup('manual');
-  const state = await loadState();
-  return {
-    ok: result.ok,
-    errors: result.errors,
-    state,
-  };
+  
+  // Use Automerge sync for manual backup
+  try {
+    await syncWithRemote({ forceRestore: false });
+    const state = await loadState();
+    return {
+      ok: true,
+      errors: [],
+      state,
+    };
+  } catch (error) {
+    console.error('[options-backup] Manual backup failed:', error);
+    return {
+      ok: false,
+      errors: [error.message || 'Manual backup failed'],
+      state: await loadState(),
+    };
+  }
 }
 
 /**
@@ -4086,13 +4217,24 @@ export async function runManualBackup() {
  */
 export async function runManualRestore() {
   initializeOptionsBackupService();
-  const result = await performRestore('manual', false);
-  const state = await loadState();
-  return {
-    ok: result.ok,
-    errors: result.errors,
-    state,
-  };
+  
+  // Use Automerge sync with force restore
+  try {
+    await syncWithRemote({ forceRestore: true });
+    const state = await loadState();
+    return {
+      ok: true,
+      errors: [],
+      state,
+    };
+  } catch (error) {
+    console.error('[options-backup] Manual restore failed:', error);
+    return {
+      ok: false,
+      errors: [error.message || 'Manual restore failed'],
+      state: await loadState(),
+    };
+  }
 }
 
 /**
