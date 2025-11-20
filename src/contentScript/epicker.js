@@ -775,11 +775,18 @@
     return new Promise((resolve) => {
       const iframe = document.createElement('iframe');
       iframe.setAttribute(pickerUniqueId, '');
+      
+      // Detect if OS theme is dark
+      const isDarkMode = window.matchMedia && 
+                        window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const colorScheme = isDarkMode ? 'color-scheme: dark !important;' : '';
+      
       iframe.style.cssText = `
         background: transparent !important;
         border: 0 !important;
         border-radius: 0 !important;
         box-shadow: none !important;
+        ${colorScheme}
         display: block !important;
         height: 100vh !important;
         left: 0 !important;
