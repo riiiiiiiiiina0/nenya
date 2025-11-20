@@ -79,6 +79,18 @@ import {
  */
 
 /**
+ * @typedef {Object} ScreenshotSettings
+ * @property {boolean} autoSave
+ */
+
+/**
+ * @typedef {Object} ScreenshotSettingsBackupPayload
+ * @property {'screenshot-settings'} kind
+ * @property {ScreenshotSettings} settings
+ * @property {BackupMetadata} metadata
+ */
+
+/**
  * @typedef {Object} BrightModePatternSettings
  * @property {string} id
  * @property {string} pattern
@@ -316,6 +328,7 @@ const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
 const AUTO_GOOGLE_LOGIN_RULES_KEY = 'autoGoogleLoginRules';
 const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
+const SCREENSHOT_SETTINGS_KEY = 'screenshotSettings';
 const VALID_PINNED_SHORTCUT_IDS = [
   'getMarkdown',
   'pull',
@@ -950,6 +963,19 @@ async function applyNotificationPreferences(preferences) {
   suppressBackup('notification-preferences');
   await chrome.storage.sync.set({
     [NOTIFICATION_PREFERENCES_KEY]: sanitized,
+  });
+}
+
+/**
+ * Apply screenshot settings to storage.
+ * @param {ScreenshotSettings} settings
+ * @returns {Promise<void>}
+ */
+async function applyScreenshotSettings(settings) {
+  const sanitized = normalizeScreenshotSettings(settings);
+  suppressBackup('screenshot-settings');
+  await chrome.storage.sync.set({
+    [SCREENSHOT_SETTINGS_KEY]: sanitized,
   });
 }
 
@@ -1716,6 +1742,52 @@ async function buildNotificationsPayload(trigger) {
   return {
     kind: 'notification-preferences',
     preferences,
+    metadata,
+  };
+}
+
+/**
+ * Normalize screenshot settings to a valid object.
+ * @param {unknown} value
+ * @returns {ScreenshotSettings}
+ */
+function normalizeScreenshotSettings(value) {
+  const fallback = { autoSave: false };
+  if (!value || typeof value !== 'object') {
+    return fallback;
+  }
+
+  const raw = /** @type {Partial<ScreenshotSettings>} */ (value);
+  return {
+    autoSave: typeof raw.autoSave === 'boolean' ? raw.autoSave : fallback.autoSave,
+  };
+}
+
+/**
+ * Get screenshot settings from storage.
+ * @returns {Promise<ScreenshotSettings>}
+ */
+async function collectScreenshotSettings() {
+  try {
+    const result = await chrome.storage.sync.get(SCREENSHOT_SETTINGS_KEY);
+    return normalizeScreenshotSettings(result?.[SCREENSHOT_SETTINGS_KEY]);
+  } catch (error) {
+    console.warn('[options-backup] Failed to collect screenshot settings:', error);
+    return { autoSave: false };
+  }
+}
+
+/**
+ * Build the screenshot settings payload for backup.
+ * @param {string} trigger
+ * @returns {Promise<ScreenshotSettingsBackupPayload>}
+ */
+async function buildScreenshotSettingsPayload(trigger) {
+  const settings = await collectScreenshotSettings();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'screenshot-settings',
+    settings,
     metadata,
   };
 }
@@ -2712,6 +2784,64 @@ function parseNotificationItem(item) {
     const payload = /** @type {NotificationBackupPayload} */ ({
       kind: 'notification-preferences',
       preferences: normalizeNotificationPreferences(parsed?.preferences),
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
+ * Attempt to parse a screenshot settings payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: ScreenshotSettingsBackupPayload | null, lastModified: number }}
+ */
+function parseScreenshotSettingsItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      return { payload: null, lastModified: 0 };
+    }
+
+    const payload = /** @type {ScreenshotSettingsBackupPayload} */ ({
+      kind: 'screenshot-settings',
+      settings: normalizeScreenshotSettings(parsed?.settings),
       metadata: {
         version: Number.isFinite(parsed?.metadata?.version)
           ? Number(parsed.metadata.version)
@@ -4147,23 +4277,13 @@ function handleWindowFocus(windowId) {
  * @returns {void}
  */
 export function initializeOptionsBackupService() {
+  // Legacy backup service is disabled in favor of Automerge sync
+  // We keep the function to avoid breaking imports, but it does nothing
+  console.log('[options-backup] Legacy backup service disabled (using Automerge)');
   if (initialized) {
     return;
   }
   initialized = true;
-
-  if (chrome?.storage?.onChanged) {
-    chrome.storage.onChanged.addListener(handleStorageChanges);
-  } else {
-    console.warn('[options-backup] chrome.storage.onChanged not available');
-  }
-  if (chrome?.alarms) {
-    chrome.alarms.onAlarm.addListener(handleAlarm);
-    void scheduleRestoreAlarm();
-  }
-  if (chrome?.windows?.onFocusChanged) {
-    chrome.windows.onFocusChanged.addListener(handleWindowFocus);
-  }
 }
 
 /**

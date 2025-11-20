@@ -164,6 +164,11 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  */
 
 /**
+ * @typedef {Object} ScreenshotSettings
+ * @property {boolean} autoSave
+ */
+
+/**
  * @typedef {Object} ExportPayload
  * @property {string} provider
  * @property {RootFolderBackupSettings} mirrorRootFolderSettings
@@ -176,6 +181,7 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  * @property {LLMPromptSettings[]} llmPrompts
  * @property {UrlProcessRuleSettings[]} urlProcessRules
  * @property {AutoGoogleLoginRuleSettings[]} autoGoogleLoginRules
+ * @property {ScreenshotSettings} screenshotSettings
  * @property {string[]} pinnedShortcuts
  */
 
@@ -186,7 +192,7 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 9;
+const EXPORT_VERSION = 10;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
@@ -197,6 +203,7 @@ const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
 const URL_PROCESS_RULES_KEY = 'urlProcessRules';
 const AUTO_GOOGLE_LOGIN_RULES_KEY = 'autoGoogleLoginRules';
+const SCREENSHOT_SETTINGS_KEY = 'screenshotSettings';
 const PINNED_SHORTCUTS_KEY = 'pinnedShortcuts';
 const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
@@ -969,6 +976,23 @@ function normalizePinnedShortcuts(value) {
 }
 
 /**
+ * Normalize screenshot settings.
+ * @param {unknown} value
+ * @returns {ScreenshotSettings}
+ */
+function normalizeScreenshotSettings(value) {
+  const fallback = { autoSave: false };
+  if (!value || typeof value !== 'object') {
+    return fallback;
+  }
+
+  const raw = /** @type {Partial<ScreenshotSettings>} */ (value);
+  return {
+    autoSave: typeof raw.autoSave === 'boolean' ? raw.autoSave : fallback.autoSave,
+  };
+}
+
+/**
  * Normalize possibly partial preferences.
  * @param {unknown} value
  * @returns {NotificationPreferences}
@@ -1146,6 +1170,13 @@ async function readCurrentOptions() {
     pinnedShortcutsResp?.[PINNED_SHORTCUTS_KEY],
   );
 
+  const screenshotSettingsResp = await chrome.storage.sync.get(
+    SCREENSHOT_SETTINGS_KEY,
+  );
+  const screenshotSettings = normalizeScreenshotSettings(
+    screenshotSettingsResp?.[SCREENSHOT_SETTINGS_KEY],
+  );
+
   return {
     rootFolder,
     notifications,
@@ -1157,6 +1188,7 @@ async function readCurrentOptions() {
     llmPrompts,
     urlProcessRules,
     autoGoogleLoginRules,
+    screenshotSettings,
     pinnedShortcuts,
   };
 }
@@ -1199,6 +1231,7 @@ async function handleExportClick() {
       llmPrompts,
       urlProcessRules,
       autoGoogleLoginRules,
+      screenshotSettings,
       pinnedShortcuts,
     } = await readCurrentOptions();
     /** @type {ExportFile} */
@@ -1216,6 +1249,7 @@ async function handleExportClick() {
         llmPrompts,
         urlProcessRules,
         autoGoogleLoginRules,
+        screenshotSettings,
         pinnedShortcuts,
       },
     };
@@ -1247,6 +1281,7 @@ async function handleExportClick() {
  * @param {LLMPromptSettings[]} llmPrompts
  * @param {UrlProcessRuleSettings[]} urlProcessRules
  * @param {AutoGoogleLoginRuleSettings[]} autoGoogleLoginRules
+ * @param {ScreenshotSettings} screenshotSettings
  * @param {string[]} pinnedShortcuts
  * @returns {Promise<void>}
  */
@@ -1261,6 +1296,7 @@ async function applyImportedOptions(
   llmPrompts,
   urlProcessRules,
   autoGoogleLoginRules,
+  screenshotSettings,
   pinnedShortcuts,
 ) {
   let parentFolderId = '';
@@ -1327,6 +1363,10 @@ async function applyImportedOptions(
     autoGoogleLoginRules || [],
   );
 
+  const sanitizedScreenshotSettings = normalizeScreenshotSettings(
+    screenshotSettings || { autoSave: false },
+  );
+
   const sanitizedPinnedShortcuts = normalizePinnedShortcuts(
     pinnedShortcuts || [],
   );
@@ -1362,6 +1402,7 @@ async function applyImportedOptions(
       [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
       [URL_PROCESS_RULES_KEY]: sanitizedUrlProcessRules,
       [AUTO_GOOGLE_LOGIN_RULES_KEY]: sanitizedAutoGoogleLoginRules,
+      [SCREENSHOT_SETTINGS_KEY]: sanitizedScreenshotSettings,
       [PINNED_SHORTCUTS_KEY]: sanitizedPinnedShortcuts,
     }),
     chrome.storage.local.set({
@@ -1421,6 +1462,9 @@ async function handleFileChosen() {
     const autoGoogleLoginRules = /** @type {AutoGoogleLoginRuleSettings[]} */ (
       data.autoGoogleLoginRules || []
     );
+    const screenshotSettings = /** @type {ScreenshotSettings} */ (
+      data.screenshotSettings || { autoSave: false }
+    );
     const pinnedShortcuts = /** @type {string[]} */ (
       data.pinnedShortcuts || []
     );
@@ -1449,6 +1493,7 @@ async function handleFileChosen() {
       llmPrompts,
       urlProcessRules,
       autoGoogleLoginRules,
+      screenshotSettings,
       pinnedShortcuts,
     );
     showToast('Options imported successfully.', 'success');
