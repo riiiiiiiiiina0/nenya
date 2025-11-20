@@ -17,6 +17,95 @@ export const CLIPBOARD_CONTEXT_MENU_IDS = {
 };
 
 /**
+ * Storage key for screenshot settings.
+ */
+const SCREENSHOT_SETTINGS_KEY = 'screenshotSettings';
+
+/**
+ * @typedef {Object} ScreenshotSettings
+ * @property {boolean} autoSave - Whether to automatically save screenshots to Downloads folder.
+ */
+
+/**
+ * Get default screenshot settings.
+ * @returns {ScreenshotSettings} Default screenshot settings.
+ */
+function getDefaultScreenshotSettings() {
+  return {
+    autoSave: false,
+  };
+}
+
+/**
+ * Normalize screenshot settings to ensure valid values.
+ * @param {*} settings - Settings to normalize.
+ * @returns {ScreenshotSettings} Normalized screenshot settings.
+ */
+function normalizeScreenshotSettings(settings) {
+  if (!settings || typeof settings !== 'object') {
+    return getDefaultScreenshotSettings();
+  }
+
+  return {
+    autoSave: typeof settings.autoSave === 'boolean' ? settings.autoSave : false,
+  };
+}
+
+/**
+ * Get screenshot settings from storage.
+ * @returns {Promise<ScreenshotSettings>} Screenshot settings.
+ */
+async function getScreenshotSettings() {
+  try {
+    const result = await chrome.storage.sync.get(SCREENSHOT_SETTINGS_KEY);
+    return normalizeScreenshotSettings(result[SCREENSHOT_SETTINGS_KEY]);
+  } catch (error) {
+    console.warn('[clipboard] Failed to get screenshot settings:', error);
+    return getDefaultScreenshotSettings();
+  }
+}
+
+/**
+ * Check if screenshots should be automatically saved to file system.
+ * @returns {Promise<boolean>} True if auto-save is enabled.
+ */
+async function shouldAutoSaveScreenshots() {
+  const settings = await getScreenshotSettings();
+  return settings.autoSave;
+}
+
+/**
+ * Download a screenshot to the Downloads folder.
+ * @param {string} dataUrl - The data URL of the screenshot.
+ * @returns {Promise<boolean>} True if download was successful, false otherwise.
+ */
+async function downloadScreenshot(dataUrl) {
+  try {
+    // Generate filename with timestamp
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const filename = `screenshot-${year}-${month}-${day}-${hours}${minutes}${seconds}.png`;
+
+    // Start the download
+    await chrome.downloads.download({
+      url: dataUrl,
+      filename: filename,
+      saveAs: false, // Don't prompt, just save to default Downloads folder
+    });
+
+    return true;
+  } catch (error) {
+    console.warn('[clipboard] Failed to download screenshot:', error);
+    return false;
+  }
+}
+
+/**
  * Get the notification icon URL using chrome.runtime.getURL.
  * @returns {string} - The icon URL.
  */
@@ -329,6 +418,13 @@ async function handleScreenshotCopy(tabId) {
 
   if (!dataUrl) {
     return false;
+  }
+
+  // Check if auto-save is enabled and download if so
+  const autoSave = await shouldAutoSaveScreenshots();
+  if (autoSave) {
+    // Download screenshot - don't fail if download fails
+    await downloadScreenshot(dataUrl);
   }
 
   try {

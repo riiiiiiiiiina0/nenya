@@ -155,6 +155,7 @@ function createEmptyAutomergeDoc(actorId) {
       llmPrompts: [],
       urlProcessRules: [],
       autoGoogleLoginRules: [],
+      screenshotSettings: { autoSave: false },
       pinnedShortcuts: [],
 
       // Metadata
@@ -904,6 +905,7 @@ async function migrateFromOldFormat() {
         llmPrompts: storage.llmPrompts || [],
         urlProcessRules: storage.urlProcessRules || [],
         autoGoogleLoginRules: storage.autoGoogleLoginRules || [],
+        screenshotSettings: storage.screenshotSettings || { autoSave: false },
         pinnedShortcuts: storage.pinnedShortcuts || [],
         _meta: {
           version: AUTOMERGE_VERSION,

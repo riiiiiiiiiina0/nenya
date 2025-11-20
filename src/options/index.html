@@ -127,6 +127,13 @@
           </a>
         </li>
         <li>
+          <a href="#screenshot-settings-heading"
+            class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
+            <span class="text-lg">📸</span>
+            <span class="text-sm">Screenshot Settings</span>
+          </a>
+        </li>
+        <li>
           <a href="#auto-google-login-heading"
             class="nav-link flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-base-200 transition-colors">
             <span class="text-lg">🔐</span>
@@ -1032,6 +1039,28 @@
                 </div>
               </div>
             </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screenshot Settings section -->
+      <section class="card w-full bg-base-100 shadow-xl section-content" aria-labelledby="screenshot-settings-heading"
+        data-section="screenshot-settings-heading" hidden>
+        <div class="card-body gap-6">
+          <div class="space-y-1">
+            <h2 id="screenshot-settings-heading" class="card-title text-3xl">📸 Screenshot Settings</h2>
+            <p class="text-base-content/70">Configure how screenshots are handled when you use the copy screenshot feature.</p>
+          </div>
+          <div class="space-y-4">
+            <div class="form-control">
+              <label class="label cursor-pointer justify-start gap-4">
+                <input id="screenshotAutoSaveToggle" type="checkbox" class="toggle toggle-primary" />
+                <div class="space-y-1">
+                  <span class="label-text font-medium">Automatically save screenshots to Downloads folder</span>
+                  <p class="text-xs text-base-content/60">When enabled, screenshots will be automatically downloaded to your Downloads folder with a timestamp filename.</p>
+                </div>
+              </label>
+            </div>
           </div>
         </div>
       </section>
