@@ -160,15 +160,15 @@ Each browser instance gets a unique actor ID (stored in `chrome.storage.local` a
 ### Component Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│ Browser A                                                   │
+┌────────────────────────────────────────────────────────────┐
+│ Browser A                                                  │
 │ ┌─────────────────────┐      ┌──────────────────────────┐  │
 │ │ chrome.storage      │──────│ Automerge Document A     │  │
 │ │ (source of truth)   │ read │ (in-memory, tracks edits)│  │
 │ └─────────────────────┘      └──────────────────────────┘  │
-│              │                           │                  │
-│              │ onChange                  │ sync (5min)      │
-│              ▼                           ▼                  │
+│              │                           │                 │
+│              │ onChange                  │ sync (5min)     │
+│              ▼                           ▼                 │
 │ ┌─────────────────────────────────────────────────────┐    │
 │ │ options-backup.js                                   │    │
 │ │ - Detect storage changes                            │    │
@@ -176,10 +176,10 @@ Each browser instance gets a unique actor ID (stored in `chrome.storage.local` a
 │ │ - Merge with remote Automerge doc                   │    │
 │ │ - Resolve conflicts (automatic via CRDT)            │    │
 │ └─────────────────────────────────────────────────────┘    │
-│              │                           ▲                  │
-│              │ save                      │ load             │
-│              ▼                           │                  │
-└──────────────┼───────────────────────────┼──────────────────┘
+│              │                           ▲                 │
+│              │ save                      │ load            │
+│              ▼                           │                 │
+└──────────────┼───────────────────────────┼─────────────────┘
                │                           │
                │    Raindrop Collection    │
                │   "Nenya options backup"  │
@@ -191,13 +191,13 @@ Each browser instance gets a unique actor ID (stored in `chrome.storage.local` a
                            ▲
                            │ sync (5min)
                            │
-┌──────────────────────────┼───────────────────────────────────┐
-│ Browser B                │                                   │
-│              ┌───────────▼──────────────┐                    │
-│              │ Automerge Document B     │                    │
-│              │ (in-memory, tracks edits)│                    │
-│              └───────────┬──────────────┘                    │
-│                          │                                   │
+┌──────────────────────────┼──────────────────────────────────┐
+│ Browser B                │                                  │
+│              ┌───────────▼──────────────┐                   │
+│              │ Automerge Document B     │                   │
+│              │ (in-memory, tracks edits)│                   │
+│              └───────────┬──────────────┘                   │
+│                          │                                  │
 │ ┌────────────────────────▼───────────┐                      │
 │ │ chrome.storage (source of truth)   │                      │
 │ └────────────────────────────────────┘                      │
@@ -462,3 +462,13 @@ If critical issues arise:
 
 5. **Q:** Should manual backup/restore buttons still exist?
    **A:** Yes, keep them. Manual backup triggers immediate sync. Manual restore forces pull from remote without pushing local changes first (useful for recovery).
+
+## Library Integration Steps
+
+To include or update the Automerge library:
+
+1. Clone from https://github.com/automerge/automerge.git
+2. `cd javascript`
+3. `npm i`
+4. `npm run build` (Note: there might be multiple cargo related errors when building webassembly; use an LLM to help resolve environment issues)
+5. Copy `javascript/dist/mjs` folder to `src/libs`
