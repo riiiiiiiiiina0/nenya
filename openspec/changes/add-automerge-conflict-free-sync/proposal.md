@@ -25,7 +25,7 @@ By integrating Automergeâ€”a CRDT (Conflict-free Replicated Data Type) libraryâ€
 - **Affected code:**
   - `src/background/options-backup.js` - Core sync engine (add Automerge integration)
   - `src/options/backup.js` - UI (minimal changes, possibly add sync status)
-  - `src/libs/automerge@3.2.0.iife.min.js` - Already downloaded, needs to be loaded
+  - `src/libs/automerge@3.2.0-mjs` - Already downloaded, needs to be loaded
 - **User benefits:** Zero data loss from concurrent edits, true multi-browser support, simpler sync model (one document instead of many)
 - **Migration:** First sync after update will consolidate existing per-category JSON backups into a single Automerge document
 - **Breaking changes:** None - new collection name ensures clean separation

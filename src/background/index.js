@@ -1,6 +1,3 @@
-// Load Automerge library (IIFE bundle for service worker)
-importScripts('../libs/automerge@3.2.0.iife.min.js');
-
 import {
   MIRROR_ALARM_NAME,
   MIRROR_PULL_INTERVAL_MINUTES,

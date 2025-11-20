@@ -27,7 +27,7 @@ Nenya currently backs up extension options to Raindrop using JSON payloads with 
 - Must continue using Raindrop as storage backend
 - **Raindrop API hard limit: item descriptions cannot exceed 10,000 characters** (data will be truncated/lost)
 - Must preserve existing UI/UX
-- Automerge v3.2.0 IIFE bundle already downloaded to `src/libs/`
+- Automerge v3.2.0 ES module already downloaded to `src/libs/`
 
 ## Goals / Non-Goals
 
@@ -265,7 +265,7 @@ Outcome: No data loss, all changes preserved!
 
 **Modified file:** `src/background/index.js`
 
-- Import automerge library (via importScripts in service worker)
+- Import automerge library (via ES module import)
 - Initialize automerge-options-sync module
 
 ## Data Model
@@ -422,7 +422,7 @@ Outcome: No data loss, all changes preserved!
 2. Add Automerge library loading in service worker
 3. Update options-backup.js to use new sync mechanism
 4. Add migration logic for old format
-5. Update manifest.json to declare Automerge IIFE as resource
+5. Update manifest.json to declare Automerge WASM/JS files as web accessible resources
 6. Test with multiple browser instances
 
 ### Phase 2: Rollout

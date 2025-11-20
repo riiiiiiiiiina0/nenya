@@ -2,7 +2,7 @@
 
 ## 1. Setup and Infrastructure
 
-- [x] 1.1 Verify Automerge library (`src/libs/automerge@3.2.0.iife.min.js`) loads correctly in service worker
+- [x] 1.1 Verify Automerge library (`src/libs/automerge@3.2.0-mjs`) loads correctly in service worker
 - [x] 1.2 Add Automerge to service worker imports in `src/background/index.js`
 - [x] 1.3 Create `src/background/automerge-options-sync.js` module skeleton
 

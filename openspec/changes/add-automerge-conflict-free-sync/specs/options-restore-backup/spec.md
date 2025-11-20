@@ -64,7 +64,7 @@ Automerge requires unique actor IDs to attribute changes correctly and enable co
 
 - **WHEN** the Automerge sync service initializes for the first time, **THEN** it MUST generate a unique actor ID in the format `nenya-<deviceId>-<randomHex8>` (e.g., `nenya-chrome-linux-a1b2c3d4`) using the existing `deviceId` from `optionsBackupState` plus 8 random hexadecimal characters, and store it in `chrome.storage.local.automergeActorId`.
 - **AND** on subsequent initializations, the service MUST load the existing `automergeActorId` from `chrome.storage.local` and use it for all Automerge operations, ensuring the same browser always uses the same actor ID.
-- **AND** the actor ID MUST be used when calling `Automerge.change(doc, { actor: actorId }, changeFunc)` and MUST be recorded in the `_meta.devices` object with the current timestamp whenever a sync completes.
+- **AND** the actor ID MUST be used when loading or initializing the Automerge document (via `Automerge.load` or `Automerge.init`), ensuring that `Automerge.change(doc, changeFunc)` uses this actor ID. The actor ID MUST be recorded in the `_meta.devices` object with the current timestamp whenever a sync completes.
 
 #### Scenario: Actor ID visibility for debugging
 
