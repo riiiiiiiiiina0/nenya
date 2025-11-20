@@ -28,6 +28,7 @@ import {
   handleOptionsBackupLifecycle,
   handleOptionsBackupMessage,
 } from './options-backup.js';
+import { initializeAutomergeSync } from './automerge-options-sync.js';
 import {
   initializeAutoReloadFeature,
   handleAutoReloadAlarm,
@@ -275,7 +276,7 @@ chrome.commands.onCommand.addListener((command) => {
       try {
         const storage = await chrome.storage.local.get('pipTabId');
         const { pipTabId } = storage;
-        
+
         if (pipTabId) {
           await chrome.scripting.executeScript({
             target: { tabId: pipTabId },
@@ -292,7 +293,9 @@ chrome.commands.onCommand.addListener((command) => {
           });
           await chrome.storage.local.remove('pipTabId');
         } else {
-          console.warn('[commands] ⚠️ No pipTabId found in storage! Cannot quit PiP.');
+          console.warn(
+            '[commands] ⚠️ No pipTabId found in storage! Cannot quit PiP.',
+          );
         }
       } catch (error) {
         console.error('[commands] Quit PiP failed:', error);
@@ -491,7 +494,6 @@ chrome.commands.onCommand.addListener((command) => {
           },
           args: [markdownContent, filename],
         });
-
       } catch (error) {
         console.warn('[commands] Download markdown failed:', error);
       }
@@ -949,6 +951,11 @@ chrome.runtime.onStartup.addListener(() => {
 // Ensure backup service is initialized immediately when service worker starts
 initializeOptionsBackupService();
 
+// Initialize Automerge sync system
+void initializeAutomergeSync().catch((error) => {
+  console.error('[automerge] Initialization failed:', error);
+});
+
 void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
 });
@@ -1007,10 +1014,8 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   }
 });
 
-
 // Clean up when tabs close
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-
   // Remove split page URL from storage if this was a split page tab
   // Since the tab is already removed when onRemoved fires, we check all open tabs
   // and remove any URLs from storage that are no longer open
