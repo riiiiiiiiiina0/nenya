@@ -213,6 +213,8 @@ export async function applyStorageChangesToDoc(changes) {
 
 /**
  * Apply Automerge document state to chrome.storage.
+ * Note: customCodeRules is stored in chrome.storage.local due to size limits,
+ * while all other settings are stored in chrome.storage.sync.
  * @param {any} doc - Automerge document
  * @param {boolean} suppressBackup - Whether to suppress backup triggers
  * @returns {Promise<void>}
@@ -225,24 +227,38 @@ export async function applyDocToStorage(doc, suppressBackup = true) {
 
   try {
     const docData = JSON.parse(JSON.stringify(doc)); // Convert Automerge proxy to plain object
-    const updates = {};
+    const syncUpdates = {};
+    const localUpdates = {};
 
     // Extract all top-level keys except metadata
     for (const key in docData) {
       if (key === '_meta') {
         continue; // Skip metadata
       }
-      updates[key] = docData[key];
+      // customCodeRules goes to local storage due to size limits
+      if (key === 'customCodeRules') {
+        localUpdates[key] = docData[key];
+      } else {
+        syncUpdates[key] = docData[key];
+      }
     }
 
-    // Apply to storage
-    if (Object.keys(updates).length > 0) {
-      await chrome.storage.sync.set(updates);
-      console.log(
-        '[automerge] Applied document to storage:',
-        Object.keys(updates),
-      );
+    // Apply to storage (sync and local separately)
+    const promises = [];
+    if (Object.keys(syncUpdates).length > 0) {
+      promises.push(chrome.storage.sync.set(syncUpdates));
     }
+    if (Object.keys(localUpdates).length > 0) {
+      promises.push(chrome.storage.local.set(localUpdates));
+    }
+    
+    await Promise.all(promises);
+    
+    const allKeys = [...Object.keys(syncUpdates), ...Object.keys(localUpdates)];
+    console.log(
+      '[automerge] Applied document to storage:',
+      allKeys,
+    );
   } catch (error) {
     console.error('[automerge] Failed to apply document to storage:', error);
     throw error;
@@ -693,6 +709,91 @@ function reassembleAndDeserializeChunks(chunks, actorId) {
 // ============================================================================
 
 /**
+ * Ensure local storage values are applied to the Automerge document.
+ * This is critical because storage changes might not have been captured
+ * if the service worker restarted or wasn't initialized when changes occurred.
+ * @returns {Promise<void>}
+ */
+async function ensureLocalStorageInDoc() {
+  if (!localAutomergeDoc || !deviceActorId) {
+    return;
+  }
+
+  try {
+    // Read current local storage values
+    const [syncStorage, localStorage] = await Promise.all([
+      chrome.storage.sync.get(null),
+      chrome.storage.local.get('customCodeRules'),
+    ]);
+
+    // Get current doc values for comparison
+    const docData = JSON.parse(JSON.stringify(localAutomergeDoc));
+
+    // Keys to sync from chrome.storage.sync
+    const syncKeys = [
+      'mirrorRootFolderSettings',
+      'notificationPreferences',
+      'autoReloadRules',
+      'darkModeRules',
+      'brightModeWhitelist',
+      'highlightTextRules',
+      'blockElementRules',
+      'llmPrompts',
+      'urlProcessRules',
+      'autoGoogleLoginRules',
+      'screenshotSettings',
+      'pinnedShortcuts',
+    ];
+
+    // Check if any values differ
+    let hasChanges = false;
+    for (const key of syncKeys) {
+      const storageValue = syncStorage[key];
+      const docValue = docData[key];
+      if (storageValue !== undefined && JSON.stringify(storageValue) !== JSON.stringify(docValue)) {
+        hasChanges = true;
+        break;
+      }
+    }
+
+    // Check customCodeRules (from local storage)
+    const customCodeRules = localStorage.customCodeRules;
+    if (customCodeRules !== undefined && JSON.stringify(customCodeRules) !== JSON.stringify(docData.customCodeRules)) {
+      hasChanges = true;
+    }
+
+    if (!hasChanges) {
+      console.log('[automerge] Local storage already in sync with document');
+      return;
+    }
+
+    console.log('[automerge] Applying local storage changes to document...');
+
+    // Apply changes using Automerge.change()
+    const newDoc = Automerge.clone(localAutomergeDoc);
+    localAutomergeDoc = Automerge.change(newDoc, (doc) => {
+      for (const key of syncKeys) {
+        const storageValue = syncStorage[key];
+        if (storageValue !== undefined) {
+          doc[key] = JSON.parse(JSON.stringify(storageValue));
+        }
+      }
+      if (customCodeRules !== undefined) {
+        doc.customCodeRules = JSON.parse(JSON.stringify(customCodeRules));
+      }
+      // Update device metadata
+      if (doc._meta && doc._meta.devices && deviceActorId) {
+        doc._meta.devices[deviceActorId] = { lastSeen: Date.now() };
+      }
+    });
+
+    console.log('[automerge] Local storage changes applied to document');
+  } catch (error) {
+    console.error('[automerge] Failed to ensure local storage in doc:', error);
+  }
+}
+
+/**
  * Perform sync with remote Raindrop document.
  * Merges local and remote documents using Automerge CRDT.
  * @param {{ forceRestore?: boolean }} options - Sync options
@@ -723,6 +824,14 @@ export async function syncWithRemote(options = {}) {
 
   try {
     console.log('[automerge] Starting sync with remote...');
+
+    // CRITICAL: If not doing force restore, ensure local storage values
+    // are captured in the Automerge document before syncing.
+    // This handles cases where storage changes weren't captured due to
+    // service worker restart or initialization timing issues.
+    if (!options.forceRestore) {
+      await ensureLocalStorageInDoc();
+    }
 
     // Load remote document
     // Load with random actor ID to avoid conflict with local document
@@ -787,53 +896,58 @@ export async function syncWithRemote(options = {}) {
 
     const mergedDoc = Automerge.merge(baseDoc, remoteDoc);
 
-    // Check if anything changed
+    // Check what changed
+    const remoteHistory = Automerge.getHistory(remoteDoc).length;
     const localHistory = localAutomergeDoc
       ? Automerge.getHistory(localAutomergeDoc).length
       : 0;
     const mergedHistory = Automerge.getHistory(mergedDoc).length;
-    const conflictsResolved = Math.max(0, mergedHistory - localHistory - 1);
+    
+    // Check if remote had changes we need to apply locally
+    const remoteHadNewChanges = mergedHistory > localHistory;
+    // Check if local has changes that need to be pushed to remote
+    const localHasUnpushedChanges = mergedHistory > remoteHistory;
+    
+    const conflictsResolved = Math.max(0, mergedHistory - Math.max(localHistory, remoteHistory));
 
-    if (mergedHistory !== localHistory && localAutomergeDoc) {
-      console.log('[automerge] Changes detected after merge');
+    console.log('[automerge] History comparison:', {
+      remoteHistory,
+      localHistory,
+      mergedHistory,
+      remoteHadNewChanges,
+      localHasUnpushedChanges,
+    });
+
+    // Update local document if merge produced changes
+    if (remoteHadNewChanges || localHasUnpushedChanges) {
       localAutomergeDoc = mergedDoc;
-
-      // Apply to storage
-      await applyDocToStorage(localAutomergeDoc, true);
-
-      // Save back to Raindrop
-      await saveDocToRaindrop(localAutomergeDoc);
-
-      // Calculate document info
-      const binary = Automerge.save(localAutomergeDoc);
-      const base64 = btoa(String.fromCharCode(...binary));
-      const chunkCount = Math.ceil(
-        base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH,
-      );
-
-      return {
-        merged: true,
-        conflictsResolved,
-        documentSize: base64.length,
-        chunkCount,
-      };
-    } else {
-      console.log('[automerge] No changes after merge');
-
-      // Calculate document info
-      const binary = Automerge.save(localAutomergeDoc);
-      const base64 = btoa(String.fromCharCode(...binary));
-      const chunkCount = Math.ceil(
-        base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH,
-      );
-
-      return {
-        merged: false,
-        conflictsResolved: 0,
-        documentSize: base64.length,
-        chunkCount,
-      };
     }
+
+    // Apply remote changes to local storage if any
+    if (remoteHadNewChanges) {
+      console.log('[automerge] Applying remote changes to local storage');
+      await applyDocToStorage(localAutomergeDoc, true);
+    }
+
+    // Push to Raindrop if local has changes remote doesn't have
+    if (localHasUnpushedChanges) {
+      console.log('[automerge] Pushing local changes to Raindrop');
+      await saveDocToRaindrop(localAutomergeDoc);
+    }
+
+    // Calculate document info
+    const binary = Automerge.save(localAutomergeDoc);
+    const base64 = btoa(String.fromCharCode(...binary));
+    const chunkCount = Math.ceil(
+      base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH,
+    );
+
+    return {
+      merged: remoteHadNewChanges || localHasUnpushedChanges,
+      conflictsResolved,
+      documentSize: base64.length,
+      chunkCount,
+    };
   } catch (error) {
     console.error('[automerge] Sync failed:', error);
     throw error;
@@ -973,6 +1087,9 @@ export async function initializeAutomergeSync() {
 
     if (remoteDoc) {
       console.log('[automerge] Loaded existing document from Raindrop');
+      // Use remote document directly - trust remote as source of truth during initialization
+      // Local changes are only tracked when user makes changes AFTER initialization
+      // User should click "Backup Now" to push local changes before switching browsers
       localAutomergeDoc = remoteDoc;
     } else {
       // Check if migration is needed

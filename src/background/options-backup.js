@@ -4222,6 +4222,14 @@ function handleStorageChanges(changes, areaName) {
   // Handle local storage changes (for custom code rules)
   if (areaName === 'local') {
     if (CUSTOM_CODE_RULES_KEY in changes) {
+      // Apply changes to Automerge document (same as sync storage)
+      void applyStorageChangesToDoc(changes).catch((error) => {
+        console.error('[options-backup] Failed to apply local changes to Automerge:', error);
+      });
+      
+      // Queue sync with remote
+      queueAutomergeSync('storage');
+      
       queueCategoryBackup('custom-code-rules', 'storage');
     }
   }
