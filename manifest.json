@@ -57,7 +57,10 @@
         "src/split/*",
         "src/libs/*",
         "src/contentScript/epicker-ui.html",
-        "src/contentScript/epicker-ui.js"
+        "src/contentScript/epicker-ui.js",
+        "src/contentScript/emoji-picker.js",
+        "src/contentScript/emoji-picker-ui.html",
+        "src/contentScript/emoji-picker-ui.js"
       ],
       "matches": [
         "<all_urls>"
@@ -163,6 +166,9 @@
     },
     "llm-download-markdown": {
       "description": "📥 Download as markdown"
+    },
+    "emoji-picker-show": {
+      "description": "😀 Show Emoji Picker"
     }
   }
 }
