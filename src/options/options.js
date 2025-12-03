@@ -30,7 +30,7 @@ class NavigationManager {
   init() {
     // Hide all sections first to prevent showing all at once
     this.sections.forEach((section) => {
-      section.setAttribute('hidden', 'true');
+      section.classList.remove('active');
     });
 
     this.setupSectionSwitching();
@@ -45,15 +45,15 @@ class NavigationManager {
   showSection(sectionId) {
     // Hide all sections
     this.sections.forEach((section) => {
-      section.setAttribute('hidden', 'true');
+      section.classList.remove('active');
     });
 
     // Show the target section
     const targetSection = document.querySelector(
-      `[data-section="${sectionId}"]`,
+      `.section-content[data-section="${sectionId}"]`,
     );
     if (targetSection) {
-      targetSection.removeAttribute('hidden');
+      targetSection.classList.add('active');
     }
 
     // Update active link
@@ -92,11 +92,9 @@ class NavigationManager {
 
       const linkTarget = href.substring(1);
       if (linkTarget === sectionId) {
-        link.classList.add('bg-primary', 'text-primary-content');
-        link.classList.remove('hover:bg-base-200');
+        link.classList.add('active');
       } else {
-        link.classList.remove('bg-primary', 'text-primary-content');
-        link.classList.add('hover:bg-base-200');
+        link.classList.remove('active');
       }
     });
   }
@@ -138,7 +136,7 @@ class NavigationManager {
   reapplySectionVisibility() {
     // Hide all sections first
     this.sections.forEach((section) => {
-      section.setAttribute('hidden', 'true');
+      section.classList.remove('active');
     });
 
     // Then show the correct section based on hash or default
