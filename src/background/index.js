@@ -501,6 +501,32 @@ chrome.commands.onCommand.addListener((command) => {
     })();
     return;
   }
+
+  if (command === 'emoji-picker-show') {
+    void (async () => {
+      try {
+        // Get the current active tab
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const currentTab = tabs && tabs[0];
+        if (!currentTab || !currentTab.id) {
+          console.warn('[commands] No active tab found for emoji picker');
+          return;
+        }
+
+        // Inject the emoji picker content script
+        await chrome.scripting.executeScript({
+          target: { tabId: currentTab.id },
+          files: ['src/contentScript/emoji-picker.js'],
+        });
+      } catch (error) {
+        console.warn('[commands] Emoji picker failed:', error);
+      }
+    })();
+    return;
+  }
 });
 
 // ============================================================================
