@@ -35,8 +35,8 @@
     /* Sidebar styling */
     .options-sidebar {
       width: var(--sidebar-width);
-      background: oklch(var(--b1));
-      border-right: 1px solid oklch(var(--b3));
+      background: var(--color-base-100);
+      border-right: 1px solid var(--color-base-300);
       position: fixed;
       height: 100vh;
       overflow-y: auto;
@@ -49,7 +49,7 @@
       min-height: 100vh;
       padding: 2rem 3rem;
       width: calc(100vw - var(--sidebar-width));
-      background: oklch(var(--b2));
+      background: var(--color-base-200);
     }
 
     .options-main>div {
@@ -66,12 +66,12 @@
       border-radius: 1rem;
       cursor: pointer;
       transition: all 0.2s ease;
-      color: oklch(var(--bc) / 0.6);
+      color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     }
 
     .nav-item:hover {
-      background: oklch(var(--b2));
-      color: oklch(var(--bc));
+      background: var(--color-base-200);
+      color: var(--color-base-content);
     }
 
     .nav-item.active,
@@ -95,7 +95,7 @@
     }
 
     .nav-item.active .nav-icon {
-      color: oklch(var(--p));
+      color: var(--color-primary);
     }
 
     .nav-group-title {
@@ -103,7 +103,7 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: oklch(var(--bc) / 0.4);
+      color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
       padding: 0.5rem 1rem;
       margin-top: 1.5rem;
     }
@@ -114,11 +114,11 @@
 
     /* Card styling */
     .options-card {
-      background: oklch(var(--b1));
+      background: var(--color-base-100);
       border-radius: 1.5rem;
       padding: 2rem;
       box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
-      border: 1px solid oklch(var(--b3) / 0.5);
+      border: 1px solid color-mix(in oklch, var(--color-base-300) 50%, transparent);
       width: 100%;
     }
 
@@ -130,12 +130,12 @@
     .section-title {
       font-size: 1.875rem;
       font-weight: 700;
-      color: oklch(var(--bc));
+      color: var(--color-base-content);
       letter-spacing: -0.025em;
     }
 
     .section-description {
-      color: oklch(var(--bc) / 0.6);
+      color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
       margin-top: 0.5rem;
       font-size: 1rem;
     }
@@ -145,22 +145,22 @@
       width: 100%;
       padding: 0.875rem 1.25rem;
       border-radius: 1rem;
-      background: oklch(var(--b2));
-      border: 1px solid oklch(var(--b3));
-      color: oklch(var(--bc));
+      background: var(--color-base-200);
+      border: 1px solid var(--color-base-300);
+      color: var(--color-base-content);
       font-size: 0.875rem;
       transition: all 0.2s ease;
     }
 
     .nenya-input:focus {
       outline: none;
-      background: oklch(var(--b1));
-      border-color: oklch(var(--p));
-      box-shadow: 0 0 0 4px oklch(var(--p) / 0.1);
+      background: var(--color-base-100);
+      border-color: var(--color-primary);
+      box-shadow: 0 0 0 4px color-mix(in oklch, var(--color-primary) 10%, transparent);
     }
 
     .nenya-input::placeholder {
-      color: oklch(var(--bc) / 0.4);
+      color: color-mix(in oklch, var(--color-base-content) 40%, transparent);
     }
 
     /* Button styling */
@@ -182,44 +182,44 @@
     }
 
     .nenya-btn-primary {
-      background: oklch(var(--p));
-      color: oklch(var(--pc));
-      box-shadow: 0 4px 14px oklch(var(--p) / 0.3);
+      background: var(--color-primary);
+      color: var(--color-primary-content);
+      box-shadow: 0 4px 14px color-mix(in oklch, var(--color-primary) 30%, transparent);
     }
 
     .nenya-btn-primary:hover {
-      background: oklch(var(--p) / 0.9);
-      box-shadow: 0 6px 20px oklch(var(--p) / 0.4);
+      background: color-mix(in oklch, var(--color-primary) 90%, transparent);
+      box-shadow: 0 6px 20px color-mix(in oklch, var(--color-primary) 40%, transparent);
     }
 
     .nenya-btn-secondary {
-      background: oklch(var(--b1));
-      color: oklch(var(--bc) / 0.7);
-      border: 1px solid oklch(var(--b3));
+      background: var(--color-base-100);
+      color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+      border: 1px solid var(--color-base-300);
     }
 
     .nenya-btn-secondary:hover {
-      background: oklch(var(--b2));
-      color: oklch(var(--bc));
+      background: var(--color-base-200);
+      color: var(--color-base-content);
     }
 
     .nenya-btn-danger {
-      background: oklch(var(--er) / 0.1);
-      color: oklch(var(--er));
+      background: color-mix(in oklch, var(--color-error) 10%, transparent);
+      color: var(--color-error);
     }
 
     .nenya-btn-danger:hover {
-      background: oklch(var(--er) / 0.15);
+      background: color-mix(in oklch, var(--color-error) 15%, transparent);
     }
 
     .nenya-btn-ghost {
       background: transparent;
-      color: oklch(var(--bc) / 0.6);
+      color: color-mix(in oklch, var(--color-base-content) 60%, transparent);
     }
 
     .nenya-btn-ghost:hover {
-      background: oklch(var(--b2));
-      color: oklch(var(--bc));
+      background: var(--color-base-200);
+      color: var(--color-base-content);
     }
 
     .nenya-btn-vibrant {
@@ -238,7 +238,7 @@
       width: 3.5rem;
       height: 2rem;
       border-radius: 1rem;
-      background: oklch(var(--b3));
+      background: var(--color-base-300);
       cursor: pointer;
       transition: background 0.3s ease;
       flex-shrink: 0;
@@ -276,28 +276,28 @@
     }
 
     .nenya-badge-green {
-      background: oklch(var(--su) / 0.15);
-      color: oklch(var(--su));
+      background: color-mix(in oklch, var(--color-success) 15%, transparent);
+      color: var(--color-success);
     }
 
     .nenya-badge-blue {
-      background: oklch(var(--in) / 0.15);
-      color: oklch(var(--in));
+      background: color-mix(in oklch, var(--color-info) 15%, transparent);
+      color: var(--color-info);
     }
 
     .nenya-badge-violet {
-      background: oklch(var(--p) / 0.15);
-      color: oklch(var(--p));
+      background: color-mix(in oklch, var(--color-primary) 15%, transparent);
+      color: var(--color-primary);
     }
 
     .nenya-badge-yellow {
-      background: oklch(var(--wa) / 0.15);
-      color: oklch(var(--wa));
+      background: color-mix(in oklch, var(--color-warning) 15%, transparent);
+      color: var(--color-warning);
     }
 
     .nenya-badge-red {
-      background: oklch(var(--er) / 0.15);
-      color: oklch(var(--er));
+      background: color-mix(in oklch, var(--color-error) 15%, transparent);
+      color: var(--color-error);
     }
 
     /* Rule item styling */
@@ -306,21 +306,21 @@
       align-items: center;
       justify-content: space-between;
       padding: 1rem 1.25rem;
-      background: oklch(var(--b1));
-      border: 1px solid oklch(var(--b3));
+      background: var(--color-base-100);
+      border: 1px solid var(--color-base-300);
       border-radius: 1rem;
       transition: all 0.2s ease;
       cursor: pointer;
     }
 
     .rule-item:hover {
-      border-color: oklch(var(--p) / 0.3);
-      box-shadow: 0 4px 12px oklch(var(--b3) / 0.5);
+      border-color: color-mix(in oklch, var(--color-primary) 30%, transparent);
+      box-shadow: 0 4px 12px color-mix(in oklch, var(--color-base-300) 50%, transparent);
     }
 
     .rule-item.active {
-      border-color: oklch(var(--p));
-      background: oklch(var(--p) / 0.05);
+      border-color: var(--color-primary);
+      background: color-mix(in oklch, var(--color-primary) 5%, transparent);
     }
 
     .rule-icon {
@@ -337,9 +337,9 @@
     .empty-state {
       padding: 2rem;
       text-align: center;
-      border: 2px dashed oklch(var(--b3));
+      border: 2px dashed var(--color-base-300);
       border-radius: 1rem;
-      color: oklch(var(--bc) / 0.5);
+      color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     }
 
     /* Animate in */
@@ -366,7 +366,7 @@
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: oklch(var(--bc) / 0.5);
+      color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
       margin-bottom: 0.5rem;
     }
 
@@ -375,17 +375,17 @@
       display: flex;
       gap: 0.75rem;
       padding: 1rem;
-      background: oklch(var(--in) / 0.1);
-      border: 1px solid oklch(var(--in) / 0.2);
+      background: color-mix(in oklch, var(--color-info) 10%, transparent);
+      border: 1px solid color-mix(in oklch, var(--color-info) 20%, transparent);
       border-radius: 1rem;
-      color: oklch(var(--in));
+      color: var(--color-info);
       font-size: 0.875rem;
     }
 
     /* Details panel */
     .details-panel {
-      background: oklch(var(--b2));
-      border: 1px solid oklch(var(--b3));
+      background: var(--color-base-200);
+      border: 1px solid var(--color-base-300);
       border-radius: 1rem;
       padding: 1.5rem;
     }
@@ -398,13 +398,13 @@
 
     #customCodeCSSInput .ace_gutter,
     #customCodeJSInput .ace_gutter {
-      background-color: oklch(var(--b2));
-      color: oklch(var(--bc) / 0.5);
+      background-color: var(--color-base-200);
+      color: color-mix(in oklch, var(--color-base-content) 50%, transparent);
     }
 
     #customCodeCSSInput .ace_gutter-active-line,
     #customCodeJSInput .ace_gutter-active-line {
-      background-color: oklch(var(--b3));
+      background-color: var(--color-base-300);
     }
 
     /* Hide sections by default */
@@ -447,7 +447,7 @@
       font-size: 1.5rem;
       font-weight: 700;
       letter-spacing: -0.025em;
-      color: oklch(var(--bc));
+      color: var(--color-base-content);
     }
 
     /* Scrollbar styling */
@@ -460,17 +460,17 @@
     }
 
     .options-sidebar::-webkit-scrollbar-thumb {
-      background: oklch(var(--bc) / 0.1);
+      background: color-mix(in oklch, var(--color-base-content) 10%, transparent);
       border-radius: 3px;
     }
 
     .options-sidebar::-webkit-scrollbar-thumb:hover {
-      background: oklch(var(--bc) / 0.2);
+      background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
     }
   </style>
 </head>
 
-<body class="bg-base-200">
+<body class="bg-base-300">
   <div id="app" class="flex min-h-screen">
     <!-- Sidebar -->
     <aside class="options-sidebar">
