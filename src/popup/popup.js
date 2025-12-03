@@ -7,6 +7,7 @@ import {
   toggleMirrorSection,
   showLoginMessage,
   initializeMirror,
+  getTokenValidationStatus,
 } from './mirror.js';
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
@@ -658,12 +659,26 @@ async function handleImportCustomCode(file) {
  */
 async function initializePopup() {
   try {
-    const loggedIn = await isUserLoggedIn();
-    if (loggedIn) {
+    const validationStatus = await getTokenValidationStatus();
+
+    if (validationStatus.isValid) {
+      // Tokens are valid, show full UI
       if (mirrorSection) {
         toggleMirrorSection(true, mirrorSection);
       }
+    } else if (validationStatus.needsReauth) {
+      // Tokens exist but expired/invalid and couldn't be refreshed
+      // Show login message with reauth prompt
+      if (statusMessage && openOptionsButton) {
+        showLoginMessage(
+          statusMessage,
+          openOptionsButton,
+          validationStatus.error ||
+            'Session expired. Please reconnect in Options.',
+        );
+      }
     } else {
+      // No tokens at all
       if (statusMessage && openOptionsButton) {
         showLoginMessage(statusMessage, openOptionsButton);
       }

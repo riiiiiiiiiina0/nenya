@@ -115,7 +115,7 @@
 export const MIRROR_ALARM_NAME = 'nenya-raindrop-mirror-pull';
 export const MIRROR_PULL_INTERVAL_MINUTES = 10;
 
-// Export functions needed by projects.js
+// Export functions needed by projects.js and index.js
 export {
   concludeActionBadge,
   setActionBadge,
@@ -127,6 +127,7 @@ export {
   buildRaindropCollectionUrl,
   fetchRaindropItems,
   isPromiseLike,
+  handleTokenValidationMessage,
 };
 
 import { processUrl } from '../shared/urlProcessor.js';
@@ -134,6 +135,10 @@ import {
   convertSplitUrlForSave,
   convertSplitUrlForRestore,
 } from '../shared/splitUrl.js';
+import {
+  getValidTokens,
+  TOKEN_VALIDATION_MESSAGE,
+} from '../shared/tokenRefresh.js';
 
 const PROVIDER_ID = 'raindrop';
 const STORAGE_KEY_TOKENS = 'cloudAuthTokens';
@@ -3190,33 +3195,57 @@ async function bookmarksRemove(nodeId) {
 
 /**
  * Load the stored tokens for the Raindrop provider and ensure they are valid.
+ * Attempts to refresh expired tokens automatically.
  * @returns {Promise<StoredProviderTokens | undefined>}
  */
 async function loadValidProviderTokens() {
-  const result = await chrome.storage.sync.get(STORAGE_KEY_TOKENS);
-  /** @type {Record<string, StoredProviderTokens> | undefined} */
-  const tokensMap = /** @type {*} */ (result[STORAGE_KEY_TOKENS]);
-  if (!tokensMap) {
-    return undefined;
-  }
+  const validationResult = await getValidTokens(PROVIDER_ID);
 
-  const record = tokensMap[PROVIDER_ID];
-  if (!record || typeof record.accessToken !== 'string') {
-    return undefined;
-  }
-
-  const expiresAt = Number(record.expiresAt);
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+  if (validationResult.needsReauth) {
+    if (validationResult.error) {
+      throw new Error(validationResult.error);
+    }
     throw new Error(
       'Raindrop credentials expired. Reconnect in Options to continue syncing.',
     );
   }
 
-  return {
-    accessToken: record.accessToken,
-    refreshToken: record.refreshToken,
-    expiresAt,
-  };
+  if (!validationResult.tokens) {
+    return undefined;
+  }
+
+  return validationResult.tokens;
+}
+
+/**
+ * Handle token validation message from popup/options.
+ * @param {any} message
+ * @param {function} sendResponse
+ * @returns {boolean}
+ */
+function handleTokenValidationMessage(message, sendResponse) {
+  if (message.type !== TOKEN_VALIDATION_MESSAGE) {
+    return false;
+  }
+
+  void (async () => {
+    try {
+      const validationResult = await getValidTokens(PROVIDER_ID);
+      sendResponse({
+        isValid: !validationResult.needsReauth && !!validationResult.tokens,
+        needsReauth: validationResult.needsReauth,
+        error: validationResult.error,
+      });
+    } catch (error) {
+      sendResponse({
+        isValid: false,
+        needsReauth: true,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  })();
+
+  return true;
 }
 
 /**

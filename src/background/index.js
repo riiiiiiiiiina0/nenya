@@ -6,6 +6,7 @@ import {
   saveUrlsToUnsorted,
   normalizeHttpUrl,
   pushNotification,
+  handleTokenValidationMessage,
 } from './mirror.js';
 import {
   SAVE_PROJECT_MESSAGE,
@@ -1857,6 +1858,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (handleOptionsBackupMessage(message, sendResponse)) {
+    return true;
+  }
+
+  if (handleTokenValidationMessage(message, sendResponse)) {
     return true;
   }
 

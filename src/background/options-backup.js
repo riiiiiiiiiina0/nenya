@@ -4315,7 +4315,21 @@ export async function runManualBackup() {
   // Use Automerge sync for manual backup
   try {
     await syncWithRemote({ forceRestore: false });
-    const state = await loadState();
+    
+    // Update lastBackupAt timestamp for all categories
+    const now = Date.now();
+    const state = await updateState((draft) => {
+      CATEGORY_IDS.forEach((categoryId) => {
+        const categoryState = draft.categories[categoryId];
+        if (categoryState) {
+          categoryState.lastBackupAt = now;
+          categoryState.lastBackupTrigger = 'manual';
+          categoryState.lastBackupError = undefined;
+          categoryState.lastBackupErrorAt = undefined;
+        }
+      });
+    });
+    
     return {
       ok: true,
       errors: [],
@@ -4341,7 +4355,21 @@ export async function runManualRestore() {
   // Use Automerge sync with force restore
   try {
     await syncWithRemote({ forceRestore: true });
-    const state = await loadState();
+    
+    // Update lastRestoreAt timestamp for all categories
+    const now = Date.now();
+    const state = await updateState((draft) => {
+      CATEGORY_IDS.forEach((categoryId) => {
+        const categoryState = draft.categories[categoryId];
+        if (categoryState) {
+          categoryState.lastRestoreAt = now;
+          categoryState.lastRestoreTrigger = 'manual';
+          categoryState.lastRestoreError = undefined;
+          categoryState.lastRestoreErrorAt = undefined;
+        }
+      });
+    });
+    
     return {
       ok: true,
       errors: [],

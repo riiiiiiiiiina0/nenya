@@ -5,6 +5,10 @@ import { clearAllProjectData } from '../background/projects.js';
 import { updateNotificationSectionsVisibility } from './notifications.js';
 import { setBackupConnectionState, refreshBackupStatus } from './backup.js';
 import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
+import {
+  getValidTokens,
+  areTokensExpired,
+} from '../shared/tokenRefresh.js';
 
 /**
  * @typedef {Object} ToastifyOptions
@@ -1075,12 +1079,63 @@ async function handleResetMirrorClick() {
   );
 }
 
+/** @type {boolean} */
+let isRefreshingTokens = false;
+
+/**
+ * Attempt to refresh tokens for the current provider if they are expired.
+ * Updates the token cache and re-renders the UI if successful.
+ * @returns {Promise<boolean>} - True if tokens are now valid (either were valid or successfully refreshed)
+ */
+async function attemptTokenRefresh() {
+  if (!currentProvider || isRefreshingTokens) {
+    return false;
+  }
+
+  const storedTokens = tokenCache[currentProvider.id];
+  if (!storedTokens) {
+    return false;
+  }
+
+  // If tokens are not expired, no need to refresh
+  if (!areTokensExpired(storedTokens)) {
+    return true;
+  }
+
+  isRefreshingTokens = true;
+  showToast('Refreshing session...', 'info');
+
+  try {
+    const result = await getValidTokens(currentProvider.id);
+
+    if (result.tokens && !result.needsReauth) {
+      // Refresh succeeded, update cache
+      tokenCache[currentProvider.id] = result.tokens;
+      showToast('Session refreshed successfully.', 'success');
+      renderProviderState();
+      return true;
+    }
+
+    // Refresh failed
+    if (result.error) {
+      console.warn('[bookmarks] Token refresh failed:', result.error);
+    }
+    return false;
+  } catch (error) {
+    console.error('[bookmarks] Error during token refresh:', error);
+    return false;
+  } finally {
+    isRefreshingTokens = false;
+  }
+}
+
 /**
  * Derive the status string for the current provider.
  * @param {StoredProviderTokens | undefined} storedTokens
+ * @param {boolean} [isRefreshing=false] - Whether tokens are currently being refreshed
  * @returns {{ message: string, statusClass: string }}
  */
-function getProviderStatus(storedTokens) {
+function getProviderStatus(storedTokens, isRefreshing = false) {
   if (!currentProvider) {
     return {
       message: 'Choose a provider to get started.',
@@ -1092,6 +1147,13 @@ function getProviderStatus(storedTokens) {
     return {
       message: 'Not connected to ' + currentProvider.name + '.',
       statusClass: 'text-error',
+    };
+  }
+
+  if (isRefreshing) {
+    return {
+      message: 'Refreshing session...',
+      statusClass: 'text-info',
     };
   }
 
@@ -1372,6 +1434,13 @@ async function init() {
   }
 
   renderProviderState();
+
+  // Attempt to refresh tokens if they are expired
+  // This runs in the background and will update the UI if successful
+  const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
+  if (storedTokens && areTokensExpired(storedTokens)) {
+    void attemptTokenRefresh();
+  }
 }
 
 /**

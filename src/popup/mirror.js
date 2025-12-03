@@ -9,12 +9,20 @@ import {
   collectSavableTabs,
 } from './shared.js';
 import { convertSplitUrlForSave } from '../shared/splitUrl.js';
+import { TOKEN_VALIDATION_MESSAGE } from '../shared/tokenRefresh.js';
 
 /**
- * Check if user is logged in to any cloud bookmark provider.
+ * @typedef {Object} TokenValidationResult
+ * @property {boolean} isValid
+ * @property {boolean} needsReauth
+ * @property {string} [error]
+ */
+
+/**
+ * Check if tokens exist in storage (quick local check).
  * @returns {Promise<boolean>}
  */
-export async function isUserLoggedIn() {
+async function hasStoredTokens() {
   try {
     const result = await chrome.storage.sync.get('cloudAuthTokens');
     const tokens = result.cloudAuthTokens;
@@ -22,23 +30,90 @@ export async function isUserLoggedIn() {
       return false;
     }
 
-    // Check if any provider has valid tokens
-    const now = Date.now();
     for (const providerId in tokens) {
       const providerTokens = tokens[providerId];
       if (
         providerTokens &&
         typeof providerTokens === 'object' &&
-        providerTokens.expiresAt &&
-        providerTokens.expiresAt > now
+        providerTokens.accessToken
       ) {
         return true;
       }
     }
     return false;
   } catch (error) {
-    console.error('[popup] Error checking login status:', error);
     return false;
+  }
+}
+
+/**
+ * Check if user is logged in to any cloud bookmark provider.
+ * This asks the background to validate tokens (and attempt refresh if expired).
+ * @returns {Promise<boolean>}
+ */
+export async function isUserLoggedIn() {
+  try {
+    // First, quick local check - if no tokens exist, user is not logged in
+    const hasTokens = await hasStoredTokens();
+    if (!hasTokens) {
+      return false;
+    }
+
+    // Ask background to validate tokens (this will attempt refresh if expired)
+    const response = await sendRuntimeMessage({
+      type: TOKEN_VALIDATION_MESSAGE,
+    });
+
+    if (response && response.isValid) {
+      return true;
+    }
+
+    // If needsReauth is true, tokens exist but are expired and couldn't be refreshed
+    // We still return true so the popup shows the UI, but operations will fail
+    // and guide user to reconnect
+    if (response && response.needsReauth) {
+      // Return true so user sees the UI but with appropriate error messages
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error('[popup] Error checking login status:', error);
+    // Fall back to local check if background communication fails
+    return hasStoredTokens();
+  }
+}
+
+/**
+ * Get detailed token validation status.
+ * @returns {Promise<TokenValidationResult>}
+ */
+export async function getTokenValidationStatus() {
+  try {
+    const hasTokens = await hasStoredTokens();
+    if (!hasTokens) {
+      return {
+        isValid: false,
+        needsReauth: true,
+        error: 'No tokens stored. Please connect to Raindrop.',
+      };
+    }
+
+    const response = await sendRuntimeMessage({
+      type: TOKEN_VALIDATION_MESSAGE,
+    });
+
+    return {
+      isValid: response?.isValid ?? false,
+      needsReauth: response?.needsReauth ?? true,
+      error: response?.error,
+    };
+  } catch (error) {
+    return {
+      isValid: false,
+      needsReauth: true,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -64,21 +139,27 @@ export function toggleMirrorSection(isLoggedIn, mirrorSection) {
  * Show a message directing users to login via options page.
  * @param {HTMLElement} statusMessage
  * @param {HTMLElement} openOptionsButton
+ * @param {string} [errorMessage] - Optional custom error message for reauth scenarios
  * @returns {void}
  */
-export function showLoginMessage(statusMessage, openOptionsButton) {
+export function showLoginMessage(statusMessage, openOptionsButton, errorMessage) {
   if (!statusMessage) {
     return;
   }
+
+  const isReauth = Boolean(errorMessage);
+  const displayMessage = errorMessage ||
+    'Connect to a cloud bookmark provider to sync your bookmarks, saved projects, and options.';
+  const buttonText = isReauth ? 'Reconnect in Options' : 'Go to Options to Connect';
 
   const loginMessage = document.createElement('div');
   loginMessage.className = 'card w-full bg-base-100 shadow-xl';
   loginMessage.innerHTML = `
     <div class="card-body gap-4">
       <div class="text-center space-y-2">
-        <p class="text-sm text-base-content/70">Connect to a cloud bookmark provider to sync your bookmarks, saved projects, and options.</p>
-        <button id="goToOptionsButton" class="btn btn-primary w-full" type="button">
-          Go to Options to Connect
+        <p class="text-sm ${isReauth ? 'text-warning' : 'text-base-content/70'}">${displayMessage}</p>
+        <button id="goToOptionsButton" class="btn ${isReauth ? 'btn-warning' : 'btn-primary'} w-full" type="button">
+          ${buttonText}
         </button>
       </div>
     </div>
