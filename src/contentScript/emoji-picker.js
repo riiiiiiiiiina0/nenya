@@ -75,6 +75,9 @@
     const newPos = start + text.length;
     element.setSelectionRange(newPos, newPos);
     
+    // Update saved selection for subsequent insertions
+    savedInputSelection = { start: newPos, end: newPos };
+    
     // Trigger input event for frameworks that listen to it
     element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
@@ -112,6 +115,9 @@
     range.setEndAfter(textNode);
     selection.removeAllRanges();
     selection.addRange(range);
+    
+    // Update saved range for subsequent insertions
+    savedRange = range.cloneRange();
 
     // Trigger input event
     const container = range.commonAncestorContainer;
@@ -213,7 +219,10 @@
       case 'emojiSelected':
         if (msg.emoji) {
           insertEmoji(msg.emoji);
-          quitPicker();
+          // Only close if shift key is not held (keepOpen = false)
+          if (!msg.keepOpen) {
+            quitPicker();
+          }
         }
         break;
       case 'close':

@@ -11,6 +11,20 @@ if (!customElements.get('emoji-picker')) {
 }
 
 let port = null;
+let isShiftHeld = false;
+
+// Track shift key state
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Shift') {
+    isShiftHeld = true;
+  }
+});
+
+document.addEventListener('keyup', (event) => {
+  if (event.key === 'Shift') {
+    isShiftHeld = false;
+  }
+});
 
 // Create the picker
 const wrapper = document.getElementById('picker-wrapper');
@@ -23,7 +37,8 @@ picker.addEventListener('emoji-click', (event) => {
   if (detail && detail.unicode && port) {
     port.postMessage({
       what: 'emojiSelected',
-      emoji: detail.unicode
+      emoji: detail.unicode,
+      keepOpen: isShiftHeld
     });
   }
 });
