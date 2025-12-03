@@ -435,22 +435,19 @@ function renderList() {
     actions.appendChild(deleteButton);
 
     const toggleContainer = document.createElement('div');
-    toggleContainer.className = 'form-control';
-    const toggleLabel = document.createElement('label');
-    toggleLabel.className = 'label cursor-pointer gap-4';
-    toggleLabel.textContent = 'Enabled';
+    toggleContainer.className = 'flex items-center gap-2';
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
     toggle.className = 'toggle toggle-success';
     toggle.checked = !rule.disabled;
+    toggle.title = 'Enabled';
     toggle.addEventListener('change', (event) => {
       const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
       rule.disabled = !isChecked;
       void saveRules(rules);
       render();
     });
-    toggleLabel.appendChild(toggle);
-    toggleContainer.appendChild(toggleLabel);
+    toggleContainer.appendChild(toggle);
     actions.appendChild(toggleContainer);
 
     container.appendChild(actions);

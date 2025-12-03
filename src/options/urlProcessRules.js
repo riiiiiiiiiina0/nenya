@@ -390,115 +390,92 @@ function render() {
   }
 
   emptyState.hidden = true;
-  listElement.innerHTML = rules
-    .map(
-      (rule) => `
-    <div
-      class="rounded-lg border border-base-300 p-3 cursor-pointer transition-colors hover:bg-base-200 ${
-        selectedRuleId === rule.id ? 'bg-base-200 border-primary' : ''
-      } ${rule.disabled ? 'opacity-50' : ''}"
-      data-rule-id="${rule.id}"
-      role="button"
-      tabindex="0"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex-1 min-w-0">
-          <h4 class="font-medium text-base-content truncate">${rule.name}</h4>
-          <p class="text-sm text-base-content/70 mt-1">
-            ${rule.urlPatterns.length} pattern${rule.urlPatterns.length !== 1 ? 's' : ''}, ${rule.processors.length} processor${rule.processors.length !== 1 ? 's' : ''}
-          </p>
-        </div>
-        <div class="flex gap-2">
-          <button
-            class="btn btn-sm btn-ghost"
-            data-edit-id="${rule.id}"
-            type="button"
-            aria-label="Edit rule"
-          >
-            ✏️
-          </button>
-          <button
-            class="btn btn-sm btn-error btn-outline"
-            data-delete-id="${rule.id}"
-            type="button"
-            aria-label="Delete rule"
-          >
-            🗑️
-          </button>
-        </div>
-      </div>
-      <div class="form-control mt-2">
-        <label class="label cursor-pointer gap-2">
-          <span class="label-text text-xs">Enabled</span>
-          <input type="checkbox" class="toggle toggle-sm toggle-success" data-toggle-id="${rule.id}" ${!rule.disabled ? 'checked' : ''} />
-        </label>
-      </div>
-    </div>
-  `,
-    )
-    .join('');
+  listElement.textContent = '';
 
-  // Attach event listeners
-  listElement.querySelectorAll('[data-rule-id]').forEach((el) => {
-    const ruleId = el.getAttribute('data-rule-id');
-    if (!ruleId) {
-      return;
+  rules.forEach((rule) => {
+    const container = document.createElement('article');
+    container.className =
+      'rounded-lg border border-base-300 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
+    container.setAttribute('role', 'listitem');
+
+    if (rule.disabled) {
+      container.classList.add('opacity-50');
     }
-    el.addEventListener('click', () => {
-      selectedRuleId = ruleId;
-      renderDetails(ruleId);
+
+    const info = document.createElement('div');
+    info.className = 'space-y-1 flex-1 min-w-0';
+
+    const name = document.createElement('p');
+    name.className = 'font-medium text-base-content truncate';
+    name.textContent = rule.name;
+    info.appendChild(name);
+
+    const summary = document.createElement('p');
+    summary.className = 'text-sm text-base-content/70';
+    summary.textContent = rule.urlPatterns.length + ' pattern' + (rule.urlPatterns.length !== 1 ? 's' : '') + ', ' + rule.processors.length + ' processor' + (rule.processors.length !== 1 ? 's' : '');
+    info.appendChild(summary);
+
+    container.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'flex flex-wrap gap-2';
+
+    const viewButton = document.createElement('button');
+    viewButton.type = 'button';
+    viewButton.className = 'btn btn-sm btn-ghost';
+    viewButton.textContent = 'View';
+    viewButton.addEventListener('click', () => {
+      selectedRuleId = rule.id;
+      renderDetails(rule.id);
       render();
     });
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectedRuleId = ruleId;
-        renderDetails(ruleId);
-        render();
-      }
-    });
-  });
+    actions.appendChild(viewButton);
 
-  listElement.querySelectorAll('[data-toggle-id]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ruleId = el.getAttribute('data-toggle-id');
-      const rule = rules.find((r) => r.id === ruleId);
-      if (rule) {
-        rule.disabled = !/** @type {HTMLInputElement} */ (el).checked;
-        void (async () => {
-          syncing = true;
-          try {
-            await chrome.storage.sync.set({ [STORAGE_KEY]: rules });
-            render();
-          } catch (error) {
-            console.error('[urlProcessRules] Failed to save rule:', error);
-          } finally {
-            syncing = false;
-          }
-        })();
-      }
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'btn btn-sm btn-outline';
+    editButton.textContent = 'Edit';
+    editButton.addEventListener('click', () => {
+      startEdit(rule.id);
     });
-  });
+    actions.appendChild(editButton);
 
-  listElement.querySelectorAll('[data-edit-id]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ruleId = el.getAttribute('data-edit-id');
-      if (ruleId) {
-        startEdit(ruleId);
-      }
+    const deleteButtonEl = document.createElement('button');
+    deleteButtonEl.type = 'button';
+    deleteButtonEl.className = 'btn btn-sm btn-error btn-outline';
+    deleteButtonEl.textContent = 'Delete';
+    deleteButtonEl.addEventListener('click', () => {
+      void deleteRule(rule.id);
     });
-  });
+    actions.appendChild(deleteButtonEl);
 
-  listElement.querySelectorAll('[data-delete-id]').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ruleId = el.getAttribute('data-delete-id');
-      if (ruleId) {
-        deleteRule(ruleId);
-      }
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'flex items-center gap-2';
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'toggle toggle-success';
+    toggle.checked = !rule.disabled;
+    toggle.title = 'Enabled';
+    toggle.addEventListener('change', (event) => {
+      const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
+      rule.disabled = !isChecked;
+      void (async () => {
+        syncing = true;
+        try {
+          await chrome.storage.sync.set({ [STORAGE_KEY]: rules });
+          render();
+        } catch (error) {
+          console.error('[urlProcessRules] Failed to save rule:', error);
+        } finally {
+          syncing = false;
+        }
+      })();
     });
+    toggleContainer.appendChild(toggle);
+    actions.appendChild(toggleContainer);
+
+    container.appendChild(actions);
+    listElement.appendChild(container);
   });
 
   if (selectedRuleId) {

@@ -4433,12 +4433,47 @@ export async function resetOptionsToDefaults() {
 
 /**
  * Retrieve the latest backup status snapshot.
+ * Since we've migrated to Automerge-based sync, clear any legacy JSON backup errors.
  * @returns {Promise<{ ok: boolean, state: BackupState, loggedIn: boolean }>}
  */
 export async function getBackupStatus() {
   initializeOptionsBackupService();
   const tokens = await loadValidProviderTokens();
   const state = await loadState();
+
+  // Clear legacy JSON backup errors since we now use Automerge sync
+  // These errors are from the old JSON-based backup system and are no longer relevant
+  let hasLegacyErrors = false;
+  CATEGORY_IDS.forEach((categoryId) => {
+    const category = state.categories[categoryId];
+    if (category) {
+      if (category.lastBackupError || category.lastRestoreError) {
+        hasLegacyErrors = true;
+      }
+    }
+  });
+
+  if (hasLegacyErrors) {
+    await updateState((draft) => {
+      CATEGORY_IDS.forEach((categoryId) => {
+        const category = draft.categories[categoryId];
+        if (category) {
+          category.lastBackupError = undefined;
+          category.lastBackupErrorAt = undefined;
+          category.lastRestoreError = undefined;
+          category.lastRestoreErrorAt = undefined;
+        }
+      });
+    });
+    // Re-load state after clearing errors
+    const cleanState = await loadState();
+    return {
+      ok: true,
+      state: cleanState,
+      loggedIn: Boolean(tokens),
+    };
+  }
+
   return {
     ok: true,
     state,
