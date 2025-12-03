@@ -93,8 +93,18 @@ class NavigationManager {
       const linkTarget = href.substring(1);
       if (linkTarget === sectionId) {
         link.classList.add('active');
+        link.style.backgroundColor = 'rgba(124, 58, 237, 0.2)';
+        link.style.color = '#7c3aed';
+        link.style.fontWeight = '600';
+        link.style.borderLeft = '3px solid #7c3aed';
+        link.style.borderRadius = '0.75rem';
       } else {
         link.classList.remove('active');
+        link.style.backgroundColor = '';
+        link.style.color = '';
+        link.style.fontWeight = '';
+        link.style.borderLeft = '';
+        link.style.borderRadius = '';
       }
     });
   }

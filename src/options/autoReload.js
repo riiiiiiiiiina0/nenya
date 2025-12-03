@@ -106,7 +106,10 @@ function normalizeRules(value) {
       if (!entry || typeof entry !== 'object') {
         return;
       }
-      const raw = /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (entry);
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, intervalSeconds?: unknown, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
       const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
       if (!pattern) {
         return;
@@ -119,16 +122,21 @@ function normalizeRules(value) {
         new URLPattern(pattern);
         isValidPattern = true;
       } catch (error) {
-        console.warn('[options:autoReload] Invalid pattern ignored in storage:', pattern, error);
+        console.warn(
+          '[options:autoReload] Invalid pattern ignored in storage:',
+          pattern,
+          error,
+        );
       }
       if (!isValidPattern) {
         return;
       }
 
       const intervalCandidate = Math.floor(Number(raw.intervalSeconds));
-      const interval = Number.isFinite(intervalCandidate) && intervalCandidate > 0
-        ? Math.max(MIN_INTERVAL_SECONDS, intervalCandidate)
-        : MIN_INTERVAL_SECONDS;
+      const interval =
+        Number.isFinite(intervalCandidate) && intervalCandidate > 0
+          ? Math.max(MIN_INTERVAL_SECONDS, intervalCandidate)
+          : MIN_INTERVAL_SECONDS;
 
       let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
       if (!id) {
@@ -226,9 +234,14 @@ function showFormError(message) {
  * @returns {string}
  */
 function formatInterval(intervalSeconds) {
-  const normalized = Math.max(MIN_INTERVAL_SECONDS, Math.floor(intervalSeconds));
+  const normalized = Math.max(
+    MIN_INTERVAL_SECONDS,
+    Math.floor(intervalSeconds),
+  );
   if (normalized < 60) {
-    return normalized === 1 ? 'Every second' : 'Every ' + normalized + ' seconds';
+    return normalized === 1
+      ? 'Every second'
+      : 'Every ' + normalized + ' seconds';
   }
   const minutes = normalized / 60;
   if (Number.isInteger(minutes)) {
@@ -291,7 +304,13 @@ function formatTimestamp(value) {
  * @returns {void}
  */
 function renderDetails() {
-  if (!detailsPanel || !detailPattern || !detailCreated || !detailUpdated || !detailSummary) {
+  if (
+    !detailsPanel ||
+    !detailPattern ||
+    !detailCreated ||
+    !detailUpdated ||
+    !detailSummary
+  ) {
     return;
   }
   const rule = findRule(selectedRuleId);
@@ -416,22 +435,19 @@ function renderList() {
     actions.appendChild(deleteButton);
 
     const toggleContainer = document.createElement('div');
-    toggleContainer.className = 'form-control';
-    const toggleLabel = document.createElement('label');
-    toggleLabel.className = 'label cursor-pointer gap-4';
-    toggleLabel.textContent = 'Enabled';
+    toggleContainer.className = 'flex items-center gap-2';
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
     toggle.className = 'toggle toggle-success';
     toggle.checked = !rule.disabled;
+    toggle.title = 'Enabled';
     toggle.addEventListener('change', (event) => {
       const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
       rule.disabled = !isChecked;
       void saveRules(rules);
       render();
     });
-    toggleLabel.appendChild(toggle);
-    toggleContainer.appendChild(toggleLabel);
+    toggleContainer.appendChild(toggle);
     actions.appendChild(toggleContainer);
 
     container.appendChild(actions);
@@ -482,7 +498,7 @@ function handleFormSubmit(event) {
 
   const normalizedInterval = Math.max(
     MIN_INTERVAL_SECONDS,
-    Math.round(minutesValue * 60)
+    Math.round(minutesValue * 60),
   );
   const now = new Date().toISOString();
 
@@ -613,7 +629,10 @@ async function checkForPrefillUrl() {
       patternInput.focus();
     }
   } catch (error) {
-    console.warn('[options:autoReload] Failed to check for prefill URL:', error);
+    console.warn(
+      '[options:autoReload] Failed to check for prefill URL:',
+      error,
+    );
   }
 }
 

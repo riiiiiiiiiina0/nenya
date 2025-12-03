@@ -9,7 +9,6 @@
  * @property {string} [updatedAt]
  */
 
-
 const WHITELIST_STORAGE_KEY = 'brightModeWhitelist';
 
 // Whitelist elements
@@ -34,7 +33,6 @@ const whitelistEmptyState = /** @type {HTMLDivElement | null} */ (
 const whitelistListElement = /** @type {HTMLDivElement | null} */ (
   document.getElementById('brightModeWhitelistList')
 );
-
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'medium',
@@ -327,22 +325,19 @@ function renderList(patterns, listElement, emptyState) {
     actions.appendChild(deleteButton);
 
     const toggleContainer = document.createElement('div');
-    toggleContainer.className = 'form-control';
-    const toggleLabel = document.createElement('label');
-    toggleLabel.className = 'label cursor-pointer gap-4';
-    toggleLabel.textContent = 'Enabled';
+    toggleContainer.className = 'flex items-center gap-2';
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
     toggle.className = 'toggle toggle-success';
     toggle.checked = !pattern.disabled;
+    toggle.title = 'Enabled';
     toggle.addEventListener('change', (event) => {
       const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
       pattern.disabled = !isChecked;
       void savePatterns(whitelistPatterns, WHITELIST_STORAGE_KEY);
       renderWhitelist();
     });
-    toggleLabel.appendChild(toggle);
-    toggleContainer.appendChild(toggleLabel);
+    toggleContainer.appendChild(toggle);
     actions.appendChild(toggleContainer);
 
     container.appendChild(actions);
@@ -355,11 +350,7 @@ function renderList(patterns, listElement, emptyState) {
  * @returns {void}
  */
 function renderWhitelist() {
-  renderList(
-    whitelistPatterns,
-    whitelistListElement,
-    whitelistEmptyState,
-  );
+  renderList(whitelistPatterns, whitelistListElement, whitelistEmptyState);
 }
 
 /**
@@ -438,9 +429,7 @@ function init() {
     );
   }
   if (whitelistCancelButton) {
-    whitelistCancelButton.addEventListener('click', () =>
-      handleCancelEdit(),
-    );
+    whitelistCancelButton.addEventListener('click', () => handleCancelEdit());
   }
 
   // Storage change listener
@@ -527,7 +516,10 @@ async function checkForPrefillUrl() {
       whitelistPatternInput.focus();
     }
   } catch (error) {
-    console.warn('[options:brightMode] Failed to check for prefill URL:', error);
+    console.warn(
+      '[options:brightMode] Failed to check for prefill URL:',
+      error,
+    );
   }
 }
 
@@ -560,12 +552,12 @@ export function isValidUrlPattern(pattern) {
   if (!pattern || typeof pattern !== 'string') {
     return false;
   }
-  
+
   const trimmedPattern = pattern.trim();
   if (!trimmedPattern) {
     return false;
   }
-  
+
   try {
     // Use URL Pattern API for robust validation
     // The pattern can be a full URL or just a pathname pattern

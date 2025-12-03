@@ -471,80 +471,130 @@ function renderRulesList() {
   }
 
   rulesEmpty.hidden = true;
-  rulesList.innerHTML = rules.map(rule => `
-    <div class="card bg-base-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow ${rule.disabled ? 'opacity-50' : ''}" data-rule-id="${rule.id}">
-      <div class="card-body p-4">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex-1 min-w-0">
-            <h4 class="font-semibold text-sm truncate">${rule.pattern}</h4>
-            <p class="text-xs text-base-content/70 truncate">${rule.value}</p>
-            <div class="flex items-center gap-2 mt-1">
-              <span class="badge badge-outline badge-sm">${getTypeDisplayName(rule.type)}</span>
-              ${rule.ignoreCase ? '<span class="badge badge-sm badge-ghost">Aa</span>' : ''}
-              <div class="flex gap-1">
-                <div class="w-3 h-3 rounded border border-base-300" style="background-color: ${rule.textColor}"></div>
-                <div class="w-3 h-3 rounded border border-base-300" style="background-color: ${rule.backgroundColor}"></div>
-              </div>
-              <div class="flex gap-1 text-xs">
-                ${rule.bold ? '<span class="font-bold">B</span>' : ''}
-                ${rule.italic ? '<span class="italic">I</span>' : ''}
-                ${rule.underline ? '<span class="underline">U</span>' : ''}
-              </div>
-            </div>
-          </div>
-          <div class="flex gap-1">
-            <button class="btn btn-ghost btn-sm" data-action="edit" data-rule-id="${rule.id}">
-              ✏️
-            </button>
-            <button class="btn btn-ghost btn-sm text-error" data-action="delete" data-rule-id="${rule.id}">
-              🗑️
-            </button>
-          </div>
-          <div class="form-control">
-            <label class="label cursor-pointer gap-2">
-              <span class="label-text text-xs">Enabled</span>
-              <input type="checkbox" class="toggle toggle-sm toggle-success" data-action="toggle" data-rule-id="${rule.id}" ${!rule.disabled ? 'checked' : ''} />
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-  `).join('');
+  rulesList.textContent = '';
 
-  // Add event listeners
-  rulesList.querySelectorAll('[data-action="edit"]').forEach(button => {
-    button.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ruleId = button.getAttribute('data-rule-id');
-      if (ruleId) editRule(ruleId);
-    });
-  });
+  rules.forEach((rule) => {
+    const container = document.createElement('article');
+    container.className =
+      'rounded-lg border border-base-300 p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between';
+    container.setAttribute('role', 'listitem');
 
-  rulesList.querySelectorAll('[data-action="delete"]').forEach(button => {
-    button.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ruleId = button.getAttribute('data-rule-id');
-      if (ruleId) deleteRule(ruleId);
-    });
-  });
+    if (rule.disabled) {
+      container.classList.add('opacity-50');
+    }
 
-  rulesList.querySelectorAll('[data-action="toggle"]').forEach(toggle => {
-    toggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const ruleId = toggle.getAttribute('data-rule-id');
-      const rule = rules.find(r => r.id === ruleId);
-      if (rule) {
-        rule.disabled = !/** @type {HTMLInputElement} */ (toggle).checked;
-        void saveRules(rules).then(renderRulesList);
-      }
-    });
-  });
+    const info = document.createElement('div');
+    info.className = 'space-y-1 flex-1 min-w-0';
 
-  rulesList.querySelectorAll('.card').forEach(card => {
-    card.addEventListener('click', () => {
-      const ruleId = card.getAttribute('data-rule-id');
-      if (ruleId) showRuleDetails(ruleId);
+    const pattern = document.createElement('p');
+    pattern.className = 'font-mono text-sm break-words';
+    pattern.textContent = rule.pattern;
+    info.appendChild(pattern);
+
+    const value = document.createElement('p');
+    value.className = 'text-sm text-base-content/70 truncate';
+    value.textContent = rule.value;
+    info.appendChild(value);
+
+    const meta = document.createElement('div');
+    meta.className = 'flex items-center gap-2 mt-1';
+
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'badge badge-outline badge-sm';
+    typeBadge.textContent = getTypeDisplayName(rule.type);
+    meta.appendChild(typeBadge);
+
+    if (rule.ignoreCase) {
+      const caseBadge = document.createElement('span');
+      caseBadge.className = 'badge badge-sm badge-ghost';
+      caseBadge.textContent = 'Aa';
+      meta.appendChild(caseBadge);
+    }
+
+    const colorPreview = document.createElement('div');
+    colorPreview.className = 'flex gap-1';
+    const textColorBox = document.createElement('div');
+    textColorBox.className = 'w-3 h-3 rounded border border-base-300';
+    textColorBox.style.backgroundColor = rule.textColor;
+    colorPreview.appendChild(textColorBox);
+    const bgColorBox = document.createElement('div');
+    bgColorBox.className = 'w-3 h-3 rounded border border-base-300';
+    bgColorBox.style.backgroundColor = rule.backgroundColor;
+    colorPreview.appendChild(bgColorBox);
+    meta.appendChild(colorPreview);
+
+    const stylePreview = document.createElement('div');
+    stylePreview.className = 'flex gap-1 text-xs';
+    if (rule.bold) {
+      const boldSpan = document.createElement('span');
+      boldSpan.className = 'font-bold';
+      boldSpan.textContent = 'B';
+      stylePreview.appendChild(boldSpan);
+    }
+    if (rule.italic) {
+      const italicSpan = document.createElement('span');
+      italicSpan.className = 'italic';
+      italicSpan.textContent = 'I';
+      stylePreview.appendChild(italicSpan);
+    }
+    if (rule.underline) {
+      const underlineSpan = document.createElement('span');
+      underlineSpan.className = 'underline';
+      underlineSpan.textContent = 'U';
+      stylePreview.appendChild(underlineSpan);
+    }
+    meta.appendChild(stylePreview);
+
+    info.appendChild(meta);
+    container.appendChild(info);
+
+    const actions = document.createElement('div');
+    actions.className = 'flex flex-wrap gap-2';
+
+    const viewButton = document.createElement('button');
+    viewButton.type = 'button';
+    viewButton.className = 'btn btn-sm btn-ghost';
+    viewButton.textContent = 'View';
+    viewButton.addEventListener('click', () => {
+      showRuleDetails(rule.id);
     });
+    actions.appendChild(viewButton);
+
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.className = 'btn btn-sm btn-outline';
+    editButton.textContent = 'Edit';
+    editButton.addEventListener('click', () => {
+      editRule(rule.id);
+    });
+    actions.appendChild(editButton);
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'btn btn-sm btn-error btn-outline';
+    deleteButton.textContent = 'Delete';
+    deleteButton.addEventListener('click', () => {
+      void deleteRule(rule.id);
+    });
+    actions.appendChild(deleteButton);
+
+    const toggleContainer = document.createElement('div');
+    toggleContainer.className = 'flex items-center gap-2';
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.className = 'toggle toggle-success';
+    toggle.checked = !rule.disabled;
+    toggle.title = 'Enabled';
+    toggle.addEventListener('change', (event) => {
+      const isChecked = /** @type {HTMLInputElement} */ (event.target).checked;
+      rule.disabled = !isChecked;
+      void saveRules(rules).then(renderRulesList);
+    });
+    toggleContainer.appendChild(toggle);
+    actions.appendChild(toggleContainer);
+
+    container.appendChild(actions);
+    rulesList.appendChild(container);
   });
 }
 

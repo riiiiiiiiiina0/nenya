@@ -48,7 +48,13 @@
       margin-left: var(--sidebar-width);
       min-height: 100vh;
       padding: 2rem 3rem;
-      max-width: calc(100vw - var(--sidebar-width));
+      width: calc(100vw - var(--sidebar-width));
+      background: oklch(var(--b2));
+    }
+
+    .options-main>div {
+      width: 100%;
+      max-width: 56rem;
     }
 
     /* Navigation styling */
@@ -68,15 +74,24 @@
       color: oklch(var(--bc));
     }
 
-    .nav-item.active {
-      background: oklch(var(--p) / 0.1);
-      color: oklch(var(--p));
+    .nav-item.active,
+    a.nav-item.active,
+    .options-sidebar .nav-item.active {
+      background: #7c3aed33 !important;
+      color: #7c3aed !important;
+      font-weight: 600;
+      border-radius: 0.75rem;
+      border-left: 3px solid #7c3aed;
     }
 
     .nav-item .nav-icon {
       width: 20px;
       height: 20px;
       flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
     }
 
     .nav-item.active .nav-icon {
@@ -104,6 +119,7 @@
       padding: 2rem;
       box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
       border: 1px solid oklch(var(--b3) / 0.5);
+      width: 100%;
     }
 
     /* Section header */
@@ -336,6 +352,7 @@
         opacity: 0;
         transform: translateY(12px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
@@ -393,10 +410,16 @@
     /* Hide sections by default */
     .section-content {
       display: none;
+      width: 100%;
     }
 
     .section-content.active {
       display: block;
+      width: 100%;
+    }
+
+    .section-content .animate-in {
+      width: 100%;
     }
 
     /* Logo styling */
@@ -411,7 +434,6 @@
     .logo-icon {
       width: 2.5rem;
       height: 2.5rem;
-      background: linear-gradient(135deg, #8b5cf6, #ec4899);
       border-radius: 0.75rem;
       display: flex;
       align-items: center;
@@ -419,7 +441,6 @@
       color: white;
       font-weight: 700;
       font-size: 1.25rem;
-      box-shadow: 0 4px 12px rgb(139 92 246 / 0.3);
     }
 
     .logo-text {
@@ -454,78 +475,81 @@
     <!-- Sidebar -->
     <aside class="options-sidebar">
       <div class="logo-container">
-        <div class="logo-icon">N</div>
+        <div class="logo-icon">
+          <img src="../../assets/icons/icon-48x48.png" alt="Extension icon"
+            style="width:2.5rem; height:2.5rem; border-radius:0.75rem;">
+        </div>
         <span class="logo-text">Nenya</span>
       </div>
 
       <nav id="options-nav">
         <div class="nav-group-title">General</div>
         <a href="#mirror-heading" class="nav-item nav-link" data-section="mirror-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H17a5 5 0 0 0 0-10 4.5 4.5 0 1 0-7.02-.55C8.61 7.6 7.1 8 5.5 8A4.5 4.5 0 0 0 5 17h.5"/><path d="M18 10a4 4 0 0 0-1.2-2.7"/></svg>
+          <span class="nav-icon text-lg">☁️</span>
           <span>Cloud Bookmarks</span>
         </a>
         <a href="#backup-heading" class="nav-item nav-link" data-section="backup-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v4h10"/></svg>
+          <span class="nav-icon text-lg">💾</span>
           <span>Options Backup</span>
         </a>
         <a href="#notifications-heading" class="nav-item nav-link" data-section="notifications-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.67 15.65H5.33a2 2 0 0 1-2-2v-4a7 7 0 0 1 14 0v4a2 2 0 0 1-2 2z"/><path d="M10 21h4"/></svg>
+          <span class="nav-icon text-lg">🔔</span>
           <span>Notifications</span>
         </a>
         <a href="#screenshot-settings-heading" class="nav-item nav-link" data-section="screenshot-settings-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.08-3.08a2 2 0 0 0-2.83 0L6 21"/></svg>
+          <span class="nav-icon text-lg">📸</span>
           <span>Screenshot Settings</span>
         </a>
 
         <div class="nav-group-title">Interface</div>
         <a href="#pinned-shortcuts-heading" class="nav-item nav-link" data-section="pinned-shortcuts-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="nav-icon text-lg">📌</span>
           <span>Pinned Shortcuts</span>
         </a>
         <a href="#dark-mode-heading" class="nav-item nav-link" data-section="dark-mode-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          <span class="nav-icon text-lg">🌙</span>
           <span>Dark Mode</span>
         </a>
         <a href="#bright-mode-heading" class="nav-item nav-link" data-section="bright-mode-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+          <span class="nav-icon text-lg">☀️</span>
           <span>Bright Mode</span>
         </a>
 
         <div class="nav-group-title">Content Control</div>
         <a href="#auto-reload-heading" class="nav-item nav-link" data-section="auto-reload-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span class="nav-icon text-lg">🔄</span>
           <span>Auto Reload Rules</span>
         </a>
         <a href="#highlight-text-heading" class="nav-item nav-link" data-section="highlight-text-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9.6 10.4-3.26 3.26a1.2 1.2 0 0 0 1.7 1.7L11.3 12"/><path d="M14.3 8 9.7 12.6l-3.26 3.26a1.2 1.2 0 0 1-1.7-1.7L12.6 9.7"/><path d="M18 12 12 18 6 12 12 6Z"/></svg>
+          <span class="nav-icon text-lg">✨</span>
           <span>Highlight Text</span>
         </a>
         <a href="#block-elements-heading" class="nav-item nav-link" data-section="block-elements-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 14.14 14.14"/></svg>
+          <span class="nav-icon text-lg">🚫</span>
           <span>Block Elements</span>
         </a>
         <a href="#custom-code-heading" class="nav-item nav-link" data-section="custom-code-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+          <span class="nav-icon text-lg">💻</span>
           <span>Custom JS CSS</span>
         </a>
 
         <div class="nav-group-title">Automation</div>
         <a href="#url-process-rules-heading" class="nav-item nav-link" data-section="url-process-rules-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="nav-icon text-lg">🔗</span>
           <span>URL Process Rules</span>
         </a>
         <a href="#auto-google-login-heading" class="nav-item nav-link" data-section="auto-google-login-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>
+          <span class="nav-icon text-lg">🔑</span>
           <span>Auto Google Login</span>
         </a>
         <a href="#llm-prompts-heading" class="nav-item nav-link" data-section="llm-prompts-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="nav-icon text-lg">💬</span>
           <span>LLM Prompts</span>
         </a>
 
         <div class="nav-group-title">System</div>
         <a href="#debug-heading" class="nav-item nav-link" data-section="debug-heading">
-          <svg class="nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"/><path d="M12 8h.01"/><path d="M16 4v16"/><path d="M4 16h16"/></svg>
+          <span class="nav-icon text-lg">🐛</span>
           <span>Debug</span>
         </a>
       </nav>
@@ -533,7 +557,7 @@
 
     <!-- Main Content -->
     <main class="options-main">
-      <div class="max-w-4xl">
+      <div>
 
         <!-- Cloud Bookmarks Section -->
         <section class="section-content" data-section="mirror-heading" id="section-mirror">
@@ -543,51 +567,60 @@
               <p class="section-description">Mirror your collections and bookmarks from the cloud to your browser.</p>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div class="options-card lg:col-span-2">
-                <div class="flex items-center gap-4 mb-6">
-                  <div class="w-14 h-14 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600">
-                    <svg class="w-7 h-7" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H17a5 5 0 0 0 0-10 4.5 4.5 0 1 0-7.02-.55C8.61 7.6 7.1 8 5.5 8A4.5 4.5 0 0 0 5 17h.5"/><path d="M18 10a4 4 0 0 0-1.2-2.7"/></svg>
-                  </div>
-                  <div>
-                    <h3 class="text-lg font-bold">Raindrop.io</h3>
-                    <div id="statusMessage" class="flex items-center gap-2 text-sm text-base-content/70" role="status" aria-live="polite"></div>
-                  </div>
+            <div class="options-card">
+              <div class="flex items-center gap-4 mb-6">
+                <div
+                  class="w-14 h-14 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center text-blue-600">
+                  <svg class="w-7 h-7" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                      d="M17.5 19H17a5 5 0 0 0 0-10 4.5 4.5 0 1 0-7.02-.55C8.61 7.6 7.1 8 5.5 8A4.5 4.5 0 0 0 5 17h.5" />
+                    <path d="M18 10a4 4 0 0 0-1.2-2.7" />
+                  </svg>
                 </div>
-
-                <div class="space-y-4">
-                  <div>
-                    <label class="form-label">Provider</label>
-                    <select id="providerSelect" class="nenya-input"></select>
-                  </div>
-                  <p id="providerDescription" class="text-sm text-base-content/60"></p>
+                <div>
+                  <h3 class="text-lg font-bold">Raindrop.io</h3>
+                  <div id="statusMessage" class="flex items-center gap-2 text-sm text-base-content/70" role="status"
+                    aria-live="polite"></div>
                 </div>
+              </div>
 
-                <div id="rootFolderSection" class="space-y-4 border-t border-base-300 pt-6 mt-6" hidden>
-                  <div>
-                    <h3 class="text-lg font-semibold mb-1">Root bookmark folder</h3>
-                    <p class="text-sm text-base-content/60">Choose where the mirror folder lives and what it is called.</p>
-                  </div>
-                  <div>
-                    <label class="form-label">Parent folder</label>
-                    <select id="rootFolderParentSelect" class="nenya-input"></select>
-                  </div>
-                  <div>
-                    <label class="form-label">Folder name</label>
-                    <input id="rootFolderNameInput" class="nenya-input" type="text" autocomplete="off" required>
-                  </div>
-                  <div class="flex justify-end">
-                    <button id="rootFolderSaveButton" class="nenya-btn nenya-btn-secondary" type="button" disabled>Save changes</button>
-                  </div>
+              <div class="space-y-4">
+                <div>
+                  <label class="form-label">Provider</label>
+                  <select id="providerSelect" class="nenya-input"></select>
                 </div>
+                <p id="providerDescription" class="text-sm text-base-content/60"></p>
+              </div>
 
-                <div class="flex flex-wrap gap-3 mt-6 pt-6 border-t border-base-300">
-                  <button id="connectButton" class="nenya-btn nenya-btn-primary" type="button" hidden>Connect</button>
-                  <button id="disconnectButton" class="nenya-btn nenya-btn-danger" type="button" hidden>Logout</button>
-                  <div class="flex gap-3 ml-auto">
-                    <button id="pullMirrorButton" class="nenya-btn nenya-btn-vibrant" type="button" hidden>Pull Now</button>
-                    <button id="resetMirrorButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Reset &amp; Re-pull</button>
-                  </div>
+              <div id="rootFolderSection" class="space-y-4 border-t border-base-300 pt-6 mt-6" hidden>
+                <div>
+                  <h3 class="text-lg font-semibold mb-1">Root bookmark folder</h3>
+                  <p class="text-sm text-base-content/60">Choose where the mirror folder lives and what it is called.
+                  </p>
+                </div>
+                <div>
+                  <label class="form-label">Parent folder</label>
+                  <select id="rootFolderParentSelect" class="nenya-input"></select>
+                </div>
+                <div>
+                  <label class="form-label">Folder name</label>
+                  <input id="rootFolderNameInput" class="nenya-input" type="text" autocomplete="off" required>
+                </div>
+                <div class="flex justify-end">
+                  <button id="rootFolderSaveButton" class="nenya-btn nenya-btn-secondary" type="button" disabled>Save
+                    changes</button>
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-3 mt-6 pt-6 border-t border-base-300">
+                <button id="connectButton" class="nenya-btn nenya-btn-primary" type="button" hidden>Connect</button>
+                <button id="disconnectButton" class="nenya-btn nenya-btn-danger" type="button" hidden>Logout</button>
+                <div class="flex gap-3 ml-auto">
+                  <button id="pullMirrorButton" class="nenya-btn nenya-btn-vibrant" type="button" hidden>Pull
+                    Now</button>
+                  <button id="resetMirrorButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Reset
+                    &amp; Re-pull</button>
                 </div>
               </div>
             </div>
@@ -610,7 +643,8 @@
                 </div>
               </div>
 
-              <div id="optionsBackupStatusMessage" class="text-sm text-base-content/60 mb-4" role="status" aria-live="polite"></div>
+              <div id="optionsBackupStatusMessage" class="text-sm text-base-content/60 mb-4" role="status"
+                aria-live="polite"></div>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="p-5 bg-base-200 rounded-2xl">
@@ -619,8 +653,14 @@
                     <span class="nenya-badge nenya-badge-green">Success</span>
                   </div>
                   <div id="optionsBackupLastBackup" class="text-xl font-bold">Never</div>
-                  <button id="optionsBackupBackupButton" class="nenya-btn nenya-btn-secondary w-full mt-4" type="button">
-                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v4h10"/></svg>
+                  <button id="optionsBackupBackupButton" class="nenya-btn nenya-btn-secondary w-full mt-4"
+                    type="button">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <path d="M17 21v-8H7v8" />
+                      <path d="M7 3v4h10" />
+                    </svg>
                     Backup Now
                   </button>
                 </div>
@@ -629,8 +669,13 @@
                     <span class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Last Restore</span>
                   </div>
                   <div id="optionsBackupLastRestore" class="text-xl font-bold">Never</div>
-                  <button id="optionsBackupRestoreButton" class="nenya-btn nenya-btn-secondary w-full mt-4" type="button">
-                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  <button id="optionsBackupRestoreButton" class="nenya-btn nenya-btn-secondary w-full mt-4"
+                    type="button">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M23 4v6h-6" />
+                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                    </svg>
                     Restore
                   </button>
                 </div>
@@ -638,9 +683,12 @@
 
               <div class="flex flex-wrap gap-3 mt-6 pt-6 border-t border-base-300">
                 <input id="optionsImportFileInput" type="file" accept="application/json" class="hidden" />
-                <button id="optionsExportButton" class="nenya-btn nenya-btn-ghost" type="button">Export Options JSON</button>
-                <button id="optionsImportButton" class="nenya-btn nenya-btn-ghost" type="button">Import Options JSON</button>
-                <button id="optionsBackupResetButton" class="nenya-btn nenya-btn-ghost text-error ml-auto" type="button">Reset to Defaults</button>
+                <button id="optionsExportButton" class="nenya-btn nenya-btn-ghost" type="button">Export Options
+                  JSON</button>
+                <button id="optionsImportButton" class="nenya-btn nenya-btn-ghost" type="button">Import Options
+                  JSON</button>
+                <button id="optionsBackupResetButton" class="nenya-btn nenya-btn-ghost text-error ml-auto"
+                  type="button">Reset to Defaults</button>
               </div>
             </div>
           </div>
@@ -668,18 +716,23 @@
                 <!-- Bookmark Management -->
                 <div class="space-y-3">
                   <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Bookmark Management</h3>
-                  <label class="flex items-center justify-between p-4 bg-base-200 rounded-2xl cursor-pointer hover:bg-base-300 transition-colors">
+                  <label
+                    class="flex items-center justify-between p-4 bg-base-200 rounded-2xl cursor-pointer hover:bg-base-300 transition-colors">
                     <span class="font-medium">Enable bookmark notifications</span>
                     <input id="notificationBookmarkToggle" class="toggle toggle-primary" type="checkbox">
                   </label>
                   <div id="notificationBookmarkGroup" class="space-y-2 pl-4">
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Pull finished</span>
-                      <input id="notificationBookmarkPullToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationBookmarkPullToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Saved to Unsorted</span>
-                      <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationBookmarkUnsortedToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
                   </div>
                 </div>
@@ -687,26 +740,35 @@
                 <!-- Project Management -->
                 <div class="space-y-3">
                   <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Project Management</h3>
-                  <label class="flex items-center justify-between p-4 bg-base-200 rounded-2xl cursor-pointer hover:bg-base-300 transition-colors">
+                  <label
+                    class="flex items-center justify-between p-4 bg-base-200 rounded-2xl cursor-pointer hover:bg-base-300 transition-colors">
                     <span class="font-medium">Enable project notifications</span>
                     <input id="notificationProjectToggle" class="toggle toggle-primary" type="checkbox">
                   </label>
                   <div id="notificationProjectGroup" class="space-y-2 pl-4">
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Save project</span>
-                      <input id="notificationProjectSaveToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationProjectSaveToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Add tabs to project</span>
-                      <input id="notificationProjectAddToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationProjectAddToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Replace project items</span>
-                      <input id="notificationProjectReplaceToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationProjectReplaceToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Delete project</span>
-                      <input id="notificationProjectDeleteToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationProjectDeleteToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
                   </div>
                 </div>
@@ -714,14 +776,17 @@
                 <!-- Clipboard Operations -->
                 <div class="space-y-3">
                   <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Clipboard Operations</h3>
-                  <label class="flex items-center justify-between p-4 bg-base-200 rounded-2xl cursor-pointer hover:bg-base-300 transition-colors">
+                  <label
+                    class="flex items-center justify-between p-4 bg-base-200 rounded-2xl cursor-pointer hover:bg-base-300 transition-colors">
                     <span class="font-medium">Enable clipboard notifications</span>
                     <input id="notificationClipboardToggle" class="toggle toggle-primary" type="checkbox">
                   </label>
                   <div id="notificationClipboardGroup" class="space-y-2 pl-4">
-                    <label class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                    <label
+                      class="flex items-center justify-between p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
                       <span>Successfully copied (title/URL/screenshot)</span>
-                      <input id="notificationClipboardCopySuccessToggle" class="toggle toggle-sm toggle-secondary" type="checkbox">
+                      <input id="notificationClipboardCopySuccessToggle" class="toggle toggle-sm toggle-secondary"
+                        type="checkbox">
                     </label>
                   </div>
                 </div>
@@ -741,12 +806,19 @@
             <div class="options-card">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-5">
-                  <div class="w-14 h-14 bg-pink-100 dark:bg-pink-900/30 rounded-2xl flex items-center justify-center text-pink-600">
-                    <svg class="w-7 h-7" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.08-3.08a2 2 0 0 0-2.83 0L6 21"/></svg>
+                  <div
+                    class="w-14 h-14 bg-pink-100 dark:bg-pink-900/30 rounded-2xl flex items-center justify-center text-pink-600">
+                    <svg class="w-7 h-7" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-3.08-3.08a2 2 0 0 0-2.83 0L6 21" />
+                    </svg>
                   </div>
                   <div>
                     <h3 class="text-lg font-bold">Auto-save to Downloads</h3>
-                    <p class="text-sm text-base-content/60 mt-1">When enabled, screenshots will be automatically saved to your Downloads folder.</p>
+                    <p class="text-sm text-base-content/60 mt-1">When enabled, screenshots will be automatically saved
+                      to your Downloads folder.</p>
                   </div>
                 </div>
                 <input id="screenshotAutoSaveToggle" type="checkbox" class="toggle toggle-primary" />
@@ -763,17 +835,21 @@
               <p class="section-description">Customize the quick access buttons in your popup menu.</p>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div>
-                <div class="flex items-center justify-between mb-4">
-                  <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Active Shortcuts (Max 6)</h3>
-                  <button id="pinnedShortcutsResetButton" class="nenya-btn nenya-btn-ghost text-sm !px-3 !py-1" type="button">Reset</button>
+            <div class="options-card">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Active Shortcuts (Max 6)
+                    </h3>
+                    <button id="pinnedShortcutsResetButton" class="nenya-btn nenya-btn-ghost text-sm !px-3 !py-1"
+                      type="button">Reset</button>
+                  </div>
+                  <div id="pinnedShortcutsList" class="space-y-3" role="list"></div>
                 </div>
-                <div id="pinnedShortcutsList" class="space-y-3" role="list"></div>
-              </div>
-              <div>
-                <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Available</h3>
-                <div id="pinnedShortcutsAvailableList" class="space-y-3" role="list"></div>
+                <div>
+                  <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Available</h3>
+                  <div id="pinnedShortcutsAvailableList" class="space-y-3" role="list"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -792,18 +868,21 @@
                 <div class="flex gap-3 items-end">
                   <div class="flex-1">
                     <label class="form-label">URL Pattern</label>
-                    <input id="darkModePatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                    <input id="darkModePatternInput" class="nenya-input font-mono text-sm" type="text"
+                      autocomplete="off" placeholder="https://example.com/*" required>
                   </div>
                   <button id="darkModeSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
-                  <button id="darkModeCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="darkModeCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
-                <p class="text-sm text-base-content/40 mt-2">Uses browser URLPattern syntax (e.g. *://*.example.com/*)</p>
+                <p class="text-sm text-base-content/40 mt-2">Uses browser URLPattern syntax (e.g. *://*.example.com/*)
+                </p>
                 <p id="darkModeFormError" class="text-sm text-error mt-2" hidden></p>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
               <div id="darkModeRulesEmpty" class="empty-state">No dark mode rules yet. Add one above to start.</div>
               <div id="darkModeRulesList" class="space-y-3" role="list"></div>
             </div>
@@ -823,19 +902,24 @@
                 <div class="flex gap-3 items-end">
                   <div class="flex-1">
                     <label class="form-label">URL Pattern</label>
-                    <input id="brightModeWhitelistPatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                    <input id="brightModeWhitelistPatternInput" class="nenya-input font-mono text-sm" type="text"
+                      autocomplete="off" placeholder="https://example.com/*" required>
                   </div>
-                  <button id="brightModeWhitelistSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
-                  <button id="brightModeWhitelistCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="brightModeWhitelistSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add
+                    Rule</button>
+                  <button id="brightModeWhitelistCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
-                <p class="text-sm text-base-content/40 mt-2">Uses browser URLPattern syntax (e.g. *://*.example.com/*)</p>
+                <p class="text-sm text-base-content/40 mt-2">Uses browser URLPattern syntax (e.g. *://*.example.com/*)
+                </p>
                 <p id="brightModeWhitelistFormError" class="text-sm text-error mt-2" hidden></p>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
-              <div id="brightModeWhitelistEmpty" class="empty-state">No bright mode rules yet. Add one above to start.</div>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
+              <div id="brightModeWhitelistEmpty" class="empty-state">No bright mode rules yet. Add one above to start.
+              </div>
               <div id="brightModeWhitelistList" class="space-y-3" role="list"></div>
             </div>
           </div>
@@ -854,46 +938,49 @@
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                   <div class="md:col-span-2">
                     <label class="form-label">URL Pattern</label>
-                    <input id="autoReloadPatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                    <input id="autoReloadPatternInput" class="nenya-input font-mono text-sm" type="text"
+                      autocomplete="off" placeholder="https://example.com/*" required>
                   </div>
                   <div>
                     <label class="form-label">Interval (Minutes)</label>
-                    <input id="autoReloadIntervalInput" class="nenya-input" type="number" min="0.08" step="0.01" required placeholder="5">
+                    <input id="autoReloadIntervalInput" class="nenya-input" type="number" min="0.08" step="0.01"
+                      required placeholder="5">
                   </div>
                   <button id="autoReloadSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
                 </div>
-                <button id="autoReloadCancelEditButton" class="nenya-btn nenya-btn-secondary mt-3" type="button" hidden>Cancel Edit</button>
+                <button id="autoReloadCancelEditButton" class="nenya-btn nenya-btn-secondary mt-3" type="button"
+                  hidden>Cancel Edit</button>
                 <p id="autoReloadFormError" class="text-sm text-error mt-2" hidden></p>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Active Reloaders</h3>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Active Reloaders</h3>
               <div id="autoReloadRulesEmpty" class="empty-state">No auto reload rules yet. Add one above to start.</div>
               <div id="autoReloadRulesList" class="space-y-3" role="list"></div>
-            </div>
 
-            <div id="autoReloadRuleDetails" class="details-panel mt-6" hidden>
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">Rule Details</h3>
-                <span id="autoReloadRuleIntervalSummary" class="nenya-badge nenya-badge-green"></span>
+              <div id="autoReloadRuleDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-semibold">Rule Details</h3>
+                  <span id="autoReloadRuleIntervalSummary" class="nenya-badge nenya-badge-green"></span>
+                </div>
+                <dl class="space-y-3 text-sm">
+                  <div>
+                    <dt class="form-label">Pattern</dt>
+                    <dd id="autoReloadRulePatternDetail" class="font-mono"></dd>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="autoReloadRuleCreatedDetail"></dd>
+                    </div>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="autoReloadRuleUpdatedDetail"></dd>
+                    </div>
+                  </div>
+                </dl>
               </div>
-              <dl class="space-y-3 text-sm">
-                <div>
-                  <dt class="form-label">Pattern</dt>
-                  <dd id="autoReloadRulePatternDetail" class="font-mono"></dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="autoReloadRuleCreatedDetail"></dd>
-                  </div>
-                  <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="autoReloadRuleUpdatedDetail"></dd>
-                  </div>
-                </div>
-              </dl>
             </div>
           </div>
         </section>
@@ -911,7 +998,8 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label class="form-label">URL Pattern</label>
-                    <input id="highlightTextPatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                    <input id="highlightTextPatternInput" class="nenya-input font-mono text-sm" type="text"
+                      autocomplete="off" placeholder="https://example.com/*" required>
                   </div>
                   <div>
                     <label class="form-label">Type</label>
@@ -924,10 +1012,12 @@
                 </div>
                 <div>
                   <label class="form-label">Value</label>
-                  <textarea id="highlightTextValueInput" class="nenya-input font-mono text-sm resize-none" placeholder="Enter text to highlight or regex pattern" rows="3" required></textarea>
+                  <textarea id="highlightTextValueInput" class="nenya-input font-mono text-sm resize-none"
+                    placeholder="Enter text to highlight or regex pattern" rows="3" required></textarea>
                 </div>
                 <label class="flex items-center gap-3 p-3 bg-base-200 rounded-xl cursor-pointer">
-                  <input id="highlightTextIgnoreCaseInput" class="checkbox checkbox-sm checkbox-primary" type="checkbox">
+                  <input id="highlightTextIgnoreCaseInput" class="checkbox checkbox-sm checkbox-primary"
+                    type="checkbox">
                   <span class="text-sm">Ignore case when matching</span>
                 </label>
                 <div class="space-y-3">
@@ -936,20 +1026,28 @@
                     <div>
                       <label class="text-xs text-base-content/50 mb-2 block">Text color</label>
                       <div class="flex items-center gap-3">
-                        <input id="highlightTextColorInput" class="w-12 h-10 rounded-lg border border-base-300 cursor-pointer" type="color" value="#000000">
+                        <input id="highlightTextColorInput"
+                          class="w-12 h-10 rounded-lg border border-base-300 cursor-pointer" type="color"
+                          value="#000000">
                         <div class="flex-1 flex items-center gap-2">
-                          <input id="highlightTextColorAlphaInput" class="range range-xs range-primary flex-1" type="range" min="0" max="100" value="100">
-                          <span id="highlightTextColorAlphaLabel" class="text-xs text-base-content/50 w-10 text-right">100%</span>
+                          <input id="highlightTextColorAlphaInput" class="range range-xs range-primary flex-1"
+                            type="range" min="0" max="100" value="100">
+                          <span id="highlightTextColorAlphaLabel"
+                            class="text-xs text-base-content/50 w-10 text-right">100%</span>
                         </div>
                       </div>
                     </div>
                     <div>
                       <label class="text-xs text-base-content/50 mb-2 block">Background color</label>
                       <div class="flex items-center gap-3">
-                        <input id="highlightTextBackgroundInput" class="w-12 h-10 rounded-lg border border-base-300 cursor-pointer" type="color" value="#ffff00">
+                        <input id="highlightTextBackgroundInput"
+                          class="w-12 h-10 rounded-lg border border-base-300 cursor-pointer" type="color"
+                          value="#ffff00">
                         <div class="flex-1 flex items-center gap-2">
-                          <input id="highlightTextBackgroundAlphaInput" class="range range-xs range-primary flex-1" type="range" min="0" max="100" value="100">
-                          <span id="highlightTextBackgroundAlphaLabel" class="text-xs text-base-content/50 w-10 text-right">100%</span>
+                          <input id="highlightTextBackgroundAlphaInput" class="range range-xs range-primary flex-1"
+                            type="range" min="0" max="100" value="100">
+                          <span id="highlightTextBackgroundAlphaLabel"
+                            class="text-xs text-base-content/50 w-10 text-right">100%</span>
                         </div>
                       </div>
                     </div>
@@ -957,15 +1055,18 @@
                       <label class="text-xs text-base-content/50 mb-2 block">Text styling</label>
                       <div class="flex gap-3 mt-2">
                         <label class="flex items-center gap-2 cursor-pointer">
-                          <input id="highlightTextBoldInput" class="checkbox checkbox-sm checkbox-primary" type="checkbox">
+                          <input id="highlightTextBoldInput" class="checkbox checkbox-sm checkbox-primary"
+                            type="checkbox">
                           <span class="text-sm font-bold">B</span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer">
-                          <input id="highlightTextItalicInput" class="checkbox checkbox-sm checkbox-primary" type="checkbox">
+                          <input id="highlightTextItalicInput" class="checkbox checkbox-sm checkbox-primary"
+                            type="checkbox">
                           <span class="text-sm italic">I</span>
                         </label>
                         <label class="flex items-center gap-2 cursor-pointer">
-                          <input id="highlightTextUnderlineInput" class="checkbox checkbox-sm checkbox-primary" type="checkbox">
+                          <input id="highlightTextUnderlineInput" class="checkbox checkbox-sm checkbox-primary"
+                            type="checkbox">
                           <span class="text-sm underline">U</span>
                         </label>
                       </div>
@@ -974,58 +1075,61 @@
                 </div>
                 <p id="highlightTextFormError" class="text-sm text-error" hidden></p>
                 <div class="flex gap-3">
-                  <button id="highlightTextSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
-                  <button id="highlightTextCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="highlightTextSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add
+                    Rule</button>
+                  <button id="highlightTextCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
-              <div id="highlightTextRulesEmpty" class="empty-state">No highlight text rules yet. Add one above to start.</div>
-              <div id="highlightTextRulesList" class="space-y-3" role="list"></div>
-            </div>
-
-            <div id="highlightTextRuleDetails" class="details-panel mt-6" hidden>
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">Rule Details</h3>
-                <div class="flex gap-2 items-center">
-                  <span id="highlightTextRuleTypeSummary" class="nenya-badge nenya-badge-blue"></span>
-                  <div class="flex gap-1">
-                    <div id="highlightTextRuleColorPreview" class="w-5 h-5 rounded border border-base-300"></div>
-                    <div id="highlightTextRuleBackgroundPreview" class="w-5 h-5 rounded border border-base-300"></div>
-                  </div>
-                  <div id="highlightTextRuleStylePreview" class="flex gap-1 text-xs">
-                    <span id="highlightTextRuleBoldPreview" class="hidden font-bold">B</span>
-                    <span id="highlightTextRuleItalicPreview" class="hidden italic">I</span>
-                    <span id="highlightTextRuleUnderlinePreview" class="hidden underline">U</span>
-                  </div>
-                </div>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
+              <div id="highlightTextRulesEmpty" class="empty-state">No highlight text rules yet. Add one above to start.
               </div>
-              <dl class="space-y-3 text-sm">
-                <div>
-                  <dt class="form-label">Pattern</dt>
-                  <dd id="highlightTextRulePatternDetail" class="font-mono"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">Value</dt>
-                  <dd id="highlightTextRuleValueDetail" class="font-mono"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">Ignore Case</dt>
-                  <dd id="highlightTextRuleIgnoreCaseDetail"></dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="highlightTextRuleCreatedDetail"></dd>
-                  </div>
-                  <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="highlightTextRuleUpdatedDetail"></dd>
+              <div id="highlightTextRulesList" class="space-y-3" role="list"></div>
+
+              <div id="highlightTextRuleDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-semibold">Rule Details</h3>
+                  <div class="flex gap-2 items-center">
+                    <span id="highlightTextRuleTypeSummary" class="nenya-badge nenya-badge-blue"></span>
+                    <div class="flex gap-1">
+                      <div id="highlightTextRuleColorPreview" class="w-5 h-5 rounded border border-base-300"></div>
+                      <div id="highlightTextRuleBackgroundPreview" class="w-5 h-5 rounded border border-base-300"></div>
+                    </div>
+                    <div id="highlightTextRuleStylePreview" class="flex gap-1 text-xs">
+                      <span id="highlightTextRuleBoldPreview" class="hidden font-bold">B</span>
+                      <span id="highlightTextRuleItalicPreview" class="hidden italic">I</span>
+                      <span id="highlightTextRuleUnderlinePreview" class="hidden underline">U</span>
+                    </div>
                   </div>
                 </div>
-              </dl>
+                <dl class="space-y-3 text-sm">
+                  <div>
+                    <dt class="form-label">Pattern</dt>
+                    <dd id="highlightTextRulePatternDetail" class="font-mono"></dd>
+                  </div>
+                  <div>
+                    <dt class="form-label">Value</dt>
+                    <dd id="highlightTextRuleValueDetail" class="font-mono"></dd>
+                  </div>
+                  <div>
+                    <dt class="form-label">Ignore Case</dt>
+                    <dd id="highlightTextRuleIgnoreCaseDetail"></dd>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="highlightTextRuleCreatedDetail"></dd>
+                    </div>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="highlightTextRuleUpdatedDetail"></dd>
+                    </div>
+                  </div>
+                </dl>
+              </div>
             </div>
           </div>
         </section>
@@ -1039,53 +1143,63 @@
             </div>
 
             <div class="info-box mb-6">
-              <svg class="w-5 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              <svg class="w-5 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
               <p>Use the element picker from the extension popup to easily add new blocking rules while browsing.</p>
             </div>
 
-            <div class="space-y-4">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
-              <div id="blockElementsRulesEmpty" class="empty-state">No blocking rules yet. Use the element picker (🎯 button in popup) to create rules.</div>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
+              <div id="blockElementsRulesEmpty" class="empty-state">No blocking rules yet. Use the element picker (🎯
+                button in popup) to create rules.</div>
               <div id="blockElementsRulesList" class="space-y-3" role="list"></div>
-            </div>
 
-            <div id="blockElementsRuleDetails" class="details-panel mt-6" hidden>
-              <div class="flex items-center justify-between mb-4">
-                <h3 class="text-lg font-semibold">Rule Details</h3>
-                <span id="blockElementsRuleSelectorCount" class="nenya-badge nenya-badge-violet"></span>
-              </div>
-              <dl class="space-y-4 text-sm">
-                <div>
-                  <dt class="form-label">URL Pattern</dt>
-                  <dd class="flex items-center gap-2">
-                    <input id="blockElementsRulePatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" />
-                    <button id="blockElementsRulePatternSaveButton" class="nenya-btn nenya-btn-primary !py-2" type="button" hidden>Save</button>
-                    <button id="blockElementsRulePatternCancelButton" class="nenya-btn nenya-btn-secondary !py-2" type="button" hidden>Cancel</button>
-                  </dd>
+              <div id="blockElementsRuleDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="text-lg font-semibold">Rule Details</h3>
+                  <span id="blockElementsRuleSelectorCount" class="nenya-badge nenya-badge-violet"></span>
                 </div>
-                <div>
-                  <dt class="form-label">CSS Selectors</dt>
-                  <dd class="space-y-3">
-                    <div class="flex gap-2">
-                      <input id="blockElementsRuleAddSelectorInput" class="nenya-input font-mono text-sm flex-1" type="text" autocomplete="off" placeholder="Enter CSS selector (e.g., .ad-banner, #sidebar)">
-                      <button id="blockElementsRuleAddSelectorButton" class="nenya-btn nenya-btn-vibrant !py-2" type="button">Add</button>
+                <dl class="space-y-4 text-sm">
+                  <div>
+                    <dt class="form-label">URL Pattern</dt>
+                    <dd class="flex items-center gap-2">
+                      <input id="blockElementsRulePatternInput" class="nenya-input font-mono text-sm" type="text"
+                        autocomplete="off" />
+                      <button id="blockElementsRulePatternSaveButton" class="nenya-btn nenya-btn-primary !py-2"
+                        type="button" hidden>Save</button>
+                      <button id="blockElementsRulePatternCancelButton" class="nenya-btn nenya-btn-secondary !py-2"
+                        type="button" hidden>Cancel</button>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="form-label">CSS Selectors</dt>
+                    <dd class="space-y-3">
+                      <div class="flex gap-2">
+                        <input id="blockElementsRuleAddSelectorInput" class="nenya-input font-mono text-sm flex-1"
+                          type="text" autocomplete="off" placeholder="Enter CSS selector (e.g., .ad-banner, #sidebar)">
+                        <button id="blockElementsRuleAddSelectorButton" class="nenya-btn nenya-btn-vibrant !py-2"
+                          type="button">Add</button>
+                      </div>
+                      <div id="blockElementsRuleSelectorsList" class="space-y-2"></div>
+                    </dd>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="blockElementsRuleCreatedDetail"></dd>
                     </div>
-                    <div id="blockElementsRuleSelectorsList" class="space-y-2"></div>
-                  </dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="blockElementsRuleCreatedDetail"></dd>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="blockElementsRuleUpdatedDetail"></dd>
+                    </div>
                   </div>
-                  <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="blockElementsRuleUpdatedDetail"></dd>
-                  </div>
+                </dl>
+                <div class="flex justify-end mt-4 pt-4 border-t border-base-300">
+                  <button id="blockElementsRuleDeleteButton" class="nenya-btn nenya-btn-danger" type="button">Delete
+                    Rule</button>
                 </div>
-              </dl>
-              <div class="flex justify-end mt-4 pt-4 border-t border-base-300">
-                <button id="blockElementsRuleDeleteButton" class="nenya-btn nenya-btn-danger" type="button">Delete Rule</button>
               </div>
             </div>
           </div>
@@ -1100,66 +1214,80 @@
             </div>
 
             <div class="info-box mb-6">
-              <svg class="w-5 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-              <p>Custom code rules are stored locally on this device. They're included in Raindrop backups and exports for syncing across devices.</p>
+              <svg class="w-5 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+              <p>Custom code rules are stored locally on this device. They're included in Raindrop backups and exports
+                for syncing across devices.</p>
             </div>
 
             <div class="options-card mb-6">
               <form id="customCodeRuleForm" class="space-y-4" novalidate>
                 <div>
                   <label class="form-label">URL Pattern</label>
-                  <input id="customCodePatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                  <input id="customCodePatternInput" class="nenya-input font-mono text-sm" type="text"
+                    autocomplete="off" placeholder="https://example.com/*" required>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label class="form-label">Custom CSS</label>
-                    <div id="customCodeCSSInput" class="border border-base-300 rounded-xl overflow-hidden" style="height: 300px;"></div>
+                    <div id="customCodeCSSInput" class="border border-base-300 rounded-xl overflow-hidden"
+                      style="height: 300px;"></div>
                   </div>
                   <div>
                     <label class="form-label">Custom JavaScript</label>
-                    <div id="customCodeJSInput" class="border border-base-300 rounded-xl overflow-hidden" style="height: 300px;"></div>
+                    <div id="customCodeJSInput" class="border border-base-300 rounded-xl overflow-hidden"
+                      style="height: 300px;"></div>
                   </div>
                 </div>
                 <p id="customCodeFormError" class="text-sm text-error" hidden></p>
                 <div class="flex gap-3">
                   <button id="customCodeSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
-                  <button id="customCodeCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="customCodeCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
               <div id="customCodeRulesEmpty" class="empty-state">No custom code rules yet. Add one above to start.</div>
               <div id="customCodeRulesList" class="space-y-3" role="list"></div>
-            </div>
 
-            <div id="customCodeRuleDetails" class="details-panel mt-6" hidden>
-              <h3 class="text-lg font-semibold mb-4">Rule Details</h3>
-              <dl class="space-y-4 text-sm">
-                <div>
-                  <dt class="form-label">Pattern</dt>
-                  <dd id="customCodeRulePatternDetail" class="font-mono"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">CSS Code</dt>
-                  <dd id="customCodeRuleCSSDetail" class="font-mono text-xs whitespace-pre-wrap bg-base-300 p-3 rounded-lg max-h-40 overflow-auto"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">JavaScript Code</dt>
-                  <dd id="customCodeRuleJSDetail" class="font-mono text-xs whitespace-pre-wrap bg-base-300 p-3 rounded-lg max-h-40 overflow-auto"></dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
+              <div id="customCodeRuleDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <h3 class="text-lg font-semibold mb-4">Rule Details</h3>
+                <dl class="space-y-4 text-sm">
                   <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="customCodeRuleCreatedDetail"></dd>
+                    <dt class="form-label">Pattern</dt>
+                    <dd id="customCodeRulePatternDetail" class="font-mono"></dd>
                   </div>
                   <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="customCodeRuleUpdatedDetail"></dd>
+                    <dt class="form-label">CSS Code</dt>
+                    <dd id="customCodeRuleCSSDetail"
+                      class="font-mono text-xs whitespace-pre-wrap bg-base-300 p-3 rounded-lg max-h-40 overflow-auto">
+                    </dd>
                   </div>
-                </div>
-              </dl>
+                  <div>
+                    <dt class="form-label">JavaScript Code</dt>
+                    <dd id="customCodeRuleJSDetail"
+                      class="font-mono text-xs whitespace-pre-wrap bg-base-300 p-3 rounded-lg max-h-40 overflow-auto">
+                    </dd>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="customCodeRuleCreatedDetail"></dd>
+                    </div>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="customCodeRuleUpdatedDetail"></dd>
+                    </div>
+                  </div>
+                </dl>
+              </div>
             </div>
           </div>
         </section>
@@ -1176,14 +1304,17 @@
               <form id="urlProcessRuleForm" class="space-y-4" novalidate>
                 <div>
                   <label class="form-label">Rule Name</label>
-                  <input id="urlProcessRuleNameInput" class="nenya-input" type="text" autocomplete="off" placeholder="E.g., Remove tracking parameters" required>
+                  <input id="urlProcessRuleNameInput" class="nenya-input" type="text" autocomplete="off"
+                    placeholder="E.g., Remove tracking parameters" required>
                 </div>
 
                 <div class="space-y-3">
                   <label class="form-label">URL Patterns</label>
                   <div class="flex gap-2">
-                    <input id="urlProcessRuleAddPatternInput" class="nenya-input font-mono text-sm flex-1" type="text" autocomplete="off" placeholder="https://example.com/*">
-                    <button id="urlProcessRuleAddPatternButton" class="nenya-btn nenya-btn-secondary" type="button">Add</button>
+                    <input id="urlProcessRuleAddPatternInput" class="nenya-input font-mono text-sm flex-1" type="text"
+                      autocomplete="off" placeholder="https://example.com/*">
+                    <button id="urlProcessRuleAddPatternButton" class="nenya-btn nenya-btn-secondary"
+                      type="button">Add</button>
                   </div>
                   <div id="urlProcessRulePatternsList" class="space-y-2"></div>
                 </div>
@@ -1196,9 +1327,12 @@
                       <option value="replace">Replace param value</option>
                       <option value="remove">Remove param</option>
                     </select>
-                    <input id="urlProcessRuleProcessorNameInput" class="nenya-input font-mono text-sm flex-1 min-w-32" type="text" autocomplete="off" placeholder="Parameter name">
-                    <input id="urlProcessRuleProcessorValueInput" class="nenya-input font-mono text-sm flex-1 min-w-32" type="text" autocomplete="off" placeholder="Value">
-                    <button id="urlProcessRuleAddProcessorButton" class="nenya-btn nenya-btn-secondary" type="button">Add</button>
+                    <input id="urlProcessRuleProcessorNameInput" class="nenya-input font-mono text-sm flex-1 min-w-32"
+                      type="text" autocomplete="off" placeholder="Parameter name">
+                    <input id="urlProcessRuleProcessorValueInput" class="nenya-input font-mono text-sm flex-1 min-w-32"
+                      type="text" autocomplete="off" placeholder="Value">
+                    <button id="urlProcessRuleAddProcessorButton" class="nenya-btn nenya-btn-secondary"
+                      type="button">Add</button>
                   </div>
                   <div id="urlProcessRuleProcessorsList" class="space-y-2"></div>
                 </div>
@@ -1206,12 +1340,16 @@
                 <div class="space-y-3">
                   <label class="form-label">When to Apply</label>
                   <div class="space-y-2">
-                    <label class="flex items-center gap-3 p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
-                      <input id="urlProcessRuleApplyWhenCopy" class="checkbox checkbox-sm checkbox-primary" type="checkbox">
+                    <label
+                      class="flex items-center gap-3 p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                      <input id="urlProcessRuleApplyWhenCopy" class="checkbox checkbox-sm checkbox-primary"
+                        type="checkbox">
                       <span>Copy to clipboard</span>
                     </label>
-                    <label class="flex items-center gap-3 p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
-                      <input id="urlProcessRuleApplyWhenRaindrop" class="checkbox checkbox-sm checkbox-primary" type="checkbox">
+                    <label
+                      class="flex items-center gap-3 p-3 bg-base-200 rounded-xl cursor-pointer hover:bg-base-300 transition-colors">
+                      <input id="urlProcessRuleApplyWhenRaindrop" class="checkbox checkbox-sm checkbox-primary"
+                        type="checkbox">
                       <span>Save to Raindrop</span>
                     </label>
                   </div>
@@ -1219,48 +1357,50 @@
 
                 <p id="urlProcessRuleFormError" class="text-sm text-error" hidden></p>
                 <div class="flex gap-3">
-                  <button id="urlProcessRuleSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
-                  <button id="urlProcessRuleCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="urlProcessRuleSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add
+                    Rule</button>
+                  <button id="urlProcessRuleCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
               <div id="urlProcessRulesEmpty" class="empty-state">No URL process rules yet. Add one above to start.</div>
               <div id="urlProcessRulesList" class="space-y-3" role="list"></div>
-            </div>
 
-            <div id="urlProcessRuleDetails" class="details-panel mt-6" hidden>
-              <h3 class="text-lg font-semibold mb-4">Rule Details</h3>
-              <dl class="space-y-4 text-sm">
-                <div>
-                  <dt class="form-label">Name</dt>
-                  <dd id="urlProcessRuleDetailName" class="font-medium"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">URL Patterns</dt>
-                  <dd id="urlProcessRuleDetailPatterns" class="space-y-1"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">Processors</dt>
-                  <dd id="urlProcessRuleDetailProcessors" class="space-y-1"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">When to Apply</dt>
-                  <dd id="urlProcessRuleDetailApplyWhen" class="space-y-1"></dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
+              <div id="urlProcessRuleDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <h3 class="text-lg font-semibold mb-4">Rule Details</h3>
+                <dl class="space-y-4 text-sm">
                   <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="urlProcessRuleDetailCreated"></dd>
+                    <dt class="form-label">Name</dt>
+                    <dd id="urlProcessRuleDetailName" class="font-medium"></dd>
                   </div>
                   <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="urlProcessRuleDetailUpdated"></dd>
+                    <dt class="form-label">URL Patterns</dt>
+                    <dd id="urlProcessRuleDetailPatterns" class="space-y-1"></dd>
                   </div>
-                </div>
-              </dl>
+                  <div>
+                    <dt class="form-label">Processors</dt>
+                    <dd id="urlProcessRuleDetailProcessors" class="space-y-1"></dd>
+                  </div>
+                  <div>
+                    <dt class="form-label">When to Apply</dt>
+                    <dd id="urlProcessRuleDetailApplyWhen" class="space-y-1"></dd>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="urlProcessRuleDetailCreated"></dd>
+                    </div>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="urlProcessRuleDetailUpdated"></dd>
+                    </div>
+                  </div>
+                </dl>
+              </div>
             </div>
           </div>
         </section>
@@ -1278,49 +1418,54 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label class="form-label">URL Pattern</label>
-                    <input id="autoGoogleLoginPatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/*" required>
+                    <input id="autoGoogleLoginPatternInput" class="nenya-input font-mono text-sm" type="text"
+                      autocomplete="off" placeholder="https://example.com/*" required>
                   </div>
                   <div>
                     <label class="form-label">Google Email (Optional)</label>
-                    <input id="autoGoogleLoginEmailInput" class="nenya-input" type="email" autocomplete="off" placeholder="user@example.com">
+                    <input id="autoGoogleLoginEmailInput" class="nenya-input" type="email" autocomplete="off"
+                      placeholder="user@example.com">
                   </div>
                 </div>
                 <p id="autoGoogleLoginFormError" class="text-sm text-error" hidden></p>
                 <div class="flex gap-3">
-                  <button id="autoGoogleLoginSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add Rule</button>
-                  <button id="autoGoogleLoginCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="autoGoogleLoginSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add
+                    Rule</button>
+                  <button id="autoGoogleLoginCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Rules</h3>
-              <div id="autoGoogleLoginRulesEmpty" class="empty-state">No auto Google login rules yet. Add one above to start.</div>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
+              <div id="autoGoogleLoginRulesEmpty" class="empty-state">No auto Google login rules yet. Add one above to
+                start.</div>
               <div id="autoGoogleLoginRulesList" class="space-y-3" role="list"></div>
-            </div>
 
-            <div id="autoGoogleLoginRuleDetails" class="details-panel mt-6" hidden>
-              <h3 class="text-lg font-semibold mb-4">Rule Details</h3>
-              <dl class="space-y-4 text-sm">
-                <div>
-                  <dt class="form-label">Pattern</dt>
-                  <dd id="autoGoogleLoginRulePatternDetail" class="font-mono"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">Google Account Email</dt>
-                  <dd id="autoGoogleLoginRuleEmailDetail"></dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
+              <div id="autoGoogleLoginRuleDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <h3 class="text-lg font-semibold mb-4">Rule Details</h3>
+                <dl class="space-y-4 text-sm">
                   <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="autoGoogleLoginRuleCreatedDetail"></dd>
+                    <dt class="form-label">Pattern</dt>
+                    <dd id="autoGoogleLoginRulePatternDetail" class="font-mono"></dd>
                   </div>
                   <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="autoGoogleLoginRuleUpdatedDetail"></dd>
+                    <dt class="form-label">Google Account Email</dt>
+                    <dd id="autoGoogleLoginRuleEmailDetail"></dd>
                   </div>
-                </div>
-              </dl>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="autoGoogleLoginRuleCreatedDetail"></dd>
+                    </div>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="autoGoogleLoginRuleUpdatedDetail"></dd>
+                    </div>
+                  </div>
+                </dl>
+              </div>
             </div>
           </div>
         </section>
@@ -1337,51 +1482,56 @@
               <form id="llmPromptForm" class="space-y-4" novalidate>
                 <div>
                   <label class="form-label">Prompt Name</label>
-                  <input id="llmPromptNameInput" class="nenya-input" type="text" autocomplete="off" placeholder="E.g., Code Review Assistant" required>
+                  <input id="llmPromptNameInput" class="nenya-input" type="text" autocomplete="off"
+                    placeholder="E.g., Code Review Assistant" required>
                 </div>
                 <div>
                   <label class="form-label">Prompt Text</label>
-                  <textarea id="llmPromptTextInput" class="nenya-input resize-none" placeholder="Enter your prompt text here..." rows="6" required></textarea>
+                  <textarea id="llmPromptTextInput" class="nenya-input resize-none"
+                    placeholder="Enter your prompt text here..." rows="6" required></textarea>
                 </div>
                 <p id="llmPromptFormError" class="text-sm text-error" hidden></p>
                 <div class="flex gap-3">
-                  <button id="llmPromptSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Save Prompt</button>
-                  <button id="llmPromptCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                  <button id="llmPromptSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Save
+                    Prompt</button>
+                  <button id="llmPromptCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button"
+                    hidden>Cancel</button>
                 </div>
               </form>
             </div>
 
-            <div class="space-y-3">
-              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Saved Prompts</h3>
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Prompts</h3>
               <div id="llmPromptsEmpty" class="empty-state">No saved prompts yet. Add one above to start.</div>
               <div id="llmPromptsList" class="grid grid-cols-1 md:grid-cols-2 gap-4" role="list"></div>
-            </div>
 
-            <div id="llmPromptDetails" class="details-panel mt-6" hidden>
-              <h3 class="text-lg font-semibold mb-4">Prompt Details</h3>
-              <dl class="space-y-4 text-sm">
-                <div>
-                  <dt class="form-label">Name</dt>
-                  <dd id="llmPromptDetailName" class="font-medium"></dd>
-                </div>
-                <div>
-                  <dt class="form-label">Prompt</dt>
-                  <dd id="llmPromptDetailText" class="whitespace-pre-wrap bg-base-300 p-3 rounded-lg max-h-60 overflow-auto"></dd>
-                </div>
-                <div class="grid grid-cols-2 gap-4">
+              <div id="llmPromptDetails" class="mt-6 pt-6 border-t border-base-300" hidden>
+                <h3 class="text-lg font-semibold mb-4">Prompt Details</h3>
+                <dl class="space-y-4 text-sm">
                   <div>
-                    <dt class="form-label">Created</dt>
-                    <dd id="llmPromptDetailCreated"></dd>
+                    <dt class="form-label">Name</dt>
+                    <dd id="llmPromptDetailName" class="font-medium"></dd>
                   </div>
                   <div>
-                    <dt class="form-label">Last Updated</dt>
-                    <dd id="llmPromptDetailUpdated"></dd>
+                    <dt class="form-label">Prompt</dt>
+                    <dd id="llmPromptDetailText"
+                      class="whitespace-pre-wrap bg-base-300 p-3 rounded-lg max-h-60 overflow-auto"></dd>
                   </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <dt class="form-label">Created</dt>
+                      <dd id="llmPromptDetailCreated"></dd>
+                    </div>
+                    <div>
+                      <dt class="form-label">Last Updated</dt>
+                      <dd id="llmPromptDetailUpdated"></dd>
+                    </div>
+                  </div>
+                </dl>
+                <div class="flex justify-between mt-4 pt-4 border-t border-base-300">
+                  <button id="llmPromptEditButton" class="nenya-btn nenya-btn-primary" type="button">Edit</button>
+                  <button id="llmPromptDeleteButton" class="nenya-btn nenya-btn-danger" type="button">Delete</button>
                 </div>
-              </dl>
-              <div class="flex justify-between mt-4 pt-4 border-t border-base-300">
-                <button id="llmPromptEditButton" class="nenya-btn nenya-btn-primary" type="button">Edit</button>
-                <button id="llmPromptDeleteButton" class="nenya-btn nenya-btn-danger" type="button">Delete</button>
               </div>
             </div>
           </div>
@@ -1398,7 +1548,13 @@
             <div class="options-card">
               <div class="flex items-center gap-4 mb-6">
                 <div class="w-12 h-12 bg-base-200 rounded-xl flex items-center justify-center">
-                  <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="16" x="4" y="4" rx="2"/><path d="M12 8h.01"/><path d="M16 4v16"/><path d="M4 16h16"/></svg>
+                  <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect width="16" height="16" x="4" y="4" rx="2" />
+                    <path d="M12 8h.01" />
+                    <path d="M16 4v16" />
+                    <path d="M4 16h16" />
+                  </svg>
                 </div>
                 <div>
                   <h3 class="text-lg font-bold">Tab Operations</h3>
@@ -1406,10 +1562,15 @@
                 </div>
               </div>
               <button id="debugReloadAllTabsButton" class="nenya-btn nenya-btn-primary" type="button">
-                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 4v6h-6" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
                 Reload All Tabs
               </button>
-              <div id="debugOperationStatus" class="text-sm text-base-content/60 mt-4" role="status" aria-live="polite"></div>
+              <div id="debugOperationStatus" class="text-sm text-base-content/60 mt-4" role="status" aria-live="polite">
+              </div>
             </div>
           </div>
         </section>
