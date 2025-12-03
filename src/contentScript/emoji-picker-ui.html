@@ -14,8 +14,12 @@
     html, body {
       width: 100%;
       height: 100%;
-      background: transparent;
+      background: transparent !important;
+      background-color: transparent !important;
       overflow: hidden;
+      /* Force light color-scheme to ensure transparent backgrounds stay transparent */
+      /* The emoji-picker component itself handles dark mode via CSS variables */
+      color-scheme: only light;
     }
     
     .container {

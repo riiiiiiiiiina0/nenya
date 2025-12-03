@@ -244,18 +244,15 @@
     return new Promise((resolve) => {
       const iframe = document.createElement('iframe');
       iframe.setAttribute('data-nenya-emoji-picker', pickerUniqueId);
-      
-      // Detect if OS theme is dark
-      const isDarkMode = window.matchMedia && 
-                        window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const colorScheme = isDarkMode ? 'color-scheme: dark !important;' : '';
+      iframe.setAttribute('allowtransparency', 'true');
       
       iframe.style.cssText = `
         background: transparent !important;
+        background-color: transparent !important;
         border: 0 !important;
         border-radius: 0 !important;
         box-shadow: none !important;
-        ${colorScheme}
+        color-scheme: only light !important;
         display: block !important;
         height: 100vh !important;
         left: 0 !important;
