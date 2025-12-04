@@ -343,6 +343,7 @@ const BACKUP_ALARM_NAME = 'nenya-options-backup-sync';
 const BACKUP_ALARM_PERIOD_MINUTES = 5;
 const BACKUP_SUPPRESSION_DURATION_MS = 1500;
 const AUTO_NOTIFICATION_COOLDOWN_MS = 15 * 60 * 1000;
+const AUTOMERGE_SYNC_DEBOUNCE_MS = 2_000;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
@@ -413,6 +414,11 @@ let lastAutoRestoreAttemptAt = 0;
 // Automerge sync state
 let automergeSyncQueued = false;
 let automergeSyncRunning = false;
+/** @type {number | null} */
+let automergeSyncDebounceTimer = null;
+let pendingAutomergeTrigger = 'storage';
+let storageListenerRegistered = false;
+let alarmListenerRegistered = false;
 
 const CATEGORY_IDS = [
   'auth-provider-settings',
@@ -3975,10 +3981,34 @@ async function updateAutomergeState(updates) {
  * @returns {void}
  */
 function queueAutomergeSync(trigger) {
+  if (trigger === 'manual') {
+    pendingAutomergeTrigger = 'manual';
+    if (automergeSyncDebounceTimer) {
+      clearTimeout(automergeSyncDebounceTimer);
+      automergeSyncDebounceTimer = null;
+    }
+    startAutomergeSyncRun();
+    return;
+  }
+
+  if (pendingAutomergeTrigger !== 'manual') {
+    pendingAutomergeTrigger = trigger;
+  }
+
+  if (automergeSyncDebounceTimer) {
+    return;
+  }
+
+  automergeSyncDebounceTimer = setTimeout(() => {
+    automergeSyncDebounceTimer = null;
+    startAutomergeSyncRun();
+  }, AUTOMERGE_SYNC_DEBOUNCE_MS);
+}
+
+function startAutomergeSyncRun() {
   automergeSyncQueued = true;
 
   if (automergeSyncRunning) {
-    console.log('[automerge] Sync already running, will retry after completion');
     return;
   }
 
@@ -3987,11 +4017,12 @@ function queueAutomergeSync(trigger) {
   const runLoop = async () => {
     while (automergeSyncQueued) {
       automergeSyncQueued = false;
+      const trigger = pendingAutomergeTrigger;
+      pendingAutomergeTrigger = 'storage';
       try {
         const syncInfo = await syncWithRemote({ forceRestore: false });
         console.log('[automerge] Sync completed successfully');
-        
-        // Update state
+
         await updateAutomergeState({
           lastSyncAt: Date.now(),
           lastMergeAt: syncInfo?.merged ? Date.now() : undefined,
@@ -4003,19 +4034,17 @@ function queueAutomergeSync(trigger) {
         });
       } catch (error) {
         console.error('[automerge] Sync failed:', error);
-        
-        // Update error state
+
         await updateAutomergeState({
           lastSyncError: error.message || 'Sync failed',
           lastSyncErrorAt: Date.now(),
         });
-        
-        // Optionally notify user on error
+
         if (trigger === 'manual') {
           void pushNotification(
             'options-backup-error',
             'Options Sync Failed',
-            `Failed to sync settings: ${error.message}`
+            `Failed to sync settings: ${error.message}`,
           );
         }
       }
@@ -4539,7 +4568,7 @@ function handleAlarm(alarm) {
   if (alarm.name !== BACKUP_ALARM_NAME) {
     return;
   }
-  void performRestore('alarm', true);
+  queueAutomergeSync('alarm');
 }
 
 /**
@@ -4566,13 +4595,23 @@ function handleWindowFocus(windowId) {
  * @returns {void}
  */
 export function initializeOptionsBackupService() {
-  // Legacy backup service is disabled in favor of Automerge sync
-  // We keep the function to avoid breaking imports, but it does nothing
-  console.log('[options-backup] Legacy backup service disabled (using Automerge)');
   if (initialized) {
     return;
   }
   initialized = true;
+
+  if (chrome?.storage?.onChanged && !storageListenerRegistered) {
+    chrome.storage.onChanged.addListener(handleStorageChanges);
+    storageListenerRegistered = true;
+  }
+
+  if (chrome?.alarms && !alarmListenerRegistered) {
+    chrome.alarms.onAlarm.addListener(handleAlarm);
+    alarmListenerRegistered = true;
+    void scheduleRestoreAlarm();
+  }
+
+  console.log('[options-backup] Automerge backup service initialized');
 }
 
 /**
