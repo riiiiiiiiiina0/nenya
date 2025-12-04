@@ -10,6 +10,7 @@ import {
   isValidUrlPattern,
 } from './brightMode.js';
 import { loadRules as loadHighlightTextRules } from './highlightText.js';
+import { loadRules as loadVideoEnhancementRules } from './videoEnhancements.js';
 import { loadLLMPrompts } from './llmPrompts.js';
 import { loadRules as loadUrlProcessRules } from './urlProcessRules.js';
 import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
@@ -100,6 +101,17 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  */
 
 /**
+ * @typedef {Object} VideoEnhancementRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {'url-pattern' | 'wildcard'} patternType
+ * @property {{ autoFullscreen: boolean }} enhancements
+ * @property {boolean} [disabled]
+ * @property {string} [createdAt]
+ * @property {string} [updatedAt]
+ */
+
+/**
  * @typedef {Object} BlockElementRuleSettings
  * @property {string} id
  * @property {string} urlPattern
@@ -176,6 +188,7 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  * @property {AutoReloadRuleSettings[]} autoReloadRules
  * @property {BrightModeSettings} brightModeSettings
  * @property {HighlightTextRuleSettings[]} highlightTextRules
+ * @property {VideoEnhancementRuleSettings[]} videoEnhancementRules
  * @property {BlockElementRuleSettings[]} blockElementRules
  * @property {CustomCodeRuleSettings[]} customCodeRules
  * @property {LLMPromptSettings[]} llmPrompts
@@ -192,12 +205,13 @@ import { loadRules as loadAutoGoogleLoginRules } from './autoGoogleLogin.js';
  */
 
 const PROVIDER_ID = 'raindrop';
-const EXPORT_VERSION = 10;
+const EXPORT_VERSION = 11;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
+const VIDEO_ENHANCEMENT_RULES_KEY = 'videoEnhancementRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
@@ -544,6 +558,101 @@ function normalizeHighlightTextRules(value) {
   });
 
   return sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+}
+
+/**
+ * Validate wildcard patterns used by video enhancements.
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function isValidEnhancementWildcardPattern(pattern) {
+  const value = pattern.trim();
+  if (!value) {
+    return false;
+  }
+  return !/\s/.test(value);
+}
+
+/**
+ * Normalize video enhancement rules from storage or input.
+ * @param {unknown} value
+ * @returns {VideoEnhancementRuleSettings[]}
+ */
+function normalizeVideoEnhancementRules(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  /** @type {VideoEnhancementRuleSettings[]} */
+  const sanitized = [];
+
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+    const raw =
+      /** @type {{ id?: unknown, pattern?: unknown, patternType?: unknown, enhancements?: { autoFullscreen?: unknown }, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+        entry
+      );
+    const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+    if (!pattern) {
+      return;
+    }
+
+    /** @type {'url-pattern' | 'wildcard'} */
+    const patternType =
+      raw.patternType === 'wildcard' ? 'wildcard' : 'url-pattern';
+
+    if (
+      (patternType === 'url-pattern' && !isValidUrlPattern(pattern)) ||
+      (patternType === 'wildcard' && !isValidEnhancementWildcardPattern(pattern))
+    ) {
+      console.warn(
+        '[importExport:videoEnhancements] Ignoring invalid pattern:',
+        pattern,
+      );
+      return;
+    }
+
+    const autoFullscreen =
+      typeof raw.enhancements?.autoFullscreen === 'boolean'
+        ? raw.enhancements.autoFullscreen
+        : false;
+
+    const id =
+      typeof raw.id === 'string' && raw.id.trim()
+        ? raw.id.trim()
+        : generateRuleId();
+
+    /** @type {VideoEnhancementRuleSettings} */
+    const normalized = {
+      id,
+      pattern,
+      patternType,
+      enhancements: {
+        autoFullscreen,
+      },
+      disabled: Boolean(raw.disabled),
+    };
+
+    if (typeof raw.createdAt === 'string') {
+      normalized.createdAt = raw.createdAt;
+    }
+    if (typeof raw.updatedAt === 'string') {
+      normalized.updatedAt = raw.updatedAt;
+    }
+
+    sanitized.push(normalized);
+  });
+
+  return sanitized.sort((a, b) => {
+    const aTime = Date.parse(a.createdAt || '') || 0;
+    const bTime = Date.parse(b.createdAt || '') || 0;
+    if (aTime === bTime) {
+      return a.pattern.localeCompare(b.pattern);
+    }
+    return bTime - aTime;
+  });
 }
 
 /**
@@ -1076,7 +1185,7 @@ function normalizePreferences(value) {
 
 /**
  * Read current settings used by Options backup.
- * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[], urlProcessRules: UrlProcessRuleSettings[], autoGoogleLoginRules: AutoGoogleLoginRuleSettings[], pinnedShortcuts: string[] }>}
+ * @returns {Promise<{ rootFolder: RootFolderBackupSettings, notifications: NotificationPreferences, autoReloadRules: AutoReloadRuleSettings[], brightModeSettings: BrightModeSettings, highlightTextRules: HighlightTextRuleSettings[], videoEnhancementRules: VideoEnhancementRuleSettings[], blockElementRules: BlockElementRuleSettings[], customCodeRules: CustomCodeRuleSettings[], llmPrompts: LLMPromptSettings[], urlProcessRules: UrlProcessRuleSettings[], autoGoogleLoginRules: AutoGoogleLoginRuleSettings[], screenshotSettings: ScreenshotSettings, pinnedShortcuts: string[] }>}
  */
 async function readCurrentOptions() {
   const [
@@ -1085,6 +1194,7 @@ async function readCurrentOptions() {
     reloadResp,
     whitelistPatterns,
     highlightTextRules,
+    videoEnhancementRules,
     blockElementResp,
     customCodeResp,
     llmPromptsResp,
@@ -1097,6 +1207,7 @@ async function readCurrentOptions() {
     chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY),
     getWhitelistPatterns(),
     loadHighlightTextRules(),
+    loadVideoEnhancementRules(),
     chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
     loadLLMPrompts(),
@@ -1183,6 +1294,7 @@ async function readCurrentOptions() {
     autoReloadRules,
     brightModeSettings,
     highlightTextRules,
+    videoEnhancementRules,
     blockElementRules,
     customCodeRules,
     llmPrompts,
@@ -1226,6 +1338,7 @@ async function handleExportClick() {
       autoReloadRules,
       brightModeSettings,
       highlightTextRules,
+      videoEnhancementRules,
       blockElementRules,
       customCodeRules,
       llmPrompts,
@@ -1244,6 +1357,7 @@ async function handleExportClick() {
         autoReloadRules,
         brightModeSettings,
         highlightTextRules,
+        videoEnhancementRules,
         blockElementRules,
         customCodeRules,
         llmPrompts,
@@ -1276,6 +1390,7 @@ async function handleExportClick() {
  * @param {AutoReloadRuleSettings[]} autoReloadRules
  * @param {BrightModeSettings} brightModeSettings
  * @param {HighlightTextRuleSettings[]} highlightTextRules
+ * @param {VideoEnhancementRuleSettings[]} videoEnhancementRules
  * @param {BlockElementRuleSettings[]} blockElementRules
  * @param {CustomCodeRuleSettings[]} customCodeRules
  * @param {LLMPromptSettings[]} llmPrompts
@@ -1291,6 +1406,7 @@ async function applyImportedOptions(
   autoReloadRules,
   brightModeSettings,
   highlightTextRules,
+  videoEnhancementRules,
   blockElementRules,
   customCodeRules,
   llmPrompts,
@@ -1345,6 +1461,9 @@ async function applyImportedOptions(
   const sanitizedHighlightTextRules = normalizeHighlightTextRules(
     highlightTextRules || [],
   );
+  const sanitizedVideoEnhancementRules = normalizeVideoEnhancementRules(
+    videoEnhancementRules || [],
+  );
   const sanitizedBlockElementRules = normalizeBlockElementRules(
     blockElementRules || [],
   );
@@ -1398,6 +1517,7 @@ async function applyImportedOptions(
       [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
       [BRIGHT_MODE_WHITELIST_KEY]: sanitizedWhitelist,
       [HIGHLIGHT_TEXT_RULES_KEY]: sanitizedHighlightTextRules,
+      [VIDEO_ENHANCEMENT_RULES_KEY]: sanitizedVideoEnhancementRules,
       [BLOCK_ELEMENT_RULES_KEY]: sanitizedBlockElementRules,
       [LLM_PROMPTS_KEY]: sanitizedLLMPrompts,
       [URL_PROCESS_RULES_KEY]: sanitizedUrlProcessRules,
@@ -1447,6 +1567,10 @@ async function handleFileChosen() {
     const highlightTextRules = /** @type {HighlightTextRuleSettings[]} */ (
       data.highlightTextRules || []
     );
+    const videoEnhancementRules =
+      /** @type {VideoEnhancementRuleSettings[]} */ (
+        data.videoEnhancementRules || []
+      );
     const blockElementRules = /** @type {BlockElementRuleSettings[]} */ (
       data.blockElementRules || []
     );
@@ -1488,6 +1612,7 @@ async function handleFileChosen() {
       autoReloadRules,
       brightModeSettings,
       highlightTextRules,
+      videoEnhancementRules,
       blockElementRules,
       customCodeRules,
       llmPrompts,
