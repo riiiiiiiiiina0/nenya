@@ -524,6 +524,10 @@
           <span class="nav-icon text-lg">✨</span>
           <span>Highlight Text</span>
         </a>
+        <a href="#video-enhancements-heading" class="nav-item nav-link" data-section="video-enhancements-heading">
+          <span class="nav-icon text-lg">🎬</span>
+          <span>Video Enhancements</span>
+        </a>
         <a href="#block-elements-heading" class="nav-item nav-link" data-section="block-elements-heading">
           <span class="nav-icon text-lg">🚫</span>
           <span>Block Elements</span>
@@ -1130,6 +1134,59 @@
                   </div>
                 </dl>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Video Enhancements Section -->
+        <section class="section-content" data-section="video-enhancements-heading" id="section-video-enhancements">
+          <div class="animate-in">
+            <div class="section-header">
+              <h1 id="video-enhancements-heading" class="section-title">Video Enhancements</h1>
+              <p class="section-description">
+                Automatically apply Nenya&#39;s video helpers on sites you trust. Start by saving a pattern for pages that should enter in-page fullscreen as soon as they load.
+              </p>
+            </div>
+
+            <div class="options-card mb-6">
+              <form id="videoEnhancementsForm" class="space-y-4" novalidate>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="form-label">URL Pattern</label>
+                    <input id="videoEnhancementsPatternInput" class="nenya-input font-mono text-sm" type="text" autocomplete="off" placeholder="https://example.com/watch/*" required>
+                  </div>
+                  <div>
+                    <label class="form-label">Pattern Type</label>
+                    <select id="videoEnhancementsPatternTypeSelect" class="nenya-input">
+                      <option value="url-pattern">URLPattern (browser-native)</option>
+                      <option value="wildcard">Wildcard (* matches anything)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="info-box">
+                  <svg class="w-5 h-5 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1010 10A10 10 0 0012 2z" />
+                  </svg>
+                  <p class="text-sm">
+                    URLPattern accepts full URLs like <code class="font-mono">https://*.example.com/*</code>. Wildcard mode is a simple substring check where <code class="font-mono">*</code> expands to any characters.
+                  </p>
+                </div>
+                <label class="flex items-center gap-3 p-3 bg-base-200 rounded-xl cursor-pointer">
+                  <input id="videoEnhancementsAutoFullscreenInput" class="checkbox checkbox-sm checkbox-primary" type="checkbox" checked>
+                  <span class="text-sm">Auto enter in-page fullscreen when the pattern matches</span>
+                </label>
+                <p id="videoEnhancementsFormError" class="text-sm text-error" hidden></p>
+                <div class="flex gap-3 flex-wrap">
+                  <button id="videoEnhancementsSaveButton" class="nenya-btn nenya-btn-vibrant" type="submit">Add rule</button>
+                  <button id="videoEnhancementsCancelEditButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Cancel</button>
+                </div>
+              </form>
+            </div>
+
+            <div class="options-card">
+              <h3 class="text-xs font-bold text-base-content/40 uppercase tracking-wider mb-4">Saved Rules</h3>
+              <div id="videoEnhancementsEmpty" class="empty-state">No video enhancement rules yet. Add one above to start.</div>
+              <div id="videoEnhancementsList" class="space-y-3" role="list"></div>
             </div>
           </div>
         </section>

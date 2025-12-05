@@ -9,6 +9,7 @@ import './autoReload.js';
 import './darkMode.js';
 import './brightMode.js';
 import './highlightText.js';
+import './videoEnhancements.js';
 import './blockElements.js';
 import './customCode.js';
 import './llmPrompts.js';

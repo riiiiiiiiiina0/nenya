@@ -162,6 +162,26 @@ import {
  */
 
 /**
+ * @typedef {'url-pattern' | 'wildcard'} VideoEnhancementPatternType
+ */
+
+/**
+ * @typedef {Object} VideoEnhancementsSettings
+ * @property {boolean} autoFullscreen
+ */
+
+/**
+ * @typedef {Object} VideoEnhancementRuleSettings
+ * @property {string} id
+ * @property {string} pattern
+ * @property {VideoEnhancementPatternType} patternType
+ * @property {VideoEnhancementsSettings} enhancements
+ * @property {boolean | undefined} disabled
+ * @property {string | undefined} createdAt
+ * @property {string | undefined} updatedAt
+ */
+
+/**
  * @typedef {Object} BrightModeSettingsBackupPayload
  * @property {'bright-mode-settings'} kind
  * @property {BrightModeSettings} settings
@@ -195,6 +215,13 @@ import {
  * @typedef {Object} BlockElementRulesBackupPayload
  * @property {'block-element-rules'} kind
  * @property {BlockElementRuleSettings[]} rules
+ * @property {BackupMetadata} metadata
+ */
+
+/**
+ * @typedef {Object} VideoEnhancementRulesBackupPayload
+ * @property {'video-enhancement-rules'} kind
+ * @property {VideoEnhancementRuleSettings[]} rules
  * @property {BackupMetadata} metadata
  */
 
@@ -316,12 +343,14 @@ const BACKUP_ALARM_NAME = 'nenya-options-backup-sync';
 const BACKUP_ALARM_PERIOD_MINUTES = 5;
 const BACKUP_SUPPRESSION_DURATION_MS = 1500;
 const AUTO_NOTIFICATION_COOLDOWN_MS = 15 * 60 * 1000;
+const AUTOMERGE_SYNC_DEBOUNCE_MS = 2_000;
 const ROOT_FOLDER_SETTINGS_KEY = 'mirrorRootFolderSettings';
 const NOTIFICATION_PREFERENCES_KEY = 'notificationPreferences';
 const AUTO_RELOAD_RULES_KEY = 'autoReloadRules';
 const DARK_MODE_RULES_KEY = 'darkModeRules';
 const BRIGHT_MODE_WHITELIST_KEY = 'brightModeWhitelist';
 const HIGHLIGHT_TEXT_RULES_KEY = 'highlightTextRules';
+const VIDEO_ENHANCEMENT_RULES_KEY = 'videoEnhancementRules';
 const BLOCK_ELEMENT_RULES_KEY = 'blockElementRules';
 const CUSTOM_CODE_RULES_KEY = 'customCodeRules';
 const LLM_PROMPTS_KEY = 'llmPrompts';
@@ -385,6 +414,11 @@ let lastAutoRestoreAttemptAt = 0;
 // Automerge sync state
 let automergeSyncQueued = false;
 let automergeSyncRunning = false;
+/** @type {number | null} */
+let automergeSyncDebounceTimer = null;
+let pendingAutomergeTrigger = 'storage';
+let storageListenerRegistered = false;
+let alarmListenerRegistered = false;
 
 const CATEGORY_IDS = [
   'auth-provider-settings',
@@ -393,6 +427,7 @@ const CATEGORY_IDS = [
   'dark-mode-rules',
   'bright-mode-settings',
   'highlight-text-rules',
+  'video-enhancement-rules',
   'block-element-rules',
   'custom-code-rules',
   'llm-prompts',
@@ -1484,6 +1519,148 @@ async function applyHighlightTextRules(rules) {
 }
 
 /**
+ * Validate wildcard patterns for video enhancements.
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function isValidVideoEnhancementWildcardPattern(pattern) {
+  const value = pattern.trim();
+  if (!value) {
+    return false;
+  }
+  return !/\s/.test(value);
+}
+
+/**
+ * Validate URLPattern strings for video enhancements.
+ * @param {string} pattern
+ * @returns {boolean}
+ */
+function isValidVideoEnhancementUrlPattern(pattern) {
+  if (!pattern.trim()) {
+    return false;
+  }
+  if (typeof URLPattern !== 'function') {
+    return true;
+  }
+  try {
+    // eslint-disable-next-line no-new
+    new URLPattern(pattern);
+    return true;
+  } catch (error) {
+    console.warn(
+      '[options-backup] Ignoring invalid video enhancement URLPattern:',
+      pattern,
+      error,
+    );
+    return false;
+  }
+}
+
+/**
+ * Normalize video enhancement rules from storage or input.
+ * @param {unknown} value
+ * @returns {{ rules: VideoEnhancementRuleSettings[], mutated: boolean }}
+ */
+function normalizeVideoEnhancementRules(value) {
+  const sanitized = [];
+  let mutated = false;
+  const originalLength = Array.isArray(value) ? value.length : 0;
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, patternType?: unknown, enhancements?: { autoFullscreen?: unknown }, disabled?: unknown, createdAt?: unknown, updatedAt?: unknown }} */ (
+          entry
+        );
+      const pattern = typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!pattern) {
+        return;
+      }
+
+      /** @type {VideoEnhancementPatternType} */
+      const patternType =
+        raw.patternType === 'wildcard' ? 'wildcard' : 'url-pattern';
+
+      const isPatternValid =
+        patternType === 'url-pattern'
+          ? isValidVideoEnhancementUrlPattern(pattern)
+          : isValidVideoEnhancementWildcardPattern(pattern);
+      if (!isPatternValid) {
+        return;
+      }
+
+      const autoFullscreen =
+        typeof raw.enhancements?.autoFullscreen === 'boolean'
+          ? raw.enhancements.autoFullscreen
+          : false;
+
+      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      if (!id) {
+        id = generateRuleId();
+        mutated = true;
+      }
+
+      /** @type {VideoEnhancementRuleSettings} */
+      const rule = {
+        id,
+        pattern,
+        patternType,
+        enhancements: {
+          autoFullscreen,
+        },
+        disabled: Boolean(raw.disabled),
+        createdAt:
+          typeof raw.createdAt === 'string' ? raw.createdAt : undefined,
+        updatedAt:
+          typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+      };
+      sanitized.push(rule);
+    });
+  }
+
+  const sorted = sanitized.sort((a, b) => a.pattern.localeCompare(b.pattern));
+  if (!mutated && sanitized.length !== originalLength) {
+    mutated = true;
+  }
+  return { rules: sorted, mutated };
+}
+
+/**
+ * Collect video enhancement rules from storage.
+ * @returns {Promise<VideoEnhancementRuleSettings[]>}
+ */
+async function collectVideoEnhancementRules() {
+  const result = await chrome.storage.sync.get(VIDEO_ENHANCEMENT_RULES_KEY);
+  const { rules: sanitized, mutated } = normalizeVideoEnhancementRules(
+    result?.[VIDEO_ENHANCEMENT_RULES_KEY],
+  );
+  if (mutated) {
+    suppressBackup('video-enhancement-rules');
+    await chrome.storage.sync.set({
+      [VIDEO_ENHANCEMENT_RULES_KEY]: sanitized,
+    });
+  }
+  return sanitized;
+}
+
+/**
+ * Apply video enhancement rules to storage.
+ * @param {VideoEnhancementRuleSettings[]} rules
+ * @returns {Promise<void>}
+ */
+async function applyVideoEnhancementRules(rules) {
+  const { rules: sanitized } = normalizeVideoEnhancementRules(rules);
+  suppressBackup('video-enhancement-rules');
+  await chrome.storage.sync.set({
+    [VIDEO_ENHANCEMENT_RULES_KEY]: sanitized,
+  });
+}
+
+/**
  * Normalize block element rules from storage or input.
  * @param {unknown} value
  * @returns {{ rules: BlockElementRuleSettings[], mutated: boolean }}
@@ -1839,6 +2016,21 @@ async function buildHighlightTextRulesPayload(trigger) {
   const metadata = await buildMetadata(trigger);
   return {
     kind: 'highlight-text-rules',
+    rules,
+    metadata,
+  };
+}
+
+/**
+ * Build the video enhancement rules payload for backup.
+ * @param {string} trigger
+ * @returns {Promise<VideoEnhancementRulesBackupPayload>}
+ */
+async function buildVideoEnhancementRulesPayload(trigger) {
+  const rules = await collectVideoEnhancementRules();
+  const metadata = await buildMetadata(trigger);
+  return {
+    kind: 'video-enhancement-rules',
     rules,
     metadata,
   };
@@ -3089,6 +3281,89 @@ function parseHighlightTextRulesItem(item) {
 }
 
 /**
+ * Attempt to parse video enhancement rules payload from Raindrop.
+ * @param {any} item
+ * @returns {{ payload: VideoEnhancementRulesBackupPayload | null, lastModified: number }}
+ */
+function parseVideoEnhancementRulesItem(item) {
+  const note = typeof item?.note === 'string' ? item.note : '';
+  if (!note) {
+    return { payload: null, lastModified: 0 };
+  }
+
+  try {
+    const parsed = JSON.parse(note);
+    if (!parsed || typeof parsed !== 'object') {
+      console.warn(
+        '[options-backup] parseVideoEnhancementRulesItem: parsed is not an object',
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    if (!Array.isArray(parsed?.rules)) {
+      console.warn(
+        '[options-backup] parseVideoEnhancementRulesItem: parsed.rules is not an array',
+        typeof parsed?.rules,
+      );
+      return { payload: null, lastModified: 0 };
+    }
+
+    const normalizedRules = normalizeVideoEnhancementRules(parsed?.rules).rules;
+
+    if (normalizedRules.length === 0 && parsed?.rules?.length > 0) {
+      console.warn(
+        '[options-backup] parseVideoEnhancementRulesItem: all rules were filtered out',
+        'original count:',
+        parsed?.rules?.length,
+      );
+    }
+
+    const payload = /** @type {VideoEnhancementRulesBackupPayload} */ ({
+      kind: 'video-enhancement-rules',
+      rules: normalizedRules,
+      metadata: {
+        version: Number.isFinite(parsed?.metadata?.version)
+          ? Number(parsed.metadata.version)
+          : STATE_VERSION,
+        lastModified: Number.isFinite(parsed?.metadata?.lastModified)
+          ? Number(parsed.metadata.lastModified)
+          : parseTimestamp(item?.lastUpdate),
+        device: {
+          id:
+            typeof parsed?.metadata?.device?.id === 'string'
+              ? parsed.metadata.device.id
+              : '',
+          platform:
+            typeof parsed?.metadata?.device?.platform === 'string'
+              ? parsed.metadata.device.platform
+              : 'unknown',
+          arch:
+            typeof parsed?.metadata?.device?.arch === 'string'
+              ? parsed.metadata.device.arch
+              : 'unknown',
+        },
+        trigger:
+          typeof parsed?.metadata?.trigger === 'string'
+            ? parsed.metadata.trigger
+            : 'unknown',
+      },
+    });
+
+    const lastModified = Number.isFinite(payload.metadata.lastModified)
+      ? payload.metadata.lastModified
+      : parseTimestamp(item?.lastUpdate);
+
+    return { payload, lastModified };
+  } catch (error) {
+    console.error(
+      '[options-backup] parseVideoEnhancementRulesItem failed:',
+      error instanceof Error ? error.message : String(error),
+    );
+    return { payload: null, lastModified: 0 };
+  }
+}
+
+/**
  * Attempt to parse block element rules payload from Raindrop.
  * @param {any} item
  * @returns {{ payload: BlockElementRulesBackupPayload | null, lastModified: number }}
@@ -3584,6 +3859,13 @@ const CATEGORY_CONFIG = {
     parseItem: parseHighlightTextRulesItem,
     applyPayload: applyHighlightTextRules,
   },
+  'video-enhancement-rules': {
+    title: 'video-enhancement-rules',
+    link: 'https://nenya.local/options/video-enhancements',
+    buildPayload: buildVideoEnhancementRulesPayload,
+    parseItem: parseVideoEnhancementRulesItem,
+    applyPayload: applyVideoEnhancementRules,
+  },
   'block-element-rules': {
     title: 'block-element-rules',
     link: 'https://nenya.local/options/block-elements',
@@ -3699,10 +3981,34 @@ async function updateAutomergeState(updates) {
  * @returns {void}
  */
 function queueAutomergeSync(trigger) {
+  if (trigger === 'manual') {
+    pendingAutomergeTrigger = 'manual';
+    if (automergeSyncDebounceTimer) {
+      clearTimeout(automergeSyncDebounceTimer);
+      automergeSyncDebounceTimer = null;
+    }
+    startAutomergeSyncRun();
+    return;
+  }
+
+  if (pendingAutomergeTrigger !== 'manual') {
+    pendingAutomergeTrigger = trigger;
+  }
+
+  if (automergeSyncDebounceTimer) {
+    return;
+  }
+
+  automergeSyncDebounceTimer = setTimeout(() => {
+    automergeSyncDebounceTimer = null;
+    startAutomergeSyncRun();
+  }, AUTOMERGE_SYNC_DEBOUNCE_MS);
+}
+
+function startAutomergeSyncRun() {
   automergeSyncQueued = true;
 
   if (automergeSyncRunning) {
-    console.log('[automerge] Sync already running, will retry after completion');
     return;
   }
 
@@ -3711,11 +4017,12 @@ function queueAutomergeSync(trigger) {
   const runLoop = async () => {
     while (automergeSyncQueued) {
       automergeSyncQueued = false;
+      const trigger = pendingAutomergeTrigger;
+      pendingAutomergeTrigger = 'storage';
       try {
         const syncInfo = await syncWithRemote({ forceRestore: false });
         console.log('[automerge] Sync completed successfully');
-        
-        // Update state
+
         await updateAutomergeState({
           lastSyncAt: Date.now(),
           lastMergeAt: syncInfo?.merged ? Date.now() : undefined,
@@ -3727,19 +4034,17 @@ function queueAutomergeSync(trigger) {
         });
       } catch (error) {
         console.error('[automerge] Sync failed:', error);
-        
-        // Update error state
+
         await updateAutomergeState({
           lastSyncError: error.message || 'Sync failed',
           lastSyncErrorAt: Date.now(),
         });
-        
-        // Optionally notify user on error
+
         if (trigger === 'manual') {
           void pushNotification(
             'options-backup-error',
             'Options Sync Failed',
-            `Failed to sync settings: ${error.message}`
+            `Failed to sync settings: ${error.message}`,
           );
         }
       }
@@ -4069,6 +4374,8 @@ async function performRestore(trigger, notifyOnError) {
           payloadToApply = payload.settings;
         } else if (payload.kind === 'highlight-text-rules') {
           payloadToApply = payload.rules;
+        } else if (payload.kind === 'video-enhancement-rules') {
+          payloadToApply = payload.rules;
         } else if (payload.kind === 'block-element-rules') {
           payloadToApply = payload.rules;
         } else if (payload.kind === 'custom-code-rules') {
@@ -4202,6 +4509,9 @@ function handleStorageChanges(changes, areaName) {
     if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
       queueCategoryBackup('highlight-text-rules', 'storage');
     }
+    if (VIDEO_ENHANCEMENT_RULES_KEY in changes) {
+      queueCategoryBackup('video-enhancement-rules', 'storage');
+    }
     if (BLOCK_ELEMENT_RULES_KEY in changes) {
       queueCategoryBackup('block-element-rules', 'storage');
     }
@@ -4258,7 +4568,7 @@ function handleAlarm(alarm) {
   if (alarm.name !== BACKUP_ALARM_NAME) {
     return;
   }
-  void performRestore('alarm', true);
+  queueAutomergeSync('alarm');
 }
 
 /**
@@ -4285,13 +4595,23 @@ function handleWindowFocus(windowId) {
  * @returns {void}
  */
 export function initializeOptionsBackupService() {
-  // Legacy backup service is disabled in favor of Automerge sync
-  // We keep the function to avoid breaking imports, but it does nothing
-  console.log('[options-backup] Legacy backup service disabled (using Automerge)');
   if (initialized) {
     return;
   }
   initialized = true;
+
+  if (chrome?.storage?.onChanged && !storageListenerRegistered) {
+    chrome.storage.onChanged.addListener(handleStorageChanges);
+    storageListenerRegistered = true;
+  }
+
+  if (chrome?.alarms && !alarmListenerRegistered) {
+    chrome.alarms.onAlarm.addListener(handleAlarm);
+    alarmListenerRegistered = true;
+    void scheduleRestoreAlarm();
+  }
+
+  console.log('[options-backup] Automerge backup service initialized');
 }
 
 /**

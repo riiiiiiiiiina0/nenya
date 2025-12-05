@@ -3,6 +3,351 @@
 
   const MIN_VIDEO_WIDTH = 640;
   const MIN_VIDEO_HEIGHT = 360;
+  const VIDEO_ENHANCEMENT_RULES_KEY = 'videoEnhancementRules';
+
+  /**
+   * @typedef {Object} VideoEnhancementRule
+   * @property {string} id
+   * @property {string} pattern
+   * @property {'url-pattern' | 'wildcard'} patternType
+   * @property {{ autoFullscreen?: boolean }} enhancements
+   * @property {boolean} [disabled]
+   */
+
+  /** @type {VideoEnhancementRule[]} */
+  let videoEnhancementRules = [];
+
+  const autoFullscreenState = {
+    /** @type {string | null} */
+    lockedRuleId: null,
+    /** @type {HTMLVideoElement | null} */
+    activeVideo: null,
+    /** @type {HTMLVideoElement | null} */
+    lastTargetVideo: null,
+    /** @type {string} */
+    url: '',
+  };
+
+  let autoFullscreenEvaluationInProgress = false;
+  let autoFullscreenEvaluationPending = false;
+  let lastObservedUrl = window.location.href;
+
+  /**
+   * @param {unknown} value
+   * @returns {VideoEnhancementRule[]}
+   */
+  function normalizeVideoEnhancementRules(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    /** @type {VideoEnhancementRule[]} */
+    const sanitized = [];
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return;
+      }
+      const raw =
+        /** @type {{ id?: unknown, pattern?: unknown, patternType?: unknown, enhancements?: { autoFullscreen?: unknown }, disabled?: unknown }} */ (
+          entry
+        );
+      const id =
+        typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
+      const pattern =
+        typeof raw.pattern === 'string' ? raw.pattern.trim() : '';
+      if (!id || !pattern) {
+        return;
+      }
+
+      /** @type {'url-pattern' | 'wildcard'} */
+      const patternType =
+        raw.patternType === 'wildcard' ? 'wildcard' : 'url-pattern';
+
+      sanitized.push({
+        id,
+        pattern,
+        patternType,
+        enhancements: {
+          autoFullscreen: Boolean(raw.enhancements?.autoFullscreen),
+        },
+        disabled: Boolean(raw.disabled),
+      });
+    });
+    return sanitized;
+  }
+
+  /**
+   * @returns {Promise<VideoEnhancementRule[]>}
+   */
+  async function loadVideoEnhancementRulesFromStorage() {
+    if (!chrome?.storage?.sync) {
+      return [];
+    }
+    try {
+      const stored = await chrome.storage.sync.get(
+        VIDEO_ENHANCEMENT_RULES_KEY,
+      );
+      return normalizeVideoEnhancementRules(
+        stored?.[VIDEO_ENHANCEMENT_RULES_KEY],
+      );
+    } catch (error) {
+      console.warn(
+        '[video-controller] Failed to load video enhancement rules:',
+        error,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * @param {string} pattern
+   * @param {string} url
+   * @returns {boolean}
+   */
+  function matchesWildcardPattern(pattern, url) {
+    const escaped = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*');
+    try {
+      const regex = new RegExp('^' + escaped + '$');
+      return regex.test(url);
+    } catch (error) {
+      const fallbackNeedle = pattern.replace(/\*/g, '').trim();
+      return fallbackNeedle ? url.includes(fallbackNeedle) : false;
+    }
+  }
+
+  /**
+   * @param {string} pattern
+   * @param {string} url
+   * @returns {boolean}
+   */
+  function matchesUrlPatternWithFallback(pattern, url) {
+    try {
+      const urlPattern = new URLPattern(pattern);
+      return urlPattern.test(url);
+    } catch (error) {
+      if (pattern.includes('*')) {
+        return matchesWildcardPattern(pattern, url);
+      }
+      return url.includes(pattern);
+    }
+  }
+
+  /**
+   * @param {string} url
+   * @returns {VideoEnhancementRule | undefined}
+   */
+  function getMatchingRule(url) {
+    return videoEnhancementRules.find((rule) => {
+      if (
+        rule.disabled ||
+        !rule.enhancements?.autoFullscreen ||
+        !rule.pattern
+      ) {
+        return false;
+      }
+      if (rule.patternType === 'wildcard') {
+        return matchesWildcardPattern(rule.pattern, url);
+      }
+      return matchesUrlPatternWithFallback(rule.pattern, url);
+    });
+  }
+
+  /**
+   * Reset all tracking so automation can run again.
+   */
+  function releaseAutoFullscreenLock() {
+    autoFullscreenState.lockedRuleId = null;
+    autoFullscreenState.lastTargetVideo = null;
+    autoFullscreenState.activeVideo = null;
+    autoFullscreenState.url = '';
+  }
+
+  /**
+   * Mark the currently tracked fullscreen video as inactive.
+   * @param {HTMLVideoElement} video
+   */
+  function markAutoFullscreenInactive(video) {
+    if (autoFullscreenState.lastTargetVideo === video) {
+      autoFullscreenState.activeVideo = null;
+    }
+  }
+
+  /**
+   * Ensure state reflects current URL and DOM.
+   */
+  function ensureAutoStateForCurrentUrl() {
+    const currentUrl = window.location.href;
+    if (
+      autoFullscreenState.url &&
+      autoFullscreenState.url !== currentUrl
+    ) {
+      releaseAutoFullscreenLock();
+      return;
+    }
+    if (
+      autoFullscreenState.lastTargetVideo &&
+      !autoFullscreenState.lastTargetVideo.isConnected
+    ) {
+      releaseAutoFullscreenLock();
+    }
+  }
+
+  /**
+   * @param {HTMLVideoElement} video
+   * @param {number} [timeoutMs=2000]
+   * @returns {Promise<void>}
+   */
+  function waitForVideoMetadata(video, timeoutMs = 2000) {
+    if (video.readyState >= 1) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      let settled = false;
+      const onLoaded = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        video.removeEventListener('loadedmetadata', onLoaded);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        video.removeEventListener('loadedmetadata', onLoaded);
+        resolve();
+      }, timeoutMs);
+      video.addEventListener('loadedmetadata', onLoaded, { once: true });
+    });
+  }
+
+  /**
+   * @returns {Promise<HTMLVideoElement | null>}
+   */
+  async function findDominantVideo() {
+    const candidates = Array.from(document.querySelectorAll('video')).filter(
+      (element) => element instanceof HTMLVideoElement,
+    );
+    if (candidates.length === 0) {
+      return null;
+    }
+
+    await Promise.all(
+      candidates.map((video) => waitForVideoMetadata(video)),
+    );
+
+    const scored = candidates
+      .map((video) => {
+        const width = video.videoWidth || video.clientWidth || 0;
+        const height = video.videoHeight || video.clientHeight || 0;
+        const area = width * height;
+        return {
+          video,
+          area,
+          meetsThreshold:
+            width >= MIN_VIDEO_WIDTH && height >= MIN_VIDEO_HEIGHT,
+        };
+      })
+      .sort((a, b) => b.area - a.area);
+
+    const preferred =
+      scored.find((entry) => entry.meetsThreshold) || scored[0];
+    return preferred ? preferred.video : null;
+  }
+
+  /**
+   * @param {string} reason
+   */
+  function scheduleAutoFullscreenEvaluation(reason) {
+    if (autoFullscreenEvaluationInProgress) {
+      autoFullscreenEvaluationPending = true;
+      return;
+    }
+    autoFullscreenEvaluationInProgress = true;
+    void (async () => {
+      try {
+        await evaluateAutoFullscreen(reason);
+      } finally {
+        autoFullscreenEvaluationInProgress = false;
+        if (autoFullscreenEvaluationPending) {
+          autoFullscreenEvaluationPending = false;
+          scheduleAutoFullscreenEvaluation('retry');
+        }
+      }
+    })();
+  }
+
+  /**
+   * @param {string} reason
+   */
+  async function evaluateAutoFullscreen(reason) {
+    ensureAutoStateForCurrentUrl();
+
+    const url = window.location.href;
+    if (!videoEnhancementRules.length) {
+      if (autoFullscreenState.activeVideo) {
+        exitFullscreen(autoFullscreenState.activeVideo);
+      }
+      releaseAutoFullscreenLock();
+      return;
+    }
+
+    const matchingRule = getMatchingRule(url);
+    if (!matchingRule) {
+      if (autoFullscreenState.activeVideo) {
+        exitFullscreen(autoFullscreenState.activeVideo);
+      }
+      releaseAutoFullscreenLock();
+      return;
+    }
+
+    const existingFullscreen = document.querySelector('.video-fullscreen');
+    if (
+      existingFullscreen &&
+      existingFullscreen instanceof HTMLVideoElement &&
+      existingFullscreen !== autoFullscreenState.activeVideo &&
+      existingFullscreen !== autoFullscreenState.lastTargetVideo
+    ) {
+      return;
+    }
+
+    const dominantVideo = await findDominantVideo();
+    if (!dominantVideo) {
+      return;
+    }
+
+    if (
+      autoFullscreenState.lockedRuleId === matchingRule.id &&
+      autoFullscreenState.lastTargetVideo &&
+      autoFullscreenState.lastTargetVideo.isConnected &&
+      autoFullscreenState.lastTargetVideo === dominantVideo
+    ) {
+      return;
+    }
+
+    if (dominantVideo.classList.contains('video-fullscreen')) {
+      autoFullscreenState.lockedRuleId = matchingRule.id;
+      autoFullscreenState.activeVideo = dominantVideo;
+      autoFullscreenState.lastTargetVideo = dominantVideo;
+      autoFullscreenState.url = url;
+      return;
+    }
+
+    try {
+      enterFullscreen(dominantVideo);
+      autoFullscreenState.lockedRuleId = matchingRule.id;
+      autoFullscreenState.activeVideo = dominantVideo;
+      autoFullscreenState.lastTargetVideo = dominantVideo;
+      autoFullscreenState.url = url;
+    } catch (error) {
+      console.warn('[video-controller] Failed to enter fullscreen:', error);
+    }
+  }
 
   // Store original video data for restoration
   const originalVideoData = new WeakMap();
@@ -218,6 +563,7 @@
 
     // Clean up stored data
     originalVideoData.delete(video);
+    markAutoFullscreenInactive(video);
   }
 
   /**
@@ -371,6 +717,7 @@
     // Add custom controls only for large videos
     const videos = await findAllLargeUnprocessedVideos();
     videos.forEach(processVideoElement);
+    scheduleAutoFullscreenEvaluation('mutation');
   });
 
   observer.observe(document.body, {
@@ -381,9 +728,47 @@
 
   // Initial setup
   setupPipTrackingForAllVideos();
-  findAllLargeUnprocessedVideos().then((videos) =>
-    videos.forEach(processVideoElement),
-  );
+  findAllLargeUnprocessedVideos()
+    .then((videos) => {
+      videos.forEach(processVideoElement);
+    })
+    .finally(() => {
+      scheduleAutoFullscreenEvaluation('initial-dom-scan');
+    });
+
+  void (async () => {
+    videoEnhancementRules = await loadVideoEnhancementRulesFromStorage();
+    scheduleAutoFullscreenEvaluation('rules-loaded');
+  })();
+
+  if (chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') {
+        return;
+      }
+      if (!Object.prototype.hasOwnProperty.call(changes, VIDEO_ENHANCEMENT_RULES_KEY)) {
+        return;
+      }
+      void (async () => {
+        videoEnhancementRules = await loadVideoEnhancementRulesFromStorage();
+        releaseAutoFullscreenLock();
+        scheduleAutoFullscreenEvaluation('rules-updated');
+      })();
+    });
+  }
+
+  window.addEventListener('popstate', () => {
+    releaseAutoFullscreenLock();
+    scheduleAutoFullscreenEvaluation('history');
+  });
+
+  setInterval(() => {
+    if (window.location.href !== lastObservedUrl) {
+      lastObservedUrl = window.location.href;
+      releaseAutoFullscreenLock();
+      scheduleAutoFullscreenEvaluation('url-changed');
+    }
+  }, 1000);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

@@ -2423,11 +2423,9 @@ async function processDeletedItems(tokens, context, stats) {
       }
 
       const url = typeof item?.link === 'string' ? item.link : '';
-      if (!url) {
-        continue;
-      }
+      const itemId = extractItemId(item);
 
-      await removeBookmarksByUrl(url, context, stats);
+      await removeBookmarksForItem(itemId, url, context, stats);
     }
 
     if (stoppedByThreshold || !shouldContinue) {
@@ -2611,27 +2609,82 @@ function parseRaindropTimestamp(value) {
 }
 
 /**
- * Remove bookmarks that match the provided URL within the mirror tree.
+ * Remove bookmarks that correspond to a specific Raindrop item (preferred) or URL.
+ * Falls back to URL-based removal only when no item mapping exists.
+ * @param {number | undefined} itemId
  * @param {string} url
  * @param {MirrorContext} context
  * @param {MirrorStats} stats
  * @returns {Promise<void>}
  */
-async function removeBookmarksByUrl(url, context, stats) {
-  const entries = context.index.bookmarksByUrl.get(url);
-  if (!entries || entries.length === 0) {
+async function removeBookmarksForItem(itemId, url, context, stats) {
+  /** @type {Set<string>} */
+  const bookmarkIds = new Set();
+
+  if (Number.isFinite(itemId)) {
+    try {
+      const mappedId = await getMappedBookmarkId(itemId);
+      if (mappedId) {
+        bookmarkIds.add(mappedId);
+      }
+    } catch (error) {
+      console.warn(
+        '[mirror] Failed to resolve mapped bookmark for deleted item:',
+        error,
+      );
+    }
+  }
+
+  if (bookmarkIds.size === 0 && url) {
+    const entries = context.index.bookmarksByUrl.get(url);
+    if (entries && entries.length > 0) {
+      entries.forEach((entry) => bookmarkIds.add(entry.id));
+    }
+  }
+
+  if (bookmarkIds.size === 0) {
     return;
   }
 
-  const copies = [...entries];
-  for (const entry of copies) {
-    await bookmarksRemove(entry.id);
-    stats.bookmarksDeleted += 1;
-    context.index.bookmarks.delete(entry.id);
-    await removeMappingsByBookmarkId(entry.id);
-  }
+  for (const bookmarkId of bookmarkIds) {
+    const entry = context.index.bookmarks.get(bookmarkId);
+    try {
+      await bookmarksRemove(bookmarkId);
+    } catch (error) {
+      console.warn(
+        '[mirror] Failed to remove bookmark during delete sync:',
+        error,
+      );
+      continue;
+    }
 
-  context.index.bookmarksByUrl.delete(url);
+    stats.bookmarksDeleted += 1;
+    context.index.bookmarks.delete(bookmarkId);
+
+    const resolvedUrl = entry?.url ?? url;
+    if (resolvedUrl) {
+      const list = context.index.bookmarksByUrl.get(resolvedUrl) || [];
+      const updated = list.filter((candidate) => candidate.id !== bookmarkId);
+      if (updated.length > 0) {
+        context.index.bookmarksByUrl.set(resolvedUrl, updated);
+      } else {
+        context.index.bookmarksByUrl.delete(resolvedUrl);
+      }
+    } else {
+      context.index.bookmarksByUrl.forEach((entries, key) => {
+        const updated = entries.filter((candidate) => candidate.id !== bookmarkId);
+        if (updated.length !== entries.length) {
+          if (updated.length > 0) {
+            context.index.bookmarksByUrl.set(key, updated);
+          } else {
+            context.index.bookmarksByUrl.delete(key);
+          }
+        }
+      });
+    }
+
+    await removeMappingsByBookmarkId(bookmarkId);
+  }
 }
 
 /**
@@ -2673,27 +2726,6 @@ function normalizeHttpUrl(value) {
  */
 function buildRaindropCollectionUrl(id) {
   return RAINDROP_COLLECTION_URL_BASE + String(id);
-}
-
-/**
- * Check if a bookmark with the given URL already exists in the target folder.
- * This function queries the actual Chrome bookmarks API to prevent duplicate entries
- * that could occur due to race conditions or index synchronization issues.
- * @param {string} url
- * @param {string} targetFolderId
- * @returns {Promise<chrome.bookmarks.BookmarkTreeNode | null>}
- */
-async function findExistingBookmarkInFolder(url, targetFolderId) {
-  try {
-    const folderChildren = await bookmarksGetChildren(targetFolderId);
-    return folderChildren.find((child) => child.url === url) || null;
-  } catch (error) {
-    console.warn(
-      '[findExistingBookmarkInFolder] Failed to check existing bookmarks:',
-      error,
-    );
-    return null;
-  }
 }
 
 /**
@@ -2905,8 +2937,7 @@ async function removeMappingsByBookmarkId(bookmarkId) {
 
 /**
  * Create or update a bookmark for the provided Raindrop item.
- * Prefers updating the previously mapped bookmark (by item id) to the new URL to avoid duplicates.
- * Falls back to URL-based detection, then creation.
+ * Prefers updating an existing bookmark mapped by item id to avoid unnecessary churn.
  * @param {StoredProviderTokens} tokens
  * @param {number | undefined} itemId
  * @param {string} url
@@ -2944,8 +2975,10 @@ async function upsertBookmark(
     return;
   }
 
+  const hasItemId = Number.isFinite(itemId);
+
   // First, if we know the Raindrop item id, try to update the previously mapped bookmark in-place.
-  if (Number.isFinite(itemId)) {
+  if (hasItemId) {
     try {
       const mappedId = await getMappedBookmarkId(itemId);
       if (mappedId) {
@@ -3032,101 +3065,6 @@ async function upsertBookmark(
     }
   }
 
-  // First, check if a bookmark with this URL already exists in the target folder
-  // by querying the actual Chrome bookmarks API to prevent duplicates.
-  // This addresses the issue where duplicate bookmarks could be created due to
-  // race conditions or index synchronization problems.
-  const existingBookmark = await findExistingBookmarkInFolder(
-    url,
-    targetFolderId,
-  );
-
-  if (existingBookmark) {
-    // Bookmark already exists in the target folder, just update title if needed
-    if (existingBookmark.title !== title) {
-      await bookmarksUpdate(existingBookmark.id, { title });
-      stats.bookmarksUpdated += 1;
-    }
-
-    // Update the context index
-    const updatedEntry = {
-      id: existingBookmark.id,
-      parentId: targetFolderId,
-      title,
-      url,
-      pathSegments: [...folderInfo.pathSegments],
-    };
-
-    context.index.bookmarks.set(existingBookmark.id, updatedEntry);
-    const existingEntries = context.index.bookmarksByUrl.get(url) ?? [];
-    const existingIndex = existingEntries.findIndex(
-      (entry) => entry.parentId === targetFolderId,
-    );
-
-    if (existingIndex >= 0) {
-      existingEntries[existingIndex] = updatedEntry;
-    } else {
-      existingEntries.push(updatedEntry);
-    }
-    context.index.bookmarksByUrl.set(url, existingEntries);
-
-    // Record mapping for this item -> bookmark
-    await setMappedBookmarkId(itemId, existingBookmark.id);
-
-    // Remove same-title duplicates that point to a different URL in this folder
-    await removeDuplicateTitleBookmarksInFolder(
-      tokens,
-      collectionId,
-      title,
-      url,
-      targetFolderId,
-      context,
-      stats,
-    );
-    return;
-  }
-
-  const existingEntries = context.index.bookmarksByUrl.get(url) ?? [];
-  let bookmarkEntry = existingEntries.find(
-    (entry) => entry.parentId === targetFolderId,
-  );
-
-  if (!bookmarkEntry && existingEntries.length > 0) {
-    bookmarkEntry = existingEntries[0];
-    if (bookmarkEntry.parentId !== targetFolderId) {
-      await bookmarksMove(bookmarkEntry.id, { parentId: targetFolderId });
-      stats.bookmarksMoved += 1;
-      bookmarkEntry.parentId = targetFolderId;
-      bookmarkEntry.pathSegments = [...folderInfo.pathSegments];
-    }
-  }
-
-  if (bookmarkEntry) {
-    if (bookmarkEntry.title !== title) {
-      await bookmarksUpdate(bookmarkEntry.id, { title });
-      bookmarkEntry.title = title;
-      stats.bookmarksUpdated += 1;
-    }
-    context.index.bookmarks.set(bookmarkEntry.id, bookmarkEntry);
-    if (!existingEntries.includes(bookmarkEntry)) {
-      existingEntries.push(bookmarkEntry);
-      context.index.bookmarksByUrl.set(url, existingEntries);
-    }
-    bookmarkEntry.pathSegments = [...folderInfo.pathSegments];
-    await setMappedBookmarkId(itemId, bookmarkEntry.id);
-    // Remove same-title duplicates that point to a different URL in this folder
-    await removeDuplicateTitleBookmarksInFolder(
-      tokens,
-      collectionId,
-      title,
-      url,
-      targetFolderId,
-      context,
-      stats,
-    );
-    return;
-  }
-
   const created = await bookmarksCreate({
     parentId: targetFolderId,
     title,
@@ -3152,7 +3090,9 @@ async function upsertBookmark(
     urlList.push(newEntry);
   }
 
-  await setMappedBookmarkId(itemId, newEntry.id);
+  if (hasItemId) {
+    await setMappedBookmarkId(itemId, newEntry.id);
+  }
   // Remove same-title duplicates that point to a different URL in this folder
   await removeDuplicateTitleBookmarksInFolder(
     tokens,
