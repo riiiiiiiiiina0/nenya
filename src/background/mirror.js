@@ -84,6 +84,7 @@
  * @typedef {Object} SaveUnsortedEntry
  * @property {string} url
  * @property {string} [title]
+ * @property {string} [cover]
  */
 
 /**
@@ -283,7 +284,7 @@ export function animateActionBadge(
 
   lastStartedBadgeToken = token;
 
-  /** @type {number | null} */
+  /** @type {ReturnType<typeof setInterval> | null} */
   let intervalId = null;
 
   /** @type {BadgeAnimationHandle} */
@@ -1037,9 +1038,10 @@ export async function resetMirrorState(settingsData) {
 /**
  * Save URLs to the Raindrop Unsorted collection and mirror them as bookmarks.
  * @param {SaveUnsortedEntry[]} entries
+ * @param {{ pleaseParse?: boolean, skipUrlProcessing?: boolean, keepEntryTitle?: boolean }} [options]
  * @returns {Promise<SaveUnsortedResult>}
  */
-export async function saveUrlsToUnsorted(entries) {
+export async function saveUrlsToUnsorted(entries, options = {}) {
   const badgeAnimation = animateActionBadge(ANIMATION_UP_SEQUENCE);
   /** @type {SaveUnsortedResult} */
   const summary = {
@@ -1057,6 +1059,10 @@ export async function saveUrlsToUnsorted(entries) {
   };
 
   try {
+    const shouldPleaseParse = options.pleaseParse !== false;
+    const shouldProcessUrl = options.skipUrlProcessing !== true;
+    const keepEntryTitle = options.keepEntryTitle === true;
+
     if (!Array.isArray(entries)) {
       summary.error = 'No URLs provided.';
       return finalize();
@@ -1079,10 +1085,10 @@ export async function saveUrlsToUnsorted(entries) {
         continue;
       }
 
-      // Process URL according to URL processing rules
-      const processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+      const processedUrl = shouldProcessUrl
+        ? await processUrl(normalizedUrl, 'save-to-raindrop')
+        : normalizedUrl;
 
-      // Convert split page URLs to nenya.local format for saving
       const finalUrl = convertSplitUrlForSave(processedUrl);
 
       if (seenUrls.has(finalUrl)) {
@@ -1094,6 +1100,10 @@ export async function saveUrlsToUnsorted(entries) {
       sanitized.push({
         url: finalUrl,
         title: typeof entry?.title === 'string' ? entry.title.trim() : '',
+        cover:
+          typeof entry?.cover === 'string' && entry.cover.trim().length > 0
+            ? entry.cover.trim()
+            : undefined,
       });
     }
 
@@ -1145,16 +1155,20 @@ export async function saveUrlsToUnsorted(entries) {
 
     for (const entry of dedupeResult.entries) {
       try {
+        const payload = {
+          link: entry.url,
+          collectionId: -1,
+          ...(shouldPleaseParse ? { pleaseParse: {} } : {}),
+          ...(entry.cover ? { cover: entry.cover } : {}),
+          ...(keepEntryTitle && entry.title ? { title: entry.title } : {}),
+        };
+
         const response = await raindropRequest('/raindrop', tokens, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            link: entry.url,
-            collectionId: -1,
-            pleaseParse: {},
-          }),
+          body: JSON.stringify(payload),
         });
 
         if (!response || typeof response !== 'object' || !response.item) {
@@ -1164,7 +1178,9 @@ export async function saveUrlsToUnsorted(entries) {
         }
 
         const itemTitle =
-          typeof response.item.title === 'string' ? response.item.title : '';
+          keepEntryTitle || typeof response.item.title !== 'string'
+            ? ''
+            : response.item.title;
         const bookmarkTitle = normalizeBookmarkTitle(
           itemTitle || entry.title,
           entry.url,
@@ -2672,7 +2688,9 @@ async function removeBookmarksForItem(itemId, url, context, stats) {
       }
     } else {
       context.index.bookmarksByUrl.forEach((entries, key) => {
-        const updated = entries.filter((candidate) => candidate.id !== bookmarkId);
+        const updated = entries.filter(
+          (candidate) => candidate.id !== bookmarkId,
+        );
         if (updated.length !== entries.length) {
           if (updated.length > 0) {
             context.index.bookmarksByUrl.set(key, updated);

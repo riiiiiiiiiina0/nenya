@@ -3,12 +3,10 @@
 ## Purpose
 
 Capture the currently shipped behavior of the Picture-in-Picture (PiP) and custom in-page fullscreen helpers so future work does not regress Nenya's injected video controller, popup action, or keyboard shortcut experience.
-
 ## Requirements
-
 ### Requirement: Popup MUST toggle Picture-in-Picture for the dominant video in the active tab
 
-The popup exposes a PiP control that targets the largest playable video element without requiring users to interact with the page.
+The popup MUST expose a PiP control that targets the largest playable video element without requiring users to interact with the page.
 
 #### Scenario: Trigger PiP from the popup
 
@@ -29,7 +27,7 @@ The popup exposes a PiP control that targets the largest playable video element 
 
 ### Requirement: Every video element MUST register PiP ownership automatically
 
-The content script tracks PiP state even when users start PiP via built-in site buttons or keyboard shortcuts.
+The content script MUST track PiP state even when users start PiP via built-in site buttons or keyboard shortcuts.
 
 #### Scenario: Record tab ownership whenever PiP starts
 
@@ -57,7 +55,7 @@ The content script tracks PiP state even when users start PiP via built-in site 
 
 ### Requirement: Large videos MUST render inline PiP and fullscreen controls
 
-Only sizable players get Nenya's overlay so the UI remains unobtrusive.
+The controller MUST limit overlays to sizable players so the UI remains unobtrusive.
 
 #### Scenario: Detect and decorate large videos without duplication
 
@@ -81,7 +79,7 @@ Only sizable players get Nenya's overlay so the UI remains unobtrusive.
 
 ### Requirement: Custom in-page fullscreen MUST isolate the video and survive host page mutations
 
-Nenya provides a fixed-position fullscreen mode that does not rely on the browser's native fullscreen API.
+Nenya MUST provide a fixed-position fullscreen mode that does not rely on the browser's native fullscreen API.
 
 #### Scenario: Enter fullscreen by reparenting and styling the video
 
@@ -114,3 +112,39 @@ Nenya provides a fixed-position fullscreen mode that does not rely on the browse
 - **GIVEN** the page adds or removes videos after load,
 - **THEN** the controller's `MutationObserver` on `document.body` MUST rerun both `setupPipTrackingForAllVideos` and `findAllLargeUnprocessedVideos`,
 - **AND** it MUST process the resulting list with `processVideoElement`, ensuring newly inserted large videos immediately gain the overlay while smaller videos still receive PiP tracking only.
+
+### Requirement: The options page SHALL manage Video Enhancement rules
+
+The options UI SHALL expose a dedicated "Video Enhancements" section that manages per-site automation rules stored in sync so users can control when fullscreen automation occurs. `src/options/videoEnhancements.js` owns the section inside `src/options/index.html` and persists rules under `chrome.storage.sync.videoEnhancementRules` using the schema `{ id, pattern, patternType: 'url-pattern' | 'wildcard', enhancements: { autoFullscreen: boolean }, disabled?: boolean, createdAt, updatedAt }`.
+
+#### Scenario: Load, sanitize, and render the rules list
+- **GIVEN** the options page initializes,
+- **THEN** the script MUST fetch `videoEnhancementRules`, drop entries that lack a valid pattern or `enhancements.autoFullscreen` boolean, coerce `disabled` to `false` when missing, and sort by `createdAt` before rendering,
+- **AND** it MUST show an empty-state card when the array is empty, otherwise render each rule (pattern in monospace, `patternType` badge, enabled toggle, enhancement badges),
+- **AND** it MUST subscribe to `chrome.storage.onChanged` for the sync namespace so updates from other windows/imports re-render without a refresh.
+
+#### Scenario: Create, edit, toggle, or delete a rule
+- **GIVEN** the user interacts with the Video Enhancements form,
+- **WHEN** they submit with a non-empty pattern that either parses via `URLPattern` (when `patternType === 'url-pattern'`) or passes wildcard validation,
+- **THEN** the handler MUST either create a new UUID-backed rule (setting `createdAt`) or update the matching `id` (writing `updatedAt`) while preserving other fields,
+- **AND** the form MUST allow enabling/disabling `autoFullscreen` via a checkbox (currently the only enhancement) and default it to `true` on creation,
+- **AND** invalid input MUST surface inline errors and leave storage untouched,
+- **AND** toggling the Enabled switch MUST flip `rule.disabled` and persist immediately, while Delete MUST confirm, remove the rule, and update the list plus any open detail drawer.
+
+### Requirement: The video controller SHALL auto-enter custom fullscreen for matching rules
+
+`src/contentScript/video-controller.js` MUST honor enabled rules so dominant videos enter Nenya's custom fullscreen automatically.
+
+#### Scenario: Enter fullscreen when the page URL matches an enabled rule
+- **GIVEN** the content script initializes or its MutationObserver finds a new dominant video,
+- **WHEN** at least one enabled rule in `videoEnhancementRules` matches `window.location.href` (using `URLPattern` first, falling back to wildcard substring matching),
+- **THEN** the script MUST pick the same "largest video" candidate used by PiP controls, wait for metadata (up to ~2 s), and call `enterFullscreen(video, { source: 'rule-auto' })`,
+- **AND** it MUST ensure auto-entry only runs once per navigation (set a flag tied to the matching rule ID) unless the video exits fullscreen and a new dominant video appears,
+- **AND** it MUST log (not throw) when matching fails or `enterFullscreen` rejects so content pages stay stable.
+
+#### Scenario: Ignore pages without matches or disabled rules
+- **GIVEN** the content script loaded rules,
+- **WHEN** no enabled rule matches the current URL, or all matching rules have `enhancements.autoFullscreen === false`,
+- **THEN** it MUST skip auto fullscreen entirely and leave manual controls untouched,
+- **AND** when `chrome.storage.onChanged` reports updates to `videoEnhancementRules`, the script MUST reload them, exit fullscreen if the currently enforced rule was disabled, and allow future navigations to re-run the match with the updated data.
+

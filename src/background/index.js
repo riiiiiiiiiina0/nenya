@@ -58,8 +58,10 @@ import {
 const MANUAL_PULL_MESSAGE = 'mirror:pull';
 const RESET_PULL_MESSAGE = 'mirror:resetPull';
 const SAVE_UNSORTED_MESSAGE = 'mirror:saveToUnsorted';
+const ENCRYPT_AND_SAVE_MESSAGE = 'mirror:encryptAndSave';
 const CONTEXT_MENU_SAVE_PAGE_ID = 'nenya-save-unsorted-page';
 const CONTEXT_MENU_SAVE_LINK_ID = 'nenya-save-unsorted-link';
+const CONTEXT_MENU_ENCRYPT_AND_SAVE_ID = 'nenya-encrypt-unsorted';
 const CONTEXT_MENU_SPLIT_TABS_ID = 'nenya-split-tabs';
 const CONTEXT_MENU_UNSPLIT_TABS_ID = 'nenya-unsplit-tabs';
 const GET_CURRENT_TAB_ID_MESSAGE = 'getCurrentTabId';
@@ -70,6 +72,8 @@ const COLLECT_AND_SEND_TO_LLM_MESSAGE = 'collect-and-send-to-llm';
 const OPEN_LLM_TABS_MESSAGE = 'open-llm-tabs';
 const CLOSE_LLM_TABS_MESSAGE = 'close-llm-tabs';
 const SWITCH_LLM_PROVIDER_MESSAGE = 'switch-llm-provider';
+const ENCRYPT_SERVICE_URL = 'https://oh-auth.vercel.app/secret/encrypt';
+const ENCRYPT_COVER_URL = 'https://oh-auth.vercel.app/img/secret-bear-2.png';
 
 // ============================================================================
 // KEYBOARD SHORTCUTS (COMMANDS)
@@ -123,6 +127,37 @@ chrome.commands.onCommand.addListener((command) => {
     void runMirrorPull('manual').catch((error) => {
       console.warn('[commands] Pull failed:', error);
     });
+    return;
+  }
+
+  if (command === 'bookmarks-encrypt-save-unsorted') {
+    void (async () => {
+      try {
+        const tabs = await chrome.tabs.query({
+          currentWindow: true,
+          active: true,
+        });
+        const activeTab = tabs && tabs[0];
+        const url = typeof activeTab?.url === 'string' ? activeTab.url : '';
+        if (!url) {
+          return;
+        }
+        const title =
+          typeof activeTab?.title === 'string' ? activeTab.title : '';
+        const tabId = typeof activeTab?.id === 'number' ? activeTab.id : null;
+        const result = await handleEncryptAndSave({
+          rawUrl: url,
+          title,
+          tabId,
+          notifyOnError: true,
+        });
+        if (!result.ok && result.error) {
+          console.warn('[commands] Encrypt & Save failed:', result.error);
+        }
+      } catch (error) {
+        console.warn('[commands] Encrypt & Save failed:', error);
+      }
+    })();
     return;
   }
 
@@ -286,7 +321,7 @@ chrome.commands.onCommand.addListener((command) => {
                 const pipVideo = document.pictureInPictureElement;
                 document.exitPictureInPicture();
                 // Pause the video after exiting PiP
-                if (pipVideo && !pipVideo.paused) {
+                if (pipVideo instanceof HTMLVideoElement && !pipVideo.paused) {
                   pipVideo.pause();
                 }
               }
@@ -532,6 +567,261 @@ chrome.commands.onCommand.addListener((command) => {
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+const FRIENDLY_TITLE_WORDS = [
+  'hidden',
+  'quiet',
+  'ember',
+  'lantern',
+  'meadow',
+  'harbor',
+  'compass',
+  'willow',
+  'prairie',
+  'atlas',
+  'haven',
+  'spark',
+  'cove',
+  'trail',
+  'pine',
+  'aurora',
+  'echo',
+  'breeze',
+  'fox',
+  'otter',
+  'lynx',
+  'sparrow',
+  'tiger',
+  'panda',
+  'dolphin',
+  'river',
+  'garden',
+  'bridge',
+  'market',
+  'sunrise',
+  'maple',
+  'london',
+  'kyoto',
+  'oslo',
+  'berlin',
+  'lagos',
+  'atlanta',
+];
+
+function buildFriendlyEncryptedTitle() {
+  const count = Math.random() < 0.5 ? 2 : 3;
+  const words = [];
+  for (let i = 0; i < count; i += 1) {
+    const word =
+      FRIENDLY_TITLE_WORDS[
+        Math.floor(Math.random() * FRIENDLY_TITLE_WORDS.length)
+      ];
+    if (word) {
+      words.push(word.charAt(0).toUpperCase() + word.slice(1));
+    }
+  }
+  if (words.length === 0) {
+    return 'Encrypted Link';
+  }
+  return words.join(' ');
+}
+
+/**
+ * Prompt the user for an encryption password in the provided tab.
+ * @param {number | null} tabId
+ * @returns {Promise<{ password: string, error?: string }>}
+ */
+async function promptForEncryptionPassword(tabId) {
+  if (!chrome.scripting || typeof tabId !== 'number') {
+    return {
+      password: '',
+      error: 'Active tab unavailable for password entry.',
+    };
+  }
+
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const input = window.prompt(
+          'Enter a password to encrypt this link (leave blank to save without encryption).',
+        );
+        return input === null ? null : String(input);
+      },
+      world: 'MAIN',
+    });
+    const value =
+      Array.isArray(results) && results[0] ? results[0].result : null;
+    const password =
+      typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+    return { password };
+  } catch (error) {
+    console.warn('[encrypt-save] Unable to prompt for password:', error);
+    return {
+      password: '',
+      error: 'Password prompt is not available on this page.',
+    };
+  }
+}
+
+/**
+ * Encrypt a URL using the external service.
+ * @param {string} url
+ * @param {string} password
+ * @returns {Promise<string>}
+ */
+async function encryptUrlWithPassword(url, password) {
+  const response = await fetch(ENCRYPT_SERVICE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url, password }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      'Encryption failed: ' +
+        response.status +
+        (response.statusText ? ' ' + response.statusText : ''),
+    );
+  }
+
+  const data = await response.json();
+  const encryptedUrl = typeof data?.url === 'string' ? data.url.trim() : '';
+  if (!encryptedUrl) {
+    throw new Error('Encryption service did not return a URL.');
+  }
+  return encryptedUrl;
+}
+
+/**
+ * Choose a title for plain saves using selection text or a fallback.
+ * @param {string} selectionText
+ * @param {string} fallbackTitle
+ * @returns {string}
+ */
+function derivePlainTitle(selectionText, fallbackTitle) {
+  const selection =
+    typeof selectionText === 'string' ? selectionText.trim() : '';
+  if (selection) {
+    return selection;
+  }
+  if (typeof fallbackTitle === 'string') {
+    return fallbackTitle;
+  }
+  return '';
+}
+
+/**
+ * Handle encrypt-and-save flow shared by commands, context menus, and popup.
+ * @param {{ rawUrl: string, title?: string, selectionText?: string, tabId?: number | null, notifyOnError?: boolean }} options
+ * @returns {Promise<{ ok: boolean, mode?: 'plain' | 'encrypted', error?: string, saveResult?: any }>}
+ */
+async function handleEncryptAndSave(options) {
+  const rawUrl = typeof options.rawUrl === 'string' ? options.rawUrl : '';
+  const tabId = typeof options.tabId === 'number' ? options.tabId : null;
+  const notifyOnError = Boolean(options.notifyOnError);
+
+  if (!rawUrl) {
+    const error = 'No URL available to save.';
+    if (notifyOnError) {
+      void pushNotification('encrypt-unsorted', 'Encrypt & save failed', error);
+    }
+    return { ok: false, error };
+  }
+
+  const normalizedUrl = normalizeHttpUrl(rawUrl);
+  if (!normalizedUrl) {
+    const error = 'This URL cannot be saved.';
+    if (notifyOnError) {
+      void pushNotification('encrypt-unsorted', 'Encrypt & save failed', error);
+    }
+    return { ok: false, error };
+  }
+
+  let processedUrl = normalizedUrl;
+  try {
+    processedUrl = await processUrl(normalizedUrl, 'save-to-raindrop');
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Failed to prepare URL.';
+    if (notifyOnError) {
+      void pushNotification(
+        'encrypt-unsorted',
+        'Encrypt & save failed',
+        message,
+      );
+    }
+    return { ok: false, error: message };
+  }
+  const finalUrl = convertSplitUrlForSave(processedUrl);
+  if (!finalUrl) {
+    const error = 'This URL cannot be saved.';
+    if (notifyOnError) {
+      void pushNotification('encrypt-unsorted', 'Encrypt & save failed', error);
+    }
+    return { ok: false, error };
+  }
+
+  const passwordResult = await promptForEncryptionPassword(tabId);
+  if (passwordResult.error) {
+    if (notifyOnError) {
+      void pushNotification(
+        'encrypt-unsorted',
+        'Encrypt & save failed',
+        passwordResult.error,
+      );
+    }
+    return { ok: false, error: passwordResult.error };
+  }
+
+  const password = passwordResult.password;
+  if (!password) {
+    const plainTitle = derivePlainTitle(
+      options.selectionText || '',
+      options.title || '',
+    );
+    const saveResult = await saveUrlsToUnsorted(
+      [{ url: finalUrl, title: plainTitle }],
+      { skipUrlProcessing: true },
+    );
+    return {
+      ok: saveResult.ok,
+      mode: 'plain',
+      saveResult,
+      error: saveResult.error,
+    };
+  }
+
+  let encryptedUrl;
+  try {
+    encryptedUrl = await encryptUrlWithPassword(finalUrl, password);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Encryption failed.';
+    if (notifyOnError) {
+      void pushNotification(
+        'encrypt-unsorted',
+        'Encrypt & save failed',
+        message,
+      );
+    }
+    return { ok: false, mode: 'encrypted', error: message };
+  }
+
+  const generatedTitle = buildFriendlyEncryptedTitle();
+  const saveResult = await saveUrlsToUnsorted(
+    [{ url: encryptedUrl, title: generatedTitle, cover: ENCRYPT_COVER_URL }],
+    { pleaseParse: false, skipUrlProcessing: true, keepEntryTitle: true },
+  );
+  return {
+    ok: saveResult.ok,
+    mode: 'encrypted',
+    saveResult,
+    error: saveResult.error,
+  };
+}
 
 /**
  * Ensure the repeating alarm is scheduled.
@@ -1028,7 +1318,9 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
                   }
                 }
               }
-              await updateSplitPageGroupInfo(tab.url, groupName);
+              if (typeof tab.url === 'string') {
+                await updateSplitPageGroupInfo(tab.url, groupName);
+              }
             } catch (error) {
               // Ignore errors - group info update is optional
             }
@@ -1918,6 +2210,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else {
       sendResponse({ tabId: null });
     }
+    return true;
+  }
+
+  if (message.type === ENCRYPT_AND_SAVE_MESSAGE) {
+    const url = typeof message.url === 'string' ? message.url : '';
+    const title = typeof message.title === 'string' ? message.title : '';
+    const selectionText =
+      typeof message.selectionText === 'string' ? message.selectionText : '';
+    const tabId = typeof message.tabId === 'number' ? message.tabId : null;
+
+    handleEncryptAndSave({
+      rawUrl: url,
+      title,
+      selectionText,
+      tabId,
+      notifyOnError: false,
+    })
+      .then((result) => {
+        sendResponse(result);
+      })
+      .catch((error) => {
+        const messageText =
+          error instanceof Error ? error.message : String(error);
+        sendResponse({ ok: false, error: messageText });
+      });
     return true;
   }
 
@@ -2861,6 +3178,23 @@ function setupContextMenus() {
 
     chrome.contextMenus.create(
       {
+        id: CONTEXT_MENU_ENCRYPT_AND_SAVE_ID,
+        title: 'Encrypt & Save to Raindrop Unsorted',
+        contexts: ['page', 'frame', 'selection', 'editable', 'image', 'link'],
+      },
+      () => {
+        const createError = chrome.runtime.lastError;
+        if (createError) {
+          console.warn(
+            '[contextMenu] Failed to register encrypt item:',
+            createError.message,
+          );
+        }
+      },
+    );
+
+    chrome.contextMenus.create(
+      {
         id: CONTEXT_MENU_SPLIT_TABS_ID,
         title: 'Split tabs',
         contexts: ['page'],
@@ -2898,6 +3232,35 @@ function setupContextMenus() {
 
 if (chrome.contextMenus) {
   chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId === CONTEXT_MENU_ENCRYPT_AND_SAVE_ID) {
+      const targetUrl =
+        typeof info.linkUrl === 'string' && info.linkUrl
+          ? info.linkUrl
+          : typeof info.pageUrl === 'string'
+          ? info.pageUrl
+          : '';
+      if (!targetUrl) {
+        return;
+      }
+
+      const selectionText =
+        typeof info.selectionText === 'string' ? info.selectionText.trim() : '';
+      const tabId = typeof tab?.id === 'number' ? tab.id : null;
+      const title =
+        selectionText || (typeof tab?.title === 'string' ? tab.title : '');
+
+      void handleEncryptAndSave({
+        rawUrl: targetUrl,
+        title,
+        selectionText,
+        tabId,
+        notifyOnError: true,
+      }).catch((error) => {
+        console.error('[contextMenu] Encrypt & save failed:', error);
+      });
+      return;
+    }
+
     if (info.menuItemId === CONTEXT_MENU_SAVE_PAGE_ID) {
       const url = typeof info.pageUrl === 'string' ? info.pageUrl : '';
       if (!url) {

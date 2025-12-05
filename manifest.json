@@ -123,6 +123,9 @@
     "bookmarks-pull-raindrop": {
       "description": "💧 Pull from Raindrop"
     },
+    "bookmarks-encrypt-save-unsorted": {
+      "description": "🔐 Encrypt & Save to Unsorted"
+    },
     "bookmarks-save-to-unsorted": {
       "description": "💧 Save to Unsorted"
     },

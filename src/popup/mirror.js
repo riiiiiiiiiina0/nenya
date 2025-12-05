@@ -142,23 +142,34 @@ export function toggleMirrorSection(isLoggedIn, mirrorSection) {
  * @param {string} [errorMessage] - Optional custom error message for reauth scenarios
  * @returns {void}
  */
-export function showLoginMessage(statusMessage, openOptionsButton, errorMessage) {
+export function showLoginMessage(
+  statusMessage,
+  openOptionsButton,
+  errorMessage,
+) {
   if (!statusMessage) {
     return;
   }
 
   const isReauth = Boolean(errorMessage);
-  const displayMessage = errorMessage ||
+  const displayMessage =
+    errorMessage ||
     'Connect to a cloud bookmark provider to sync your bookmarks, saved projects, and options.';
-  const buttonText = isReauth ? 'Reconnect in Options' : 'Go to Options to Connect';
+  const buttonText = isReauth
+    ? 'Reconnect in Options'
+    : 'Go to Options to Connect';
 
   const loginMessage = document.createElement('div');
   loginMessage.className = 'card w-full bg-base-100 shadow-xl';
   loginMessage.innerHTML = `
     <div class="card-body gap-4">
       <div class="text-center space-y-2">
-        <p class="text-sm ${isReauth ? 'text-warning' : 'text-base-content/70'}">${displayMessage}</p>
-        <button id="goToOptionsButton" class="btn ${isReauth ? 'btn-warning' : 'btn-primary'} w-full" type="button">
+        <p class="text-sm ${
+          isReauth ? 'text-warning' : 'text-base-content/70'
+        }">${displayMessage}</p>
+        <button id="goToOptionsButton" class="btn ${
+          isReauth ? 'btn-warning' : 'btn-primary'
+        } w-full" type="button">
           ${buttonText}
         </button>
       </div>
@@ -271,6 +282,108 @@ export async function handleSaveToUnsorted(saveUnsortedButton, statusMessage) {
 }
 
 /**
+ * Handle encrypt-and-save for the active tab.
+ * @param {HTMLElement} encryptButton
+ * @param {HTMLElement} statusMessage
+ * @returns {Promise<void>}
+ */
+export async function handleEncryptAndSaveActive(encryptButton, statusMessage) {
+  if (!encryptButton) {
+    return;
+  }
+
+  /** @type {HTMLButtonElement} */ (encryptButton).disabled = true;
+  setStatus('Preparing encrypted save...', 'info', statusMessage);
+
+  try {
+    const tabs = await queryTabs({
+      currentWindow: true,
+      active: true,
+    });
+    const activeTab = tabs && tabs[0];
+    const rawUrl = typeof activeTab?.url === 'string' ? activeTab.url : '';
+    if (!rawUrl) {
+      concludeStatus(
+        'No active tab available to save.',
+        'info',
+        3000,
+        statusMessage,
+      );
+      return;
+    }
+
+    const convertedUrl = convertSplitUrlForSave(rawUrl);
+    const normalizedUrl = normalizeUrlForSave(convertedUrl);
+    if (!normalizedUrl) {
+      concludeStatus(
+        'Active tab URL is not supported for saving.',
+        'error',
+        3000,
+        statusMessage,
+      );
+      return;
+    }
+
+    const title = typeof activeTab?.title === 'string' ? activeTab.title : '';
+    const tabId = typeof activeTab?.id === 'number' ? activeTab.id : undefined;
+
+    const response = await sendRuntimeMessage({
+      type: 'mirror:encryptAndSave',
+      url: normalizedUrl,
+      title,
+      tabId,
+    });
+
+    if (!response || typeof response !== 'object') {
+      concludeStatus(
+        'Encrypt and save failed. Please try again.',
+        'error',
+        3000,
+        statusMessage,
+      );
+      return;
+    }
+
+    if (!response.ok) {
+      concludeStatus(
+        response.error || 'Encrypt and save failed. Please try again.',
+        'error',
+        3000,
+        statusMessage,
+      );
+      return;
+    }
+
+    if (response.saveResult && typeof response.saveResult === 'object') {
+      const summary = summarizeSaveResult(response.saveResult);
+      const modePrefix =
+        response.mode === 'encrypted'
+          ? 'Encrypted link saved.'
+          : 'Saved without encryption.';
+      const message = (modePrefix + ' ' + summary).trim();
+      concludeStatus(
+        message,
+        response.saveResult.ok ? 'success' : 'error',
+        3000,
+        statusMessage,
+      );
+      return;
+    }
+
+    const fallbackMessage =
+      response.mode === 'encrypted'
+        ? 'Encrypted link saved to Unsorted.'
+        : 'Saved to Unsorted.';
+    concludeStatus(fallbackMessage, 'success', 3000, statusMessage);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    concludeStatus(message, 'error', 3000, statusMessage);
+  } finally {
+    /** @type {HTMLButtonElement} */ (encryptButton).disabled = false;
+  }
+}
+
+/**
  * Build save entries from tab descriptors.
  * @param {chrome.tabs.Tab[]} tabs
  * @returns {SaveUnsortedEntry[]}
@@ -306,17 +419,7 @@ function buildSaveEntriesFromTabs(tabs) {
  * @param {HTMLElement} statusMessage
  * @returns {void}
  */
-function handleSaveResponse(response, statusMessage) {
-  if (!response || typeof response !== 'object') {
-    concludeStatus(
-      'Save failed. Please try again.',
-      'error',
-      3000,
-      statusMessage,
-    );
-    return;
-  }
-
+function summarizeSaveResult(response) {
   const created = Number(response.created) || 0;
   const updated = Number(response.updated) || 0;
   const skipped = Number(response.skipped) || 0;
@@ -332,7 +435,26 @@ function handleSaveResponse(response, statusMessage) {
     fragments.push(failed + ' failed');
   }
 
-  const message = fragments.join('. ') + '.';
+  return fragments.join('. ') + '.';
+}
+
+/**
+ * @param {any} response
+ * @param {HTMLElement} statusMessage
+ * @returns {void}
+ */
+function handleSaveResponse(response, statusMessage) {
+  if (!response || typeof response !== 'object') {
+    concludeStatus(
+      'Save failed. Please try again.',
+      'error',
+      3000,
+      statusMessage,
+    );
+    return;
+  }
+
+  const message = summarizeSaveResult(response);
 
   if (response.ok) {
     concludeStatus(message, 'success', 3000, statusMessage);
