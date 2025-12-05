@@ -26,11 +26,6 @@ const TOAST_BACKGROUND_BY_VARIANT = {
   info: 'linear-gradient(135deg, #3b82f6, #2563eb)',
 };
 
-const dateFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-});
-
 let loggedIn = false;
 let actionInProgress = false;
 
@@ -60,18 +55,23 @@ function showToast(message, variant = 'info') {
 }
 
 /**
- * Format a timestamp for display.
+ * Format a timestamp as MM/DD HH:mm (24h).
  * @param {number | undefined} value
  * @returns {string}
  */
 function formatTimestamp(value) {
   if (!value || !Number.isFinite(value)) {
-    return 'never';
+    return '—';
   }
   try {
-    return dateFormatter.format(new Date(Number(value)));
+    const date = new Date(Number(value));
+    const M = String(date.getMonth() + 1).padStart(2, '0');
+    const D = String(date.getDate()).padStart(2, '0');
+    const h = String(date.getHours()).padStart(2, '0');
+    const m = String(date.getMinutes()).padStart(2, '0');
+    return `${M}/${D} ${h}:${m}`;
   } catch (error) {
-    return 'never';
+    return '—';
   }
 }
 
@@ -81,9 +81,11 @@ function formatTimestamp(value) {
  * @returns {void}
  */
 function setStatus(message) {
-  if (statusElement) {
-    statusElement.textContent = message;
+  if (!statusElement) {
+    return;
   }
+  statusElement.innerHTML = message.replace(/\n/g, '<br>');
+  statusElement.setAttribute('aria-label', message.replace(/\n/g, ' '));
 }
 
 /**
@@ -154,25 +156,18 @@ async function refreshStatus() {
     const backupText = formatTimestamp(state.lastBackupAt);
     const restoreText = formatTimestamp(state.lastRestoreAt);
     if (!loggedIn) {
-      setStatus(
-        'Connect your Raindrop account to back up or restore options.',
-      );
+      setStatus('Connect your Raindrop account to back up or restore options.');
     } else if (state.lastError) {
       setStatus(
         'Last error: ' +
           state.lastError +
-          ' • Last backup ' +
+          '\nBackup ' +
           backupText +
-          ' • Last restore ' +
+          '\nRestore ' +
           restoreText,
       );
     } else {
-      setStatus(
-        'Manual backup ready — last backup ' +
-          backupText +
-          ' • last restore ' +
-          restoreText,
-      );
+      setStatus('Backup ' + backupText + '\nRestore ' + restoreText);
     }
 
     updateButtonStates(false);
@@ -270,4 +265,3 @@ export function setBackupConnectionState(isLoggedIn) {
 export function refreshBackupStatus() {
   return refreshStatus();
 }
-
