@@ -15,6 +15,11 @@ const AVAILABLE_SHORTCUTS = [
   { id: 'getMarkdown', emoji: '💬', tooltip: 'Chat with llm' },
   { id: 'pull', emoji: '🌧️', tooltip: 'Pull from raindrop' },
   { id: 'saveUnsorted', emoji: '📤', tooltip: 'Save to unsorted' },
+  {
+    id: 'encryptSave',
+    emoji: '🔐',
+    tooltip: 'Encrypt & save to unsorted',
+  },
   { id: 'importCustomCode', emoji: '💾', tooltip: 'Import custom JS/CSS rule' },
   { id: 'customFilter', emoji: '⚡️', tooltip: 'Hide elements in page' },
   { id: 'splitPage', emoji: '🈹', tooltip: 'Split page' },
@@ -35,6 +40,7 @@ const DEFAULT_PINNED_SHORTCUTS = [
   'getMarkdown', // Chat with llm
   'pull', // Pull from raindrop
   'saveUnsorted', // Save to unsorted
+  'encryptSave', // Encrypt & save to unsorted
   'customFilter', // Hide elements in page
   'splitPage', // Split page
 ];

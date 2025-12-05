@@ -8,6 +8,7 @@ import {
   showLoginMessage,
   initializeMirror,
   getTokenValidationStatus,
+  handleEncryptAndSaveActive,
 } from './mirror.js';
 import { concludeStatus } from './shared.js';
 import { initializeProjects } from './projects.js';
@@ -31,6 +32,15 @@ const SHORTCUT_CONFIG = {
     emoji: '📤',
     tooltip: 'Save to unsorted',
     handler: () => {},
+  },
+  encryptSave: {
+    emoji: '🔐',
+    tooltip: 'Encrypt & save to unsorted',
+    handler: () => {
+      if (encryptSaveButton && statusMessage) {
+        void handleEncryptAndSaveActive(encryptSaveButton, statusMessage);
+      }
+    },
   },
   importCustomCode: {
     emoji: '💾',
@@ -110,6 +120,7 @@ const DEFAULT_PINNED_SHORTCUTS = [
   'getMarkdown', // Chat with llm
   'pull', // Pull from raindrop
   'saveUnsorted', // Save to unsorted
+  'encryptSave', // Encrypt & save to unsorted
   'customFilter', // Hide elements in page
   'splitPage', // Split page
 ];
@@ -122,6 +133,7 @@ const shortcutsContainer = /** @type {HTMLDivElement | null} */ (
 let getMarkdownButton = null;
 let pullButton = null;
 let saveUnsortedButton = null;
+let encryptSaveButton = null;
 let openOptionsButton = null;
 let customFilterButton = null;
 let importCustomCodeButton = null;
@@ -190,6 +202,7 @@ async function loadAndRenderShortcuts() {
     getMarkdownButton = null;
     pullButton = null;
     saveUnsortedButton = null;
+    encryptSaveButton = null;
     openOptionsButton = null;
     customFilterButton = null;
     importCustomCodeButton = null;
@@ -235,6 +248,9 @@ async function loadAndRenderShortcuts() {
         case 'saveUnsorted':
           saveUnsortedButton = button;
           break;
+        case 'encryptSave':
+          encryptSaveButton = button;
+          break;
         case 'openOptions':
           openOptionsButton = button;
           break;
@@ -254,8 +270,8 @@ async function loadAndRenderShortcuts() {
           brightModeButton = button;
           break;
         case 'darkMode':
-            darkModeButton = button;
-            break;
+          darkModeButton = button;
+          break;
         case 'highlightText':
           highlightTextButton = button;
           break;
@@ -356,46 +372,50 @@ if (chrome?.storage?.onChanged) {
  */
 
 async function handleDarkMode() {
-    try {
-        // Get the current active tab
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!tabs || tabs.length === 0) {
-            if (statusMessage) {
-                concludeStatus('No active tab found.', 'error', 3000, statusMessage);
-            }
-            return;
-        }
-
-        const currentTab = tabs[0];
-        const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
-
-        if (!currentUrl) {
-            if (statusMessage) {
-                concludeStatus(
-                    'No URL found for current tab.',
-                    'error',
-                    3000,
-                    statusMessage,
-                );
-            }
-            return;
-        }
-
-        // Open options page with dark mode section hash
-        const optionsUrl = chrome.runtime.getURL('src/options/index.html');
-        chrome.tabs.create({ url: `${optionsUrl}#dark-mode-heading&url=${encodeURIComponent(currentUrl)}` });
-        window.close();
-    } catch (error) {
-        console.error('[popup] Error opening dark mode options:', error);
-        if (statusMessage) {
-            concludeStatus(
-                'Unable to open dark mode options.',
-                'error',
-                3000,
-                statusMessage,
-            );
-        }
+  try {
+    // Get the current active tab
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tabs || tabs.length === 0) {
+      if (statusMessage) {
+        concludeStatus('No active tab found.', 'error', 3000, statusMessage);
+      }
+      return;
     }
+
+    const currentTab = tabs[0];
+    const currentUrl = typeof currentTab.url === 'string' ? currentTab.url : '';
+
+    if (!currentUrl) {
+      if (statusMessage) {
+        concludeStatus(
+          'No URL found for current tab.',
+          'error',
+          3000,
+          statusMessage,
+        );
+      }
+      return;
+    }
+
+    // Open options page with dark mode section hash
+    const optionsUrl = chrome.runtime.getURL('src/options/index.html');
+    chrome.tabs.create({
+      url: `${optionsUrl}#dark-mode-heading&url=${encodeURIComponent(
+        currentUrl,
+      )}`,
+    });
+    window.close();
+  } catch (error) {
+    console.error('[popup] Error opening dark mode options:', error);
+    if (statusMessage) {
+      concludeStatus(
+        'Unable to open dark mode options.',
+        'error',
+        3000,
+        statusMessage,
+      );
+    }
+  }
 }
 
 /**
@@ -1140,7 +1160,6 @@ async function handlePictureInPicture() {
             };
           }
 
-
           // Find the largest video by area (width * height)
           let largestVideo = null;
           let largestArea = 0;
@@ -1164,7 +1183,7 @@ async function handlePictureInPicture() {
           // Set up event listeners for PiP if not already set up
           if (!largestVideo.hasAttribute('data-pip-listeners-set')) {
             largestVideo.setAttribute('data-pip-listeners-set', 'true');
-            
+
             largestVideo.addEventListener('leavepictureinpicture', () => {
               chrome.storage.local.remove('pipTabId');
               if (!largestVideo.paused) {
@@ -1265,7 +1284,6 @@ async function handlePictureInPicture() {
     }
   }
 }
-
 
 // Listen for storage changes to update popup when user logs in/out
 chrome.storage.onChanged.addListener((changes, namespace) => {
