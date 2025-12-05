@@ -21,9 +21,10 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
 - **Raindrop.io Integration:** Full two-way sync with Raindrop.io bookmarks
   - Pull collections from Raindrop
   - Save current tabs to Raindrop Unsorted
+  - Encrypt & Save to Raindrop Unsorted via password-protected links
   - Mirror Raindrop collections as browser bookmarks
   - Automatic background synchronization
-- **Backup & Restore:** Export and import all your extension settings
+- **Backup & Restore:** Export and import all your extension settings with conflict-free (Automerge) sync across browsers
 
 ### 🖥️ Advanced Tab Features
 
@@ -49,10 +50,11 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
 - Copy title - URL (dash separated)
 - Copy markdown link `[Title](URL)`
 - Copy visible page screenshot
+- Auto-save screenshots to your filesystem (configurable in options)
 
 ### ✨ Content Enhancement
 
-- **Video Controller:** Enhanced video playback controls with keyboard shortcuts
+- **Video Controller:** Enhanced video playback controls with keyboard shortcuts and per-site auto fullscreen rules
 - **Picture-in-Picture:** Quick PiP mode for any video on the page
 - **Text Highlighting:** Persistent text highlights on web pages
 - **Bright Mode:** Force light/bright mode on any website (override dark themes)
@@ -60,6 +62,7 @@ Nenya is the ultimate browser extension for users who refuse to be tied down to 
 - **Custom JavaScript:** Inject custom JS code into specific websites
 - **Custom CSS:** Inject custom CSS styles into specific websites
 - **YouTube Enhancements:** Special optimizations and fixes for YouTube
+- **Emoji Panel:** Open anywhere and insert multiple emoji (hold Shift); light theme enforced for transparent emoji
 
 ### 🔐 Auto Features
 
