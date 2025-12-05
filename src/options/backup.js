@@ -14,8 +14,21 @@ import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
  */
 
 /**
+ * @typedef {Object} AutomergeSyncState
+ * @property {boolean} enabled
+ * @property {number | undefined} lastSyncAt
+ * @property {number | undefined} lastMergeAt
+ * @property {number | undefined} conflictsResolved
+ * @property {number | undefined} documentSize
+ * @property {number | undefined} chunkCount
+ * @property {string | undefined} lastSyncError
+ * @property {number | undefined} lastSyncErrorAt
+ */
+
+/**
  * @typedef {Object} BackupState
  * @property {Record<string, BackupCategoryState>} categories
+ * @property {AutomergeSyncState} [automerge]
  */
 
 /**
@@ -23,6 +36,7 @@ import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
  * @property {boolean} ok
  * @property {BackupState} [state]
  * @property {boolean} [loggedIn]
+ * @property {string} [actorId]
  * @property {string} [error]
  */
 
@@ -163,6 +177,16 @@ function extractLatestError(state) {
     });
   });
 
+  if (
+    state.automerge &&
+    typeof state.automerge.lastSyncError === 'string' &&
+    Number.isFinite(state.automerge.lastSyncErrorAt) &&
+    Number(state.automerge.lastSyncErrorAt) > latestTimestamp
+  ) {
+    latestMessage = state.automerge.lastSyncError;
+    latestTimestamp = Number(state.automerge.lastSyncErrorAt);
+  }
+
   return latestMessage;
 }
 
@@ -200,6 +224,9 @@ function renderStatus(state, isLoggedIn) {
     const lastBackupTimes = Object.values(state.categories).map(
       (category) => Number(category?.lastBackupAt ?? 0),
     );
+    if (state.automerge?.lastSyncAt) {
+      lastBackupTimes.push(Number(state.automerge.lastSyncAt));
+    }
     lastBackupElement.textContent = formatTimestamp(
       getLatestTimestamp(lastBackupTimes),
     );
@@ -211,6 +238,9 @@ function renderStatus(state, isLoggedIn) {
     const lastRestoreTimes = Object.values(state.categories).map(
       (category) => Number(category?.lastRestoreAt ?? 0),
     );
+    if (state.automerge?.lastMergeAt) {
+      lastRestoreTimes.push(Number(state.automerge.lastMergeAt));
+    }
     lastRestoreElement.textContent = formatTimestamp(
       getLatestTimestamp(lastRestoreTimes),
     );
@@ -373,7 +403,7 @@ function initializeBackupControls() {
   restoreButton.addEventListener('click', () => {
     void runAction(
       OPTIONS_BACKUP_MESSAGES.RESTORE_NOW,
-      'Options restored from backup.',
+      'Options restored from remote backup. Local changes discarded.',
     );
   });
 

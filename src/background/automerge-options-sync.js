@@ -40,6 +40,9 @@ const AUTOMERGE_ITEM_TITLE = 'automerge-options-sync';
 /** Item title prefix for chunked documents */
 const AUTOMERGE_CHUNK_TITLE_PREFIX = 'automerge-options-sync-chunk-';
 
+/** Page size used by Raindrop pagination (mirrors mirror.js FETCH_PAGE_SIZE) */
+const RAINDROP_PAGE_SIZE = 100;
+
 /** Maximum characters per Raindrop item description (hard limit) */
 const RAINDROP_MAX_DESCRIPTION_LENGTH = 10000;
 
@@ -68,23 +71,88 @@ let ensureCollectionPromise = null;
 /** @type {boolean} Whether the module has been initialized */
 let isInitialized = false;
 
+const ACTOR_ID_PREFIX = 'nenya';
+
+/**
+ * Generate a random hexadecimal string.
+ * @param {number} length
+ * @returns {string}
+ */
+function generateRandomHex(length) {
+  const bytes = new Uint8Array(Math.ceil(length / 2));
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, length);
+}
+
+/**
+ * Read the device id from options backup state when available.
+ * @returns {Promise<string | null>}
+ */
+async function readDeviceIdFromState() {
+  try {
+    const result = await chrome.storage.local.get('optionsBackupState');
+    const storedState = result?.optionsBackupState;
+    const deviceId = storedState?.deviceId;
+    if (typeof deviceId === 'string' && deviceId.trim()) {
+      return deviceId.trim();
+    }
+
+    const generated = 'device-' + generateRandomHex(6);
+    const nextState =
+      storedState && typeof storedState === 'object'
+        ? { ...storedState, deviceId: generated }
+        : { deviceId: generated };
+    await chrome.storage.local.set({ optionsBackupState: nextState });
+    return generated;
+  } catch (error) {
+    console.warn('[automerge] Failed to read deviceId from state:', error);
+  }
+  return null;
+}
+
 // ============================================================================
 // ACTOR ID MANAGEMENT
 // ============================================================================
 
 /**
  * Generate a unique actor ID for this browser instance.
- * Format: 32 hex characters (128 bits of randomness)
+ * Format: nenya-<deviceId>-<randomHex8>
+ * @returns {Promise<string>}
+ */
+async function generateActorId() {
+  const deviceId =
+    (await readDeviceIdFromState()) ?? 'device-' + generateRandomHex(6);
+  const sanitizedDeviceId =
+    deviceId.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/-+/g, '-') || 'device';
+  const randomHex = generateRandomHex(8);
+  return `${ACTOR_ID_PREFIX}-${sanitizedDeviceId}-${randomHex}`;
+}
+
+/**
+ * Convert the readable actor id into a hex-only string acceptable by Automerge.
+ * @param {string} actorId
  * @returns {string}
  */
-function generateActorId() {
-  // Generate a random 128-bit hex string (32 hex characters)
-  // This ensures uniqueness across browser instances
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
-  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join(
-    '',
-  );
+function toHexActorId(actorId) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(actorId);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Normalize base64 data by stripping whitespace and padding to a valid length.
+ * @param {string} data
+ * @returns {string}
+ */
+function normalizeBase64(data) {
+  const cleaned = (data || '').replace(/\s+/g, '');
+  const pad = cleaned.length % 4;
+  if (pad === 0) {
+    return cleaned;
+  }
+  return cleaned + '='.repeat(4 - pad);
 }
 
 /**
@@ -98,13 +166,13 @@ async function loadOrCreateActorId() {
       result.automergeActorId &&
       typeof result.automergeActorId === 'string'
     ) {
-      // Check if it's a valid hex string (migration from old format)
-      if (/^[0-9a-f]+$/i.test(result.automergeActorId)) {
+      // Check if it's a valid actor id (migration from old format)
+      if (/^nenya-[\w-]+-[0-9a-f]{8}$/i.test(result.automergeActorId)) {
         return result.automergeActorId;
       } else {
         console.log('[automerge] Migrating from old actor ID format');
-        // Old format detected, generate new hex-only actor ID
-        const newActorId = generateActorId();
+        // Old format detected, generate new actor ID using deviceId
+        const newActorId = await generateActorId();
         await chrome.storage.local.set({ automergeActorId: newActorId });
         console.log('[automerge] Generated new actor ID:', newActorId);
         return newActorId;
@@ -112,14 +180,14 @@ async function loadOrCreateActorId() {
     }
 
     // Generate new actor ID
-    const newActorId = generateActorId();
+    const newActorId = await generateActorId();
     await chrome.storage.local.set({ automergeActorId: newActorId });
     console.log('[automerge] Generated new actor ID:', newActorId);
     return newActorId;
   } catch (error) {
     console.error('[automerge] Failed to load/create actor ID:', error);
     // Fallback to generating without persisting
-    return generateActorId();
+    return await generateActorId();
   }
 }
 
@@ -136,11 +204,31 @@ export function getLocalAutomergeDoc() {
 }
 
 /**
+ * Get the current automerge actor id for this device.
+ * @returns {string | null}
+ */
+export function getAutomergeActorId() {
+  return deviceActorId;
+}
+
+/**
+ * Get the Automerge-safe hex actor id for this device.
+ * @returns {string | null}
+ */
+function getAutomergeActorHex() {
+  if (!deviceActorId) {
+    return null;
+  }
+  return toHexActorId(deviceActorId);
+}
+
+/**
  * Create an empty Automerge document with default structure.
  * @param {string} actorId - Actor ID for this device
  * @returns {any}
  */
 function createEmptyAutomergeDoc(actorId) {
+  const actorHex = toHexActorId(actorId);
   return Automerge.from(
     {
       // Top-level keys match chrome.storage keys
@@ -167,7 +255,7 @@ function createEmptyAutomergeDoc(actorId) {
         },
       },
     },
-    { actor: actorId },
+    { actor: actorHex },
   );
 }
 
@@ -186,13 +274,24 @@ export async function applyStorageChangesToDoc(changes) {
     const newDoc = Automerge.clone(localAutomergeDoc);
     localAutomergeDoc = Automerge.change(newDoc, (doc) => {
       for (const key in changes) {
-        if (key.startsWith('_') || !changes[key].newValue) {
-          continue; // Skip internal keys and deletions
+        if (key.startsWith('_')) {
+          continue; // Skip internal keys
         }
 
-        const value = changes[key].newValue;
+        const change = changes[key];
+        if (!Object.prototype.hasOwnProperty.call(change, 'newValue')) {
+          continue;
+        }
 
-        // Update the document with the new value
+        const value = change.newValue;
+
+        // Propagate deletions/removals
+        if (value === undefined) {
+          delete doc[key];
+          continue;
+        }
+
+        // Update the document with the new value (allow falsy/empty values)
         if (typeof value === 'object' && value !== null) {
           doc[key] = JSON.parse(JSON.stringify(value)); // Deep clone
         } else {
@@ -230,17 +329,30 @@ export async function applyDocToStorage(doc, suppressBackup = true) {
     const docData = JSON.parse(JSON.stringify(doc)); // Convert Automerge proxy to plain object
     const syncUpdates = {};
     const localUpdates = {};
+    /** @type {string[]} */
+    const syncRemovals = [];
+    /** @type {string[]} */
+    const localRemovals = [];
 
     // Extract all top-level keys except metadata
     for (const key in docData) {
       if (key === '_meta') {
         continue; // Skip metadata
       }
+      const value = docData[key];
       // customCodeRules goes to local storage due to size limits
       if (key === 'customCodeRules') {
-        localUpdates[key] = docData[key];
+        if (value === undefined) {
+          localRemovals.push(key);
+        } else {
+          localUpdates[key] = value;
+        }
       } else {
-        syncUpdates[key] = docData[key];
+        if (value === undefined) {
+          syncRemovals.push(key);
+        } else {
+          syncUpdates[key] = value;
+        }
       }
     }
 
@@ -249,17 +361,25 @@ export async function applyDocToStorage(doc, suppressBackup = true) {
     if (Object.keys(syncUpdates).length > 0) {
       promises.push(chrome.storage.sync.set(syncUpdates));
     }
+    if (syncRemovals.length > 0) {
+      promises.push(chrome.storage.sync.remove(syncRemovals));
+    }
     if (Object.keys(localUpdates).length > 0) {
       promises.push(chrome.storage.local.set(localUpdates));
     }
-    
+    if (localRemovals.length > 0) {
+      promises.push(chrome.storage.local.remove(localRemovals));
+    }
+
     await Promise.all(promises);
-    
-    const allKeys = [...Object.keys(syncUpdates), ...Object.keys(localUpdates)];
-    console.log(
-      '[automerge] Applied document to storage:',
-      allKeys,
-    );
+
+    const allKeys = [
+      ...Object.keys(syncUpdates),
+      ...Object.keys(localUpdates),
+      ...syncRemovals,
+      ...localRemovals,
+    ];
+    console.log('[automerge] Applied document to storage:', allKeys);
   } catch (error) {
     console.error('[automerge] Failed to apply document to storage:', error);
     throw error;
@@ -315,7 +435,10 @@ async function ensureAutomergeCollection() {
         }
 
         collection = createResponse.item;
-        console.log('[automerge] Created Automerge collection:', collection._id);
+        console.log(
+          '[automerge] Created Automerge collection:',
+          collection._id,
+        );
       }
 
       automergeCollectionId = collection._id;
@@ -329,6 +452,28 @@ async function ensureAutomergeCollection() {
   })();
 
   return ensureCollectionPromise;
+}
+
+/**
+ * Fetch all items from a collection, paging until exhausted.
+ * @param {any} tokens
+ * @param {number} collectionId
+ * @returns {Promise<any[]>}
+ */
+async function fetchAllCollectionItems(tokens, collectionId) {
+  /** @type {any[]} */
+  const all = [];
+  for (let page = 0; page < 50; page += 1) {
+    const items = await fetchRaindropItems(tokens, collectionId, page);
+    if (!items || items.length === 0) {
+      break;
+    }
+    all.push(...items);
+    if (items.length < RAINDROP_PAGE_SIZE) {
+      break;
+    }
+  }
+  return all;
 }
 
 /**
@@ -429,8 +574,8 @@ async function saveSingleItem(tokens, collectionId, base64Data) {
     );
   }
 
-  // Find existing item
-  const items = await fetchRaindropItems(tokens, collectionId, 0);
+  // Find existing item (all pages to avoid missing prior chunks)
+  const items = await fetchAllCollectionItems(tokens, collectionId);
   const existing = items.find((item) => item.title === AUTOMERGE_ITEM_TITLE);
 
   if (existing) {
@@ -479,8 +624,8 @@ async function saveChunkedItems(tokens, collectionId, chunks) {
     `total-chunks:${totalChunks}`,
   ];
 
-  // Fetch existing items
-  const items = await fetchRaindropItems(tokens, collectionId, 0);
+  // Fetch existing items (all pages)
+  const items = await fetchAllCollectionItems(tokens, collectionId);
   const existingChunks = items.filter((item) =>
     item.title.startsWith(AUTOMERGE_CHUNK_TITLE_PREFIX),
   );
@@ -550,7 +695,7 @@ async function saveChunkedItems(tokens, collectionId, chunks) {
  */
 async function cleanupObsoleteChunks(tokens, collectionId, keepCount) {
   try {
-    const items = await fetchRaindropItems(tokens, collectionId, 0);
+    const items = await fetchAllCollectionItems(tokens, collectionId);
     const chunks = items.filter((item) =>
       item.title.startsWith(AUTOMERGE_CHUNK_TITLE_PREFIX),
     );
@@ -577,18 +722,26 @@ async function cleanupObsoleteChunks(tokens, collectionId, keepCount) {
 /**
  * Load Automerge document from Raindrop (with automatic chunk reassembly).
  * @param {string} [actorId] - Actor ID to use for the loaded document (default: generate random)
- * @returns {Promise<any | null>} Loaded document or null if not found
+ * @returns {Promise<{ doc: any | null, lastRemoteModifiedAt: number }>} Loaded document and timestamp metadata
  */
 export async function loadDocFromRaindrop(actorId) {
   try {
+    const actorHex = actorId ? toHexActorId(actorId) : undefined;
     const collectionId = await ensureAutomergeCollection();
     const tokens = await loadValidProviderTokens();
     if (!tokens) {
       throw new Error('Raindrop authentication required');
     }
 
-    // Fetch all items from collection
-    const items = await fetchRaindropItems(tokens, collectionId, 0);
+    // Fetch all items from collection (ensure all chunks visible)
+    const items = await fetchAllCollectionItems(tokens, collectionId);
+    const lastRemoteModifiedAt = Math.max(
+      0,
+      ...items.map((item) => {
+        const ts = Date.parse(item?.lastUpdate ?? '');
+        return Number.isFinite(ts) ? ts : 0;
+      }),
+    );
 
     // Check for single item first
     const singleItem = items.find(
@@ -596,7 +749,10 @@ export async function loadDocFromRaindrop(actorId) {
     );
     if (singleItem && singleItem.excerpt) {
       console.log('[automerge] Found single item, loading...');
-      return deserializeDoc(singleItem.excerpt, actorId);
+      return {
+        doc: deserializeDoc(singleItem.excerpt, actorHex),
+        lastRemoteModifiedAt,
+      };
     }
 
     // Check for chunked items
@@ -606,12 +762,15 @@ export async function loadDocFromRaindrop(actorId) {
 
     if (chunks.length === 0) {
       console.log('[automerge] No Automerge document found in Raindrop');
-      return null;
+      return { doc: null, lastRemoteModifiedAt };
     }
 
     // Validate and reassemble chunks
     console.log('[automerge] Found', chunks.length, 'chunks, reassembling...');
-    return reassembleAndDeserializeChunks(chunks, actorId);
+    return {
+      doc: reassembleAndDeserializeChunks(chunks, actorHex),
+      lastRemoteModifiedAt,
+    };
   } catch (error) {
     console.error('[automerge] Failed to load document from Raindrop:', error);
     throw error;
@@ -626,12 +785,14 @@ export async function loadDocFromRaindrop(actorId) {
  */
 function deserializeDoc(base64Data, actorId) {
   try {
+    const normalized = normalizeBase64(base64Data);
+
     // Decode Base64
-    const binary = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+    const binary = Uint8Array.from(atob(normalized), (c) => c.charCodeAt(0));
 
     // Load Automerge document
     // Use provided actor ID or let Automerge generate one
-    const options = actorId ? { actor: actorId } : undefined;
+    const options = actorId ? { actor: toHexActorId(actorId) } : undefined;
     const doc = Automerge.load(binary, options);
     console.log('[automerge] Document deserialized successfully');
     return doc;
@@ -688,8 +849,15 @@ function reassembleAndDeserializeChunks(chunks, actorId) {
       }
     }
 
-    // Concatenate chunks
-    const base64Data = sortedChunks.map((chunk) => chunk.excerpt).join('');
+    // Concatenate chunks (ensure excerpt exists)
+    const base64Data = sortedChunks
+      .map((chunk) => {
+        if (typeof chunk.excerpt !== 'string') {
+          throw new Error('Chunk missing excerpt data');
+        }
+        return chunk.excerpt;
+      })
+      .join('');
     console.log(
       '[automerge] Reassembled',
       totalChunks,
@@ -752,7 +920,10 @@ async function ensureLocalStorageInDoc() {
     for (const key of syncKeys) {
       const storageValue = syncStorage[key];
       const docValue = docData[key];
-      if (storageValue !== undefined && JSON.stringify(storageValue) !== JSON.stringify(docValue)) {
+      if (
+        storageValue !== undefined &&
+        JSON.stringify(storageValue) !== JSON.stringify(docValue)
+      ) {
         hasChanges = true;
         break;
       }
@@ -760,7 +931,11 @@ async function ensureLocalStorageInDoc() {
 
     // Check customCodeRules (from local storage)
     const customCodeRules = localStorage.customCodeRules;
-    if (customCodeRules !== undefined && JSON.stringify(customCodeRules) !== JSON.stringify(docData.customCodeRules)) {
+    if (
+      customCodeRules !== undefined &&
+      JSON.stringify(customCodeRules) !==
+        JSON.stringify(docData.customCodeRules)
+    ) {
       hasChanges = true;
     }
 
@@ -796,12 +971,50 @@ async function ensureLocalStorageInDoc() {
 }
 
 /**
+ * Calculate document size and chunk count for diagnostics.
+ * @param {any} doc
+ * @returns {{ documentSize: number, chunkCount: number }}
+ */
+function calculateDocMetrics(doc) {
+  if (!doc) {
+    return { documentSize: 0, chunkCount: 0 };
+  }
+  const binary = Automerge.save(doc);
+  const base64 = btoa(String.fromCharCode(...binary));
+  const chunkCount = Math.ceil(base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH);
+  return { documentSize: base64.length, chunkCount };
+}
+
+/**
+ * Stamp the current device metadata onto a document.
+ * @param {any} doc
+ * @returns {any}
+ */
+function stampDeviceMetadata(doc) {
+  if (!doc || !deviceActorId) {
+    return doc;
+  }
+  try {
+    const actorId = /** @type {string} */ (deviceActorId);
+    return Automerge.change(doc, (mutable) => {
+      if (mutable._meta && mutable._meta.devices) {
+        mutable._meta.devices[actorId] = { lastSeen: Date.now() };
+      }
+    });
+  } catch (error) {
+    console.warn('[automerge] Failed to stamp device metadata:', error);
+    return doc;
+  }
+}
+
+/**
  * Perform sync with remote Raindrop document.
  * Merges local and remote documents using Automerge CRDT.
- * @param {{ forceRestore?: boolean }} options - Sync options
- * @returns {Promise<{merged: boolean, conflictsResolved: number, documentSize: number, chunkCount: number}>}
+ * @param {{ forceRestore?: boolean, trigger?: string }} options - Sync options
+ * @returns {Promise<{merged: boolean, conflictsResolved: number, documentSize: number, chunkCount: number, pulled: boolean, pushed: boolean, remoteLastModifiedAt?: number}>}
  */
 export async function syncWithRemote(options = {}) {
+  const { forceRestore = false, trigger = 'storage' } = options;
   // Ensure initialization before sync
   if (!isInitialized) {
     await initializeAutomergeSync();
@@ -821,6 +1034,9 @@ export async function syncWithRemote(options = {}) {
       conflictsResolved: 0,
       documentSize: 0,
       chunkCount: 0,
+      pulled: false,
+      pushed: false,
+      remoteLastModifiedAt: 0,
     };
   }
 
@@ -831,19 +1047,24 @@ export async function syncWithRemote(options = {}) {
     // are captured in the Automerge document before syncing.
     // This handles cases where storage changes weren't captured due to
     // service worker restart or initialization timing issues.
-    if (!options.forceRestore) {
+    if (!forceRestore) {
       await ensureLocalStorageInDoc();
     }
 
     // Load remote document
     // Load with random actor ID to avoid conflict with local document
     // when merging (we don't need to own the remote snapshot)
-    const remoteDoc = await loadDocFromRaindrop(undefined);
+    const remoteResult = await loadDocFromRaindrop(undefined);
+    const remoteDoc = remoteResult?.doc ?? null;
+    const remoteLastModifiedAt = Number(
+      remoteResult?.lastRemoteModifiedAt ?? 0,
+    );
 
     if (!remoteDoc) {
       // No remote document exists, push local
       console.log('[automerge] No remote document, pushing local...');
       if (localAutomergeDoc) {
+        localAutomergeDoc = stampDeviceMetadata(localAutomergeDoc);
         await saveDocToRaindrop(localAutomergeDoc);
       } else {
         // Create and push empty document
@@ -852,38 +1073,36 @@ export async function syncWithRemote(options = {}) {
       }
 
       // Calculate document info
-      const binary = Automerge.save(localAutomergeDoc);
-      const base64 = btoa(String.fromCharCode(...binary));
-      const chunkCount = Math.ceil(
-        base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH,
-      );
+      const metrics = calculateDocMetrics(localAutomergeDoc);
 
       return {
         merged: false,
         conflictsResolved: 0,
-        documentSize: base64.length,
-        chunkCount,
+        documentSize: metrics.documentSize,
+        chunkCount: metrics.chunkCount,
+        pulled: false,
+        pushed: true,
+        remoteLastModifiedAt,
       };
     }
 
-    if (options.forceRestore && remoteDoc) {
+    if (forceRestore && remoteDoc) {
       // Force restore: replace local with remote without merging
       console.log('[automerge] Force restore: replacing local with remote');
-      localAutomergeDoc = remoteDoc;
+      localAutomergeDoc = stampDeviceMetadata(remoteDoc);
       await applyDocToStorage(localAutomergeDoc, true);
 
       // Calculate document info
-      const binary = Automerge.save(localAutomergeDoc);
-      const base64 = btoa(String.fromCharCode(...binary));
-      const chunkCount = Math.ceil(
-        base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH,
-      );
+      const metrics = calculateDocMetrics(localAutomergeDoc);
 
       return {
         merged: false,
         conflictsResolved: 0,
-        documentSize: base64.length,
-        chunkCount,
+        documentSize: metrics.documentSize,
+        chunkCount: metrics.chunkCount,
+        pulled: true,
+        pushed: false,
+        remoteLastModifiedAt,
       };
     }
 
@@ -904,13 +1123,16 @@ export async function syncWithRemote(options = {}) {
       ? Automerge.getHistory(localAutomergeDoc).length
       : 0;
     const mergedHistory = Automerge.getHistory(mergedDoc).length;
-    
+
     // Check if remote had changes we need to apply locally
     const remoteHadNewChanges = mergedHistory > localHistory;
     // Check if local has changes that need to be pushed to remote
     const localHasUnpushedChanges = mergedHistory > remoteHistory;
-    
-    const conflictsResolved = Math.max(0, mergedHistory - Math.max(localHistory, remoteHistory));
+
+    const conflictsResolved = Math.max(
+      0,
+      mergedHistory - Math.max(localHistory, remoteHistory),
+    );
 
     console.log('[automerge] History comparison:', {
       remoteHistory,
@@ -920,10 +1142,13 @@ export async function syncWithRemote(options = {}) {
       localHasUnpushedChanges,
     });
 
-    // Update local document if merge produced changes
-    if (remoteHadNewChanges || localHasUnpushedChanges) {
+    // Update local document if merge produced changes or local doc was empty
+    if (remoteHadNewChanges || localHasUnpushedChanges || !localAutomergeDoc) {
       localAutomergeDoc = mergedDoc;
     }
+
+    // Stamp metadata for this device on the merged document
+    localAutomergeDoc = stampDeviceMetadata(localAutomergeDoc);
 
     // Apply remote changes to local storage if any
     if (remoteHadNewChanges) {
@@ -938,17 +1163,16 @@ export async function syncWithRemote(options = {}) {
     }
 
     // Calculate document info
-    const binary = Automerge.save(localAutomergeDoc);
-    const base64 = btoa(String.fromCharCode(...binary));
-    const chunkCount = Math.ceil(
-      base64.length / RAINDROP_MAX_DESCRIPTION_LENGTH,
-    );
+    const metrics = calculateDocMetrics(localAutomergeDoc);
 
     return {
       merged: remoteHadNewChanges || localHasUnpushedChanges,
       conflictsResolved,
-      documentSize: base64.length,
-      chunkCount,
+      documentSize: metrics.documentSize,
+      chunkCount: metrics.chunkCount,
+      pulled: remoteHadNewChanges,
+      pushed: localHasUnpushedChanges,
+      remoteLastModifiedAt,
     };
   } catch (error) {
     console.error('[automerge] Sync failed:', error);
@@ -972,10 +1196,7 @@ async function detectOldBackupFormat() {
     }
 
     // Fetch all collections
-    const collectionsResponse = await raindropRequest(
-      '/collections',
-      tokens,
-    );
+    const collectionsResponse = await raindropRequest('/collections', tokens);
 
     const collections = Array.isArray(collectionsResponse?.items)
       ? collectionsResponse.items
@@ -1086,14 +1307,15 @@ export async function initializeAutomergeSync() {
 
     // Try to load existing remote document
     console.log('[automerge] Attempting to load document from Raindrop...');
-    const remoteDoc = await loadDocFromRaindrop(deviceActorId);
+    const remoteResult = await loadDocFromRaindrop(deviceActorId);
+    const remoteDoc = remoteResult?.doc ?? null;
 
     if (remoteDoc) {
       console.log('[automerge] Loaded existing document from Raindrop');
       // Use remote document directly - trust remote as source of truth during initialization
       // Local changes are only tracked when user makes changes AFTER initialization
       // User should click "Backup Now" to push local changes before switching browsers
-      localAutomergeDoc = remoteDoc;
+      localAutomergeDoc = stampDeviceMetadata(remoteDoc);
     } else {
       // Check if migration is needed
       const hasOldBackup = await detectOldBackupFormat();

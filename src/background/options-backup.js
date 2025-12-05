@@ -16,6 +16,7 @@ import { evaluateAllTabs } from './auto-reload.js';
 import {
   syncWithRemote,
   applyStorageChangesToDoc,
+  getAutomergeActorId,
 } from './automerge-options-sync.js';
 
 /**
@@ -410,6 +411,7 @@ const backupSuppressionUntil = new Map();
 const lastAutoNotificationAt = new Map();
 let restoreInProgress = false;
 let lastAutoRestoreAttemptAt = 0;
+let automergeApplyInProgress = false;
 
 // Automerge sync state
 let automergeSyncQueued = false;
@@ -419,6 +421,7 @@ let automergeSyncDebounceTimer = null;
 let pendingAutomergeTrigger = 'storage';
 let storageListenerRegistered = false;
 let alarmListenerRegistered = false;
+let focusListenerRegistered = false;
 
 const CATEGORY_IDS = [
   'auth-provider-settings',
@@ -434,6 +437,7 @@ const CATEGORY_IDS = [
   'url-process-rules',
   'auto-google-login-rules',
   'pinned-shortcuts',
+  'screenshot-settings',
 ];
 
 /**
@@ -756,6 +760,58 @@ function suppressBackup(categoryId) {
     categoryId,
     Date.now() + BACKUP_SUPPRESSION_DURATION_MS,
   );
+}
+
+/**
+ * Map storage change keys to backup category ids.
+ * @param {Record<string, chrome.storage.StorageChange>} changes
+ * @returns {string[]}
+ */
+function getCategoriesForChanges(changes) {
+  const categories = new Set();
+  if (ROOT_FOLDER_SETTINGS_KEY in changes) {
+    categories.add('auth-provider-settings');
+  }
+  if (NOTIFICATION_PREFERENCES_KEY in changes) {
+    categories.add('notification-preferences');
+  }
+  if (AUTO_RELOAD_RULES_KEY in changes) {
+    categories.add('auto-reload-rules');
+  }
+  if (DARK_MODE_RULES_KEY in changes) {
+    categories.add('dark-mode-rules');
+  }
+  if (BRIGHT_MODE_WHITELIST_KEY in changes) {
+    categories.add('bright-mode-settings');
+  }
+  if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
+    categories.add('highlight-text-rules');
+  }
+  if (VIDEO_ENHANCEMENT_RULES_KEY in changes) {
+    categories.add('video-enhancement-rules');
+  }
+  if (BLOCK_ELEMENT_RULES_KEY in changes) {
+    categories.add('block-element-rules');
+  }
+  if (CUSTOM_CODE_RULES_KEY in changes) {
+    categories.add('custom-code-rules');
+  }
+  if (LLM_PROMPTS_KEY in changes) {
+    categories.add('llm-prompts');
+  }
+  if (URL_PROCESS_RULES_KEY in changes) {
+    categories.add('url-process-rules');
+  }
+  if (AUTO_GOOGLE_LOGIN_RULES_KEY in changes) {
+    categories.add('auto-google-login-rules');
+  }
+  if (PINNED_SHORTCUTS_KEY in changes) {
+    categories.add('pinned-shortcuts');
+  }
+  if (SCREENSHOT_SETTINGS_KEY in changes) {
+    categories.add('screenshot-settings');
+  }
+  return Array.from(categories);
 }
 
 /**
@@ -3901,6 +3957,13 @@ const CATEGORY_CONFIG = {
     parseItem: parseAutoGoogleLoginRulesItem,
     applyPayload: applyAutoGoogleLoginRules,
   },
+  'screenshot-settings': {
+    title: 'screenshot-settings',
+    link: 'https://nenya.local/options/screenshot',
+    buildPayload: buildScreenshotSettingsPayload,
+    parseItem: parseScreenshotSettingsItem,
+    applyPayload: applyScreenshotSettings,
+  },
   'pinned-shortcuts': {
     title: 'pinned-shortcuts',
     link: 'https://nenya.local/options/pinned-shortcuts',
@@ -3976,6 +4039,117 @@ async function updateAutomergeState(updates) {
 }
 
 /**
+ * Ensure automerge state is present on BackupState.
+ * @param {BackupState} state
+ * @returns {AutomergeSyncState}
+ */
+function ensureAutomergeState(state) {
+  if (!state.automerge) {
+    state.automerge = {
+      enabled: true,
+      lastSyncAt: undefined,
+      lastMergeAt: undefined,
+      conflictsResolved: 0,
+      documentSize: undefined,
+      chunkCount: undefined,
+      lastSyncError: undefined,
+      lastSyncErrorAt: undefined,
+    };
+  }
+  return state.automerge;
+}
+
+/**
+ * Record a successful automerge sync into state and category timestamps.
+ * @param {string} trigger
+ * @param {{ merged?: boolean, conflictsResolved?: number, documentSize?: number, chunkCount?: number, pulled?: boolean, pushed?: boolean, remoteLastModifiedAt?: number }} syncInfo
+ * @param {{ markBackup?: boolean, markRestore?: boolean, forceRestore?: boolean }} [options]
+ * @returns {Promise<void>}
+ */
+async function recordAutomergeSuccess(trigger, syncInfo, options = {}) {
+  const now = Date.now();
+  const pulled =
+    Boolean(syncInfo?.pulled) ||
+    Boolean(options.markRestore) ||
+    Boolean(options.forceRestore);
+  const pushed = Boolean(syncInfo?.pushed) || Boolean(options.markBackup);
+  const remoteLastModifiedAt = Number(syncInfo?.remoteLastModifiedAt ?? 0);
+
+  await updateState((state) => {
+    const automerge = ensureAutomergeState(state);
+    automerge.enabled = true;
+    automerge.lastSyncAt = now;
+    if (syncInfo?.merged || pulled) {
+      automerge.lastMergeAt = now;
+    }
+    if (Number.isFinite(syncInfo?.conflictsResolved)) {
+      automerge.conflictsResolved = Number(syncInfo.conflictsResolved);
+    }
+    if (Number.isFinite(syncInfo?.documentSize)) {
+      automerge.documentSize = Number(syncInfo.documentSize);
+    }
+    if (Number.isFinite(syncInfo?.chunkCount)) {
+      automerge.chunkCount = Number(syncInfo.chunkCount);
+    }
+    automerge.lastSyncError = undefined;
+    automerge.lastSyncErrorAt = undefined;
+
+    CATEGORY_IDS.forEach((categoryId) => {
+      const category = state.categories[categoryId];
+      if (!category) {
+        return;
+      }
+      if (pushed) {
+        category.lastBackupAt = now;
+        category.lastBackupTrigger = trigger;
+        category.lastBackupError = undefined;
+        category.lastBackupErrorAt = undefined;
+      }
+      if (pulled) {
+        category.lastRestoreAt = now;
+        category.lastRestoreTrigger = trigger;
+        category.lastRestoreError = undefined;
+        category.lastRestoreErrorAt = undefined;
+      }
+      if (remoteLastModifiedAt > 0) {
+        category.lastRemoteModifiedAt = remoteLastModifiedAt;
+      }
+    });
+  });
+}
+
+/**
+ * Record a failed automerge sync attempt.
+ * @param {string} trigger
+ * @param {string} message
+ * @param {boolean} isBackupError
+ * @returns {Promise<void>}
+ */
+async function recordAutomergeFailure(trigger, message, isBackupError) {
+  const now = Date.now();
+  const normalizedMessage = message || 'Sync failed';
+  await updateState((state) => {
+    const automerge = ensureAutomergeState(state);
+    automerge.lastSyncError = normalizedMessage;
+    automerge.lastSyncErrorAt = now;
+
+    CATEGORY_IDS.forEach((categoryId) => {
+      const category = state.categories[categoryId];
+      if (!category) {
+        return;
+      }
+      if (isBackupError) {
+        category.lastBackupError = normalizedMessage;
+        category.lastBackupErrorAt = now;
+      } else {
+        category.lastRestoreError = normalizedMessage;
+        category.lastRestoreErrorAt = now;
+      }
+    });
+  });
+}
+
+/**
  * Queue an Automerge sync operation (debounced).
  * @param {string} trigger - Reason for sync ('storage', 'manual', 'alarm', etc.)
  * @returns {void}
@@ -4020,33 +4194,49 @@ function startAutomergeSyncRun() {
       const trigger = pendingAutomergeTrigger;
       pendingAutomergeTrigger = 'storage';
       try {
-        const syncInfo = await syncWithRemote({ forceRestore: false });
+        automergeApplyInProgress = true;
+        const syncInfo = await syncWithRemote({
+          forceRestore: false,
+          trigger,
+        });
         console.log('[automerge] Sync completed successfully');
 
-        await updateAutomergeState({
-          lastSyncAt: Date.now(),
-          lastMergeAt: syncInfo?.merged ? Date.now() : undefined,
-          conflictsResolved: syncInfo?.conflictsResolved || 0,
-          documentSize: syncInfo?.documentSize || undefined,
-          chunkCount: syncInfo?.chunkCount || undefined,
-          lastSyncError: undefined,
-          lastSyncErrorAt: undefined,
-        });
+        await recordAutomergeSuccess(trigger, syncInfo);
+
+        if (syncInfo?.pulled) {
+          try {
+            await evaluateAllTabs();
+          } catch (error) {
+            console.warn(
+              '[automerge] Failed to re-evaluate auto reload rules after sync:',
+              error,
+            );
+          }
+        }
       } catch (error) {
         console.error('[automerge] Sync failed:', error);
 
-        await updateAutomergeState({
-          lastSyncError: error.message || 'Sync failed',
-          lastSyncErrorAt: Date.now(),
-        });
+        await recordAutomergeFailure(
+          trigger,
+          error?.message || 'Sync failed',
+          trigger === 'manual',
+        );
 
         if (trigger === 'manual') {
           void pushNotification(
             'options-backup-error',
             'Options Sync Failed',
-            `Failed to sync settings: ${error.message}`,
+            `Failed to sync settings: ${error?.message || 'Unknown error'}`,
+          );
+        } else if (canNotify('automerge-sync')) {
+          void pushNotification(
+            'options-backup',
+            'Options sync failed',
+            error?.message || 'Failed to sync settings',
           );
         }
+      } finally {
+        automergeApplyInProgress = false;
       }
     }
     automergeSyncRunning = false;
@@ -4479,69 +4669,26 @@ async function performRestore(trigger, notifyOnError) {
  * @returns {void}
  */
 function handleStorageChanges(changes, areaName) {
-  // Handle sync storage changes with Automerge
-  if (areaName === 'sync') {
-    // Apply changes to Automerge document
+  if (areaName === 'sync' || areaName === 'local') {
+    if (automergeApplyInProgress) {
+      return;
+    }
+
+    const affectedCategories = getCategoriesForChanges(changes);
+    const hasUnsuppressed =
+      affectedCategories.length === 0 ||
+      affectedCategories.some((categoryId) => !isBackupSuppressed(categoryId));
+
+    if (!hasUnsuppressed) {
+      return;
+    }
+
     void applyStorageChangesToDoc(changes).catch((error) => {
       console.error('[options-backup] Failed to apply changes to Automerge:', error);
     });
 
     // Queue sync with remote (debounced)
     queueAutomergeSync('storage');
-
-    // OLD IMPLEMENTATION (kept for reference during transition):
-    // Each feature category triggers its own backup
-    if (ROOT_FOLDER_SETTINGS_KEY in changes) {
-      // queueCategoryBackup('auth-provider-settings', 'storage');
-    }
-    if (NOTIFICATION_PREFERENCES_KEY in changes) {
-      // queueCategoryBackup('notification-preferences', 'storage');
-    }
-    if (AUTO_RELOAD_RULES_KEY in changes) {
-      // queueCategoryBackup('auto-reload-rules', 'storage');
-    }
-    if (DARK_MODE_RULES_KEY in changes) {
-      queueCategoryBackup('dark-mode-rules', 'storage');
-    }
-    if (BRIGHT_MODE_WHITELIST_KEY in changes) {
-      queueCategoryBackup('bright-mode-settings', 'storage');
-    }
-    if (HIGHLIGHT_TEXT_RULES_KEY in changes) {
-      queueCategoryBackup('highlight-text-rules', 'storage');
-    }
-    if (VIDEO_ENHANCEMENT_RULES_KEY in changes) {
-      queueCategoryBackup('video-enhancement-rules', 'storage');
-    }
-    if (BLOCK_ELEMENT_RULES_KEY in changes) {
-      queueCategoryBackup('block-element-rules', 'storage');
-    }
-    if (LLM_PROMPTS_KEY in changes) {
-      queueCategoryBackup('llm-prompts', 'storage');
-    }
-    if (URL_PROCESS_RULES_KEY in changes) {
-      queueCategoryBackup('url-process-rules', 'storage');
-    }
-    if (AUTO_GOOGLE_LOGIN_RULES_KEY in changes) {
-      queueCategoryBackup('auto-google-login-rules', 'storage');
-    }
-    if (PINNED_SHORTCUTS_KEY in changes) {
-      queueCategoryBackup('pinned-shortcuts', 'storage');
-    }
-  }
-
-  // Handle local storage changes (for custom code rules)
-  if (areaName === 'local') {
-    if (CUSTOM_CODE_RULES_KEY in changes) {
-      // Apply changes to Automerge document (same as sync storage)
-      void applyStorageChangesToDoc(changes).catch((error) => {
-        console.error('[options-backup] Failed to apply local changes to Automerge:', error);
-      });
-      
-      // Queue sync with remote
-      queueAutomergeSync('storage');
-      
-      queueCategoryBackup('custom-code-rules', 'storage');
-    }
   }
 }
 
@@ -4587,7 +4734,7 @@ function handleWindowFocus(windowId) {
   }
 
   lastAutoRestoreAttemptAt = now;
-  void performRestore('focus', true);
+  queueAutomergeSync('focus');
 }
 
 /**
@@ -4611,6 +4758,11 @@ export function initializeOptionsBackupService() {
     void scheduleRestoreAlarm();
   }
 
+  if (chrome?.windows?.onFocusChanged && !focusListenerRegistered) {
+    chrome.windows.onFocusChanged.addListener(handleWindowFocus);
+    focusListenerRegistered = true;
+  }
+
   console.log('[options-backup] Automerge backup service initialized');
 }
 
@@ -4621,15 +4773,38 @@ export function initializeOptionsBackupService() {
  */
 export async function handleOptionsBackupLifecycle(trigger) {
   initializeOptionsBackupService();
-  
+
+  const lifecycleTrigger = trigger || 'lifecycle';
+
   // Use Automerge sync for lifecycle restore
   try {
-    await syncWithRemote({ forceRestore: false });
+    automergeApplyInProgress = true;
+    const syncInfo = await syncWithRemote({
+      forceRestore: false,
+      trigger: lifecycleTrigger,
+    });
+    await recordAutomergeSuccess(lifecycleTrigger, syncInfo);
     console.log('[options-backup] Lifecycle sync completed');
+
+    if (syncInfo?.pulled) {
+      try {
+        await evaluateAllTabs();
+      } catch (error) {
+        console.warn(
+          '[options-backup] Failed to re-evaluate auto reload rules after lifecycle sync:',
+          error,
+        );
+      }
+    }
   } catch (error) {
     console.error('[options-backup] Lifecycle sync failed:', error);
-    // Fallback to old restore if Automerge fails
-    // await performRestore(trigger, true);
+    await recordAutomergeFailure(
+      lifecycleTrigger,
+      error?.message || 'Lifecycle sync failed',
+      false,
+    );
+  } finally {
+    automergeApplyInProgress = false;
   }
 }
 
@@ -4639,25 +4814,18 @@ export async function handleOptionsBackupLifecycle(trigger) {
  */
 export async function runManualBackup() {
   initializeOptionsBackupService();
-  
+
   // Use Automerge sync for manual backup
   try {
-    await syncWithRemote({ forceRestore: false });
-    
-    // Update lastBackupAt timestamp for all categories
-    const now = Date.now();
-    const state = await updateState((draft) => {
-      CATEGORY_IDS.forEach((categoryId) => {
-        const categoryState = draft.categories[categoryId];
-        if (categoryState) {
-          categoryState.lastBackupAt = now;
-          categoryState.lastBackupTrigger = 'manual';
-          categoryState.lastBackupError = undefined;
-          categoryState.lastBackupErrorAt = undefined;
-        }
-      });
+    automergeApplyInProgress = true;
+    const syncInfo = await syncWithRemote({
+      forceRestore: false,
+      trigger: 'manual',
     });
-    
+
+    await recordAutomergeSuccess('manual', syncInfo, { markBackup: true });
+    const state = await loadState();
+
     return {
       ok: true,
       errors: [],
@@ -4665,11 +4833,19 @@ export async function runManualBackup() {
     };
   } catch (error) {
     console.error('[options-backup] Manual backup failed:', error);
+
+    await recordAutomergeFailure(
+      'manual',
+      error?.message || 'Manual backup failed',
+      true,
+    );
     return {
       ok: false,
-      errors: [error.message || 'Manual backup failed'],
+      errors: [error?.message || 'Manual backup failed'],
       state: await loadState(),
     };
+  } finally {
+    automergeApplyInProgress = false;
   }
 }
 
@@ -4679,25 +4855,31 @@ export async function runManualBackup() {
  */
 export async function runManualRestore() {
   initializeOptionsBackupService();
-  
+
   // Use Automerge sync with force restore
   try {
-    await syncWithRemote({ forceRestore: true });
-    
-    // Update lastRestoreAt timestamp for all categories
-    const now = Date.now();
-    const state = await updateState((draft) => {
-      CATEGORY_IDS.forEach((categoryId) => {
-        const categoryState = draft.categories[categoryId];
-        if (categoryState) {
-          categoryState.lastRestoreAt = now;
-          categoryState.lastRestoreTrigger = 'manual';
-          categoryState.lastRestoreError = undefined;
-          categoryState.lastRestoreErrorAt = undefined;
-        }
-      });
+    automergeApplyInProgress = true;
+    const syncInfo = await syncWithRemote({
+      forceRestore: true,
+      trigger: 'manual-restore',
     });
-    
+
+    await recordAutomergeSuccess('manual-restore', syncInfo, {
+      markRestore: true,
+      forceRestore: true,
+    });
+
+    try {
+      await evaluateAllTabs();
+    } catch (error) {
+      console.warn(
+        '[options-backup] Failed to re-evaluate auto reload rules after manual restore:',
+        error,
+      );
+    }
+
+    const state = await loadState();
+
     return {
       ok: true,
       errors: [],
@@ -4705,11 +4887,19 @@ export async function runManualRestore() {
     };
   } catch (error) {
     console.error('[options-backup] Manual restore failed:', error);
+
+    await recordAutomergeFailure(
+      'manual-restore',
+      error?.message || 'Manual restore failed',
+      false,
+    );
     return {
       ok: false,
-      errors: [error.message || 'Manual restore failed'],
+      errors: [error?.message || 'Manual restore failed'],
       state: await loadState(),
     };
+  } finally {
+    automergeApplyInProgress = false;
   }
 }
 
@@ -4719,13 +4909,46 @@ export async function runManualRestore() {
  */
 export async function runLoginRestore() {
   initializeOptionsBackupService();
-  const result = await performRestore('login', true);
-  const state = await loadState();
-  return {
-    ok: result.ok,
-    errors: result.errors,
-    state,
-  };
+  try {
+    automergeApplyInProgress = true;
+    const syncInfo = await syncWithRemote({
+      forceRestore: false,
+      trigger: 'login',
+    });
+
+    await recordAutomergeSuccess('login', syncInfo, { markRestore: true });
+
+    if (syncInfo?.pulled) {
+      try {
+        await evaluateAllTabs();
+      } catch (error) {
+        console.warn(
+          '[options-backup] Failed to re-evaluate auto reload rules after login restore:',
+          error,
+        );
+      }
+    }
+
+    const state = await loadState();
+    return {
+      ok: true,
+      errors: [],
+      state,
+    };
+  } catch (error) {
+    await recordAutomergeFailure(
+      'login',
+      error?.message || 'Login sync failed',
+      false,
+    );
+    return {
+      ok: false,
+      errors: [error?.message || 'Login sync failed'],
+      state: await loadState(),
+    };
+  } finally {
+    automergeApplyInProgress = false;
+  }
 }
 
 /**
@@ -4741,10 +4964,14 @@ export async function resetOptionsToDefaults() {
   suppressBackup('dark-mode-rules');
   suppressBackup('bright-mode-settings');
   suppressBackup('highlight-text-rules');
+  suppressBackup('video-enhancement-rules');
   suppressBackup('block-element-rules');
   suppressBackup('custom-code-rules');
   suppressBackup('llm-prompts');
   suppressBackup('url-process-rules');
+  suppressBackup('auto-google-login-rules');
+  suppressBackup('pinned-shortcuts');
+  suppressBackup('screenshot-settings');
 
   const defaultPreferences = JSON.parse(
     JSON.stringify(DEFAULT_NOTIFICATION_PREFERENCES),
@@ -4763,9 +4990,13 @@ export async function resetOptionsToDefaults() {
       [DARK_MODE_RULES_KEY]: [],
       [BRIGHT_MODE_WHITELIST_KEY]: [],
       [HIGHLIGHT_TEXT_RULES_KEY]: [],
+      [VIDEO_ENHANCEMENT_RULES_KEY]: [],
       [BLOCK_ELEMENT_RULES_KEY]: [],
       [LLM_PROMPTS_KEY]: [],
       [URL_PROCESS_RULES_KEY]: [],
+      [AUTO_GOOGLE_LOGIN_RULES_KEY]: [],
+      [SCREENSHOT_SETTINGS_KEY]: { autoSave: false },
+      [PINNED_SHORTCUTS_KEY]: [],
     }),
     chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: [],
@@ -4778,13 +5009,33 @@ export async function resetOptionsToDefaults() {
     });
   });
 
-  const backupResult = await performFullBackup('reset');
-  const state = await loadState();
-  return {
-    ok: backupResult.ok,
-    errors: backupResult.errors,
-    state,
-  };
+  try {
+    automergeApplyInProgress = true;
+    const syncInfo = await syncWithRemote({
+      forceRestore: false,
+      trigger: 'reset',
+    });
+    await recordAutomergeSuccess('reset', syncInfo, { markBackup: true });
+    const state = await loadState();
+    return {
+      ok: true,
+      errors: [],
+      state,
+    };
+  } catch (error) {
+    await recordAutomergeFailure(
+      'reset',
+      error?.message || 'Reset backup failed',
+      true,
+    );
+    return {
+      ok: false,
+      errors: [error?.message || 'Reset backup failed'],
+      state: await loadState(),
+    };
+  } finally {
+    automergeApplyInProgress = false;
+  }
 }
 
 /**
@@ -4797,43 +5048,11 @@ export async function getBackupStatus() {
   const tokens = await loadValidProviderTokens();
   const state = await loadState();
 
-  // Clear legacy JSON backup errors since we now use Automerge sync
-  // These errors are from the old JSON-based backup system and are no longer relevant
-  let hasLegacyErrors = false;
-  CATEGORY_IDS.forEach((categoryId) => {
-    const category = state.categories[categoryId];
-    if (category) {
-      if (category.lastBackupError || category.lastRestoreError) {
-        hasLegacyErrors = true;
-      }
-    }
-  });
-
-  if (hasLegacyErrors) {
-    await updateState((draft) => {
-      CATEGORY_IDS.forEach((categoryId) => {
-        const category = draft.categories[categoryId];
-        if (category) {
-          category.lastBackupError = undefined;
-          category.lastBackupErrorAt = undefined;
-          category.lastRestoreError = undefined;
-          category.lastRestoreErrorAt = undefined;
-        }
-      });
-    });
-    // Re-load state after clearing errors
-    const cleanState = await loadState();
-    return {
-      ok: true,
-      state: cleanState,
-      loggedIn: Boolean(tokens),
-    };
-  }
-
   return {
     ok: true,
     state,
     loggedIn: Boolean(tokens),
+    actorId: getAutomergeActorId(),
   };
 }
 
@@ -4899,6 +5118,7 @@ export function handleOptionsBackupMessage(message, sendResponse) {
         });
       return true;
     }
+    case OPTIONS_BACKUP_MESSAGES.SYNC_AFTER_LOGIN:
     case OPTIONS_BACKUP_MESSAGES.RESTORE_AFTER_LOGIN: {
       void runLoginRestore()
         .then((result) => {

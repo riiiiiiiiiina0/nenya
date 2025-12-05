@@ -1343,7 +1343,7 @@ async function processOAuthSuccess(message) {
 
   try {
     await sendRuntimeMessage({
-      type: OPTIONS_BACKUP_MESSAGES.RESTORE_AFTER_LOGIN,
+      type: OPTIONS_BACKUP_MESSAGES.SYNC_AFTER_LOGIN,
     });
   } catch (error) {
     console.warn(
