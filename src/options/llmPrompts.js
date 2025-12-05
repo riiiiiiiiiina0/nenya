@@ -133,7 +133,7 @@ function formatTimestamp(value) {
  * @returns {Promise<LLMPromptSettings[]>}
  */
 export async function loadLLMPrompts() {
-  const result = await chrome.storage.sync.get(LLM_PROMPTS_KEY);
+  const result = await chrome.storage.local.get(LLM_PROMPTS_KEY);
   const prompts = result?.[LLM_PROMPTS_KEY];
   if (!Array.isArray(prompts)) {
     return [];
@@ -147,7 +147,7 @@ export async function loadLLMPrompts() {
  * @returns {Promise<void>}
  */
 async function savePrompts(prompts) {
-  await chrome.storage.sync.set({
+  await chrome.storage.local.set({
     [LLM_PROMPTS_KEY]: prompts,
   });
 }
@@ -450,7 +450,7 @@ async function initLLMPrompts() {
   // Listen for storage changes to update UI when options are restored/imported
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(changes, LLM_PROMPTS_KEY)) {

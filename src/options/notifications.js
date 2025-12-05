@@ -184,11 +184,11 @@ function normalizePreferences(value) {
  * @returns {Promise<NotificationPreferences>}
  */
 async function loadPreferences() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return clonePreferences(DEFAULT_NOTIFICATION_PREFERENCES);
   }
 
-  const result = await chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY);
+  const result = await chrome.storage.local.get(NOTIFICATION_PREFERENCES_KEY);
   const stored = result?.[NOTIFICATION_PREFERENCES_KEY];
   return normalizePreferences(stored);
 }
@@ -198,11 +198,11 @@ async function loadPreferences() {
  * @returns {Promise<void>}
  */
 async function savePreferences() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
 
-  await chrome.storage.sync.set({
+  await chrome.storage.local.set({
     [NOTIFICATION_PREFERENCES_KEY]: preferences
   });
 }
@@ -436,7 +436,7 @@ function subscribeToStorageChanges() {
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'sync') {
+    if (areaName !== 'local') {
       return;
     }
 
@@ -483,7 +483,7 @@ export function updateNotificationSectionsVisibility(isLoggedIn) {
 // Reflect imported/restored preference changes live in the controls
 if (chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'sync') {
+    if (areaName !== 'local') {
       return;
     }
 

@@ -508,14 +508,14 @@ function normalizeNotificationPreferences(value) {
  * @returns {Promise<NotificationPreferences>}
  */
 async function loadNotificationPreferences() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     const defaults = createDefaultNotificationPreferences();
     updateNotificationPreferencesCache(defaults);
     return defaults;
   }
 
   try {
-    const result = await chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY);
+    const result = await chrome.storage.local.get(NOTIFICATION_PREFERENCES_KEY);
     const stored = result?.[NOTIFICATION_PREFERENCES_KEY];
     const normalized = normalizeNotificationPreferences(stored);
     updateNotificationPreferencesCache(normalized);
@@ -3211,7 +3211,7 @@ function handleTokenValidationMessage(message, sendResponse) {
  * @returns {Promise<{ settings: RootFolderSettings, map: Record<string, RootFolderSettings>, didMutate: boolean }>}
  */
 async function loadRootFolderSettings() {
-  const result = await chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY);
+  const result = await chrome.storage.local.get(ROOT_FOLDER_SETTINGS_KEY);
   /** @type {Record<string, RootFolderSettings> | undefined} */
   const storedMap = /** @type {*} */ (result[ROOT_FOLDER_SETTINGS_KEY]);
   const map = storedMap ? { ...storedMap } : {};
@@ -3247,7 +3247,7 @@ async function loadRootFolderSettings() {
  */
 async function persistRootFolderSettings(data) {
   data.map[PROVIDER_ID] = data.settings;
-  await chrome.storage.sync.set({
+  await chrome.storage.local.set({
     [ROOT_FOLDER_SETTINGS_KEY]: data.map,
   });
 }

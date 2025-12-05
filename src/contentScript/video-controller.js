@@ -80,11 +80,11 @@
    * @returns {Promise<VideoEnhancementRule[]>}
    */
   async function loadVideoEnhancementRulesFromStorage() {
-    if (!chrome?.storage?.sync) {
+    if (!chrome?.storage?.local) {
       return [];
     }
     try {
-      const stored = await chrome.storage.sync.get(
+      const stored = await chrome.storage.local.get(
         VIDEO_ENHANCEMENT_RULES_KEY,
       );
       return normalizeVideoEnhancementRules(

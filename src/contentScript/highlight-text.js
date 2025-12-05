@@ -432,7 +432,7 @@
    */
   async function loadRules() {
     try {
-      const result = await chrome.storage.sync.get(HIGHLIGHT_TEXT_RULES_KEY);
+      const result = await chrome.storage.local.get(HIGHLIGHT_TEXT_RULES_KEY);
       const storedRules = result[HIGHLIGHT_TEXT_RULES_KEY];
 
       if (!Array.isArray(storedRules)) {

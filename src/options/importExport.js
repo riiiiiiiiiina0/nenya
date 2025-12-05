@@ -223,13 +223,13 @@ const MIN_RULE_INTERVAL_SECONDS = 5;
 const DEFAULT_PARENT_PATH = '/Bookmarks Bar';
 
 const importButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('optionsImportButton')
+  document.getElementById('optionsFloatingImportButton')
 );
 const exportButton = /** @type {HTMLButtonElement | null} */ (
-  document.getElementById('optionsExportButton')
+  document.getElementById('optionsFloatingExportButton')
 );
 const fileInput = /** @type {HTMLInputElement | null} */ (
-  document.getElementById('optionsImportFileInput')
+  document.getElementById('optionsFloatingImportFileInput')
 );
 
 /** @typedef {'success' | 'error' | 'info'} ToastVariant */
@@ -1202,18 +1202,18 @@ async function readCurrentOptions() {
     autoGoogleLoginRulesResp,
     pinnedShortcutsResp,
   ] = await Promise.all([
-    chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY),
-    chrome.storage.sync.get(NOTIFICATION_PREFERENCES_KEY),
-    chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY),
+    chrome.storage.local.get(ROOT_FOLDER_SETTINGS_KEY),
+    chrome.storage.local.get(NOTIFICATION_PREFERENCES_KEY),
+    chrome.storage.local.get(AUTO_RELOAD_RULES_KEY),
     getWhitelistPatterns(),
     loadHighlightTextRules(),
     loadVideoEnhancementRules(),
-    chrome.storage.sync.get(BLOCK_ELEMENT_RULES_KEY),
+    chrome.storage.local.get(BLOCK_ELEMENT_RULES_KEY),
     chrome.storage.local.get(CUSTOM_CODE_RULES_KEY),
     loadLLMPrompts(),
     loadUrlProcessRules(),
     loadAutoGoogleLoginRules(),
-    chrome.storage.sync.get(PINNED_SHORTCUTS_KEY),
+    chrome.storage.local.get(PINNED_SHORTCUTS_KEY),
   ]);
 
   /** @type {Record<string, RootFolderSettings> | undefined} */
@@ -1281,7 +1281,7 @@ async function readCurrentOptions() {
     pinnedShortcutsResp?.[PINNED_SHORTCUTS_KEY],
   );
 
-  const screenshotSettingsResp = await chrome.storage.sync.get(
+  const screenshotSettingsResp = await chrome.storage.local.get(
     SCREENSHOT_SETTINGS_KEY,
   );
   const screenshotSettings = normalizeScreenshotSettings(
@@ -1504,14 +1504,14 @@ async function applyImportedOptions(
   }
 
   // Read existing map to preserve other providers if any
-  const existing = await chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY);
+  const existing = await chrome.storage.local.get(ROOT_FOLDER_SETTINGS_KEY);
   /** @type {Record<string, RootFolderSettings>} */
   const map = /** @type {*} */ (existing?.[ROOT_FOLDER_SETTINGS_KEY]) || {};
   map[PROVIDER_ID] = sanitizedRoot;
 
   // Persist all keys (custom code rules go to local storage due to size)
   await Promise.all([
-    chrome.storage.sync.set({
+    chrome.storage.local.set({
       [ROOT_FOLDER_SETTINGS_KEY]: map,
       [NOTIFICATION_PREFERENCES_KEY]: sanitizedNotifications,
       [AUTO_RELOAD_RULES_KEY]: sanitizedRules,
@@ -1524,8 +1524,6 @@ async function applyImportedOptions(
       [AUTO_GOOGLE_LOGIN_RULES_KEY]: sanitizedAutoGoogleLoginRules,
       [SCREENSHOT_SETTINGS_KEY]: sanitizedScreenshotSettings,
       [PINNED_SHORTCUTS_KEY]: sanitizedPinnedShortcuts,
-    }),
-    chrome.storage.local.set({
       [CUSTOM_CODE_RULES_KEY]: sanitizedCustomCodeRules,
     }),
   ]);

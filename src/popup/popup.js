@@ -2,6 +2,7 @@
 
 import '../options/theme.js';
 import '../shared/iconUrl.js';
+import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
 import {
   isUserLoggedIn,
   toggleMirrorSection,
@@ -155,6 +156,12 @@ const importCustomCodeFileInput = /** @type {HTMLInputElement | null} */ (
 const statusMessage = /** @type {HTMLDivElement | null} */ (
   document.getElementById('statusMessage')
 );
+const popupBackupButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('popupBackupButton')
+);
+const popupRestoreButton = /** @type {HTMLButtonElement | null} */ (
+  document.getElementById('popupRestoreButton')
+);
 const autoReloadStatusElement = /** @type {HTMLSpanElement | null} */ (
   document.getElementById('autoReloadStatus')
 );
@@ -171,6 +178,108 @@ const mirrorSection = /** @type {HTMLElement | null} */ (
   document.querySelector('article[aria-labelledby="mirror-heading"]')
 );
 
+let popupBackupBusy = false;
+
+/**
+ * Enable or disable popup backup buttons.
+ * @param {boolean} disabled
+ * @returns {void}
+ */
+function setPopupBackupDisabled(disabled) {
+  if (popupBackupButton) {
+    popupBackupButton.disabled = disabled;
+    popupBackupButton.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+  }
+  if (popupRestoreButton) {
+    popupRestoreButton.disabled = disabled;
+    popupRestoreButton.setAttribute(
+      'aria-disabled',
+      disabled ? 'true' : 'false',
+    );
+  }
+}
+
+/**
+ * Send backup/restore runtime message.
+ * @template T
+ * @param {string} type
+ * @returns {Promise<T>}
+ */
+function sendBackupRuntimeMessage(type) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({ type }, (response) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError) {
+        reject(new Error(lastError.message));
+        return;
+      }
+      resolve(response);
+    });
+  });
+}
+
+/**
+ * Refresh backup buttons based on connection state.
+ * @returns {Promise<void>}
+ */
+async function refreshPopupBackupState() {
+  setPopupBackupDisabled(true);
+  try {
+    /** @type {{ ok?: boolean, loggedIn?: boolean }} */
+    const status = await sendBackupRuntimeMessage(
+      OPTIONS_BACKUP_MESSAGES.STATUS,
+    );
+    const enable = Boolean(status?.ok && status?.loggedIn);
+    setPopupBackupDisabled(!enable);
+  } catch (error) {
+    console.warn('[popup] Failed to refresh backup state:', error);
+    setPopupBackupDisabled(true);
+  }
+}
+
+/**
+ * Run backup or restore action from popup.
+ * @param {string} type
+ * @param {string} successMessage
+ * @returns {Promise<void>}
+ */
+async function runPopupBackupAction(type, successMessage) {
+  if (popupBackupBusy) {
+    return;
+  }
+  popupBackupBusy = true;
+  setPopupBackupDisabled(true);
+  try {
+    /** @type {{ ok?: boolean, errors?: string[], error?: string }} */
+    const response = await sendBackupRuntimeMessage(type);
+    if (response?.ok) {
+      if (statusMessage) {
+        concludeStatus(successMessage, 'success', 3000, statusMessage);
+      }
+    } else {
+      const errorMessage =
+        (Array.isArray(response?.errors) && response?.errors[0]) ||
+        response?.error ||
+        'Action failed. Check your Raindrop connection.';
+      if (statusMessage) {
+        concludeStatus(errorMessage, 'error', 4000, statusMessage);
+      }
+    }
+  } catch (error) {
+    if (statusMessage) {
+      concludeStatus(
+        error instanceof Error ? error.message : 'Unexpected error.',
+        'error',
+        4000,
+        statusMessage,
+      );
+    }
+  } finally {
+    popupBackupBusy = false;
+    void refreshPopupBackupState();
+  }
+}
+
 /**
  * Load pinned shortcuts from storage and render buttons
  * @returns {Promise<void>}
@@ -181,7 +290,7 @@ async function loadAndRenderShortcuts() {
   }
 
   try {
-    const stored = await chrome.storage.sync.get(STORAGE_KEY);
+    const stored = await chrome.storage.local.get(STORAGE_KEY);
     const pinnedIds = Array.isArray(stored?.[STORAGE_KEY])
       ? stored[STORAGE_KEY]
       : [];
@@ -354,17 +463,36 @@ if (!statusMessage) {
   console.error('[popup] Status element not found.');
 }
 
-// Initialize shortcuts on page load
-void loadAndRenderShortcuts();
-
-// Listen for storage changes to update buttons dynamically
-if (chrome?.storage?.onChanged) {
-  chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync' && changes[STORAGE_KEY]) {
-      void loadAndRenderShortcuts();
-    }
+if (popupBackupButton) {
+  popupBackupButton.addEventListener('click', () => {
+    void runPopupBackupAction(
+      OPTIONS_BACKUP_MESSAGES.BACKUP_NOW,
+      'Options backup saved to Raindrop.',
+    );
   });
 }
+
+if (popupRestoreButton) {
+  popupRestoreButton.addEventListener('click', () => {
+    void runPopupBackupAction(
+      OPTIONS_BACKUP_MESSAGES.RESTORE_NOW,
+      'Options restored from Raindrop backup.',
+    );
+  });
+}
+
+// Initialize shortcuts on page load
+void loadAndRenderShortcuts();
+void refreshPopupBackupState();
+
+// Listen for storage changes to update buttons dynamically
+  if (chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, namespace) => {
+      if (namespace === 'local' && changes[STORAGE_KEY]) {
+        void loadAndRenderShortcuts();
+      }
+    });
+  }
 
 /**
  * Handle opening dark mode options with current tab URL prefilled.
@@ -1289,6 +1417,7 @@ async function handlePictureInPicture() {
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === 'sync' && changes.cloudAuthTokens) {
     void initializePopup();
+    void refreshPopupBackupState();
   }
 });
 

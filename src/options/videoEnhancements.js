@@ -182,15 +182,15 @@ function normalizeStoredRules(value) {
 }
 
 /**
- * Load rules from sync storage.
+ * Load rules from storage.
  * @returns {Promise<VideoEnhancementRule[]>}
  */
 async function loadRules() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return [];
   }
   try {
-    const stored = await chrome.storage.sync.get(VIDEO_ENHANCEMENT_RULES_KEY);
+    const stored = await chrome.storage.local.get(VIDEO_ENHANCEMENT_RULES_KEY);
     return normalizeStoredRules(stored?.[VIDEO_ENHANCEMENT_RULES_KEY]);
   } catch (error) {
     console.warn('[videoEnhancements] Failed to load rules:', error);
@@ -199,16 +199,16 @@ async function loadRules() {
 }
 
 /**
- * Persist rules to sync storage.
+ * Persist rules to storage.
  * @param {VideoEnhancementRule[]} nextRules
  * @returns {Promise<void>}
  */
 async function saveRules(nextRules) {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
   try {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [VIDEO_ENHANCEMENT_RULES_KEY]: nextRules,
     });
   } catch (error) {
@@ -531,7 +531,7 @@ async function initVideoEnhancements() {
 
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(changes, VIDEO_ENHANCEMENT_RULES_KEY)) {

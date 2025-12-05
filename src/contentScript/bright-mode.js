@@ -58,13 +58,13 @@
      * Load whitelist patterns from storage
      */
     async loadPatterns() {
-      if (!chrome?.storage?.sync) {
+      if (!chrome?.storage?.local) {
         console.warn('[BrightMode] Chrome storage not available');
         return;
       }
 
       try {
-        const result = await chrome.storage.sync.get([
+        const result = await chrome.storage.local.get([
           WHITELIST_STORAGE_KEY,
         ]);
 

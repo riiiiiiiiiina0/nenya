@@ -124,18 +124,18 @@ function normalizePatterns(value) {
 }
 
 /**
- * Persist the provided patterns in chrome.storage.sync.
+ * Persist the provided patterns in chrome.storage.local.
  * @param {BrightModePattern[]} patterns
  * @param {string} storageKey
  * @returns {Promise<void>}
  */
 async function savePatterns(patterns, storageKey) {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
   syncing = true;
   try {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [storageKey]: patterns,
     });
   } catch (error) {
@@ -151,12 +151,12 @@ async function savePatterns(patterns, storageKey) {
  * @returns {Promise<BrightModePattern[]>}
  */
 async function loadPatterns(storageKey) {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return [];
   }
 
   try {
-    const stored = await chrome.storage.sync.get(storageKey);
+    const stored = await chrome.storage.local.get(storageKey);
     const { patterns: sanitized, mutated } = normalizePatterns(
       stored?.[storageKey],
     );
@@ -435,7 +435,7 @@ function init() {
   // Storage change listener
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (syncing) {

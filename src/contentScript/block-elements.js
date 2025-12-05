@@ -166,7 +166,7 @@
     }
 
     try {
-      const stored = await chrome.storage.sync.get(STORAGE_KEY);
+      const stored = await chrome.storage.local.get(STORAGE_KEY);
       const rules = Array.isArray(stored?.[STORAGE_KEY])
         ? stored[STORAGE_KEY]
         : [];

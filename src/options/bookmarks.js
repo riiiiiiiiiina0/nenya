@@ -188,7 +188,7 @@ async function writeTokenCache(map) {
  * @returns {Promise<RootFolderSettingsMap>}
  */
 async function readRootFolderSettings() {
-  const result = await chrome.storage.sync.get(ROOT_FOLDER_SETTINGS_KEY);
+  const result = await chrome.storage.local.get(ROOT_FOLDER_SETTINGS_KEY);
   const stored = /** @type {RootFolderSettingsMap | undefined} */ (
     result[ROOT_FOLDER_SETTINGS_KEY]
   );
@@ -201,7 +201,7 @@ async function readRootFolderSettings() {
  * @returns {Promise<void>}
  */
 async function writeRootFolderSettings(map) {
-  await chrome.storage.sync.set({ [ROOT_FOLDER_SETTINGS_KEY]: map });
+  await chrome.storage.local.set({ [ROOT_FOLDER_SETTINGS_KEY]: map });
 }
 
 /**
@@ -1456,7 +1456,7 @@ function subscribeToRootFolderStorageChanges() {
   let suppressOnce = false;
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'sync' || !changes || !changes[ROOT_FOLDER_SETTINGS_KEY]) {
+    if (areaName !== 'local' || !changes || !changes[ROOT_FOLDER_SETTINGS_KEY]) {
       return;
     }
 
@@ -1511,7 +1511,7 @@ function subscribeToRootFolderStorageChanges() {
           const sanitizedMap = { ...(newMap || {}) };
           sanitizedMap[providerId] = next;
           suppressOnce = true;
-          await chrome.storage.sync.set({
+          await chrome.storage.local.set({
             [ROOT_FOLDER_SETTINGS_KEY]: sanitizedMap,
           });
 
