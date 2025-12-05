@@ -348,12 +348,12 @@ async function loadAndRenderRules() {
   syncing = true;
 
   try {
-    const result = await chrome.storage.sync.get(STORAGE_KEY);
+    const result = await chrome.storage.local.get(STORAGE_KEY);
     const { rules: sanitized, mutated } = normalizeRules(
       result?.[STORAGE_KEY],
     );
     if (mutated) {
-      await chrome.storage.sync.set({
+      await chrome.storage.local.set({
         [STORAGE_KEY]: sanitized,
       });
     }
@@ -462,7 +462,7 @@ function render() {
       void (async () => {
         syncing = true;
         try {
-          await chrome.storage.sync.set({ [STORAGE_KEY]: rules });
+          await chrome.storage.local.set({ [STORAGE_KEY]: rules });
           render();
         } catch (error) {
           console.error('[urlProcessRules] Failed to save rule:', error);
@@ -717,7 +717,7 @@ async function deleteRule(ruleId) {
 
   try {
     const filtered = rules.filter((r) => r.id !== ruleId);
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [STORAGE_KEY]: filtered,
     });
     rules = filtered;
@@ -791,7 +791,7 @@ async function handleFormSubmit(event) {
     }
 
     const sorted = sortRules(rules);
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [STORAGE_KEY]: sorted,
     });
     rules = sorted;
@@ -1246,7 +1246,7 @@ function init() {
   // Listen for storage changes to update UI when options are restored/imported
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(changes, STORAGE_KEY)) {
@@ -1292,7 +1292,7 @@ if (document.readyState === 'loading') {
  * @returns {Promise<UrlProcessRule[]>}
  */
 export async function loadRules() {
-  const result = await chrome.storage.sync.get(STORAGE_KEY);
+  const result = await chrome.storage.local.get(STORAGE_KEY);
   const { rules: sanitized } = normalizeRules(result?.[STORAGE_KEY]);
   return sanitized;
 }

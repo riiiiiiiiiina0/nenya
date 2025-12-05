@@ -26,10 +26,8 @@ import {
 } from './projects.js';
 import {
   initializeOptionsBackupService,
-  handleOptionsBackupLifecycle,
   handleOptionsBackupMessage,
 } from './options-backup.js';
-import { initializeAutomergeSync } from './automerge-options-sync.js';
 import {
   initializeAutoReloadFeature,
   handleAutoReloadAlarm,
@@ -878,26 +876,8 @@ function handleLifecycleEvent(trigger) {
   setupClipboardContextMenus();
   void scheduleMirrorAlarm();
   void setupHeaderRemovalRules();
-  initializeOptionsBackupService();
   initializeTabSnapshots();
-  void handleOptionsBackupLifecycle(trigger)
-    .then(async () => {
-      // Re-evaluate auto reload rules after options backup restore completes
-      try {
-        await evaluateAllTabs();
-      } catch (error) {
-        console.warn(
-          '[background] Failed to re-evaluate auto reload rules after options backup:',
-          error,
-        );
-      }
-    })
-    .catch((error) => {
-      console.warn(
-        '[options-backup] Lifecycle restore skipped:',
-        error instanceof Error ? error.message : error,
-      );
-    });
+  void initializeOptionsBackupService();
   // Delay startup pull to avoid race condition with network initialization
   if (trigger === 'startup') {
     setTimeout(() => {
@@ -1267,11 +1247,6 @@ chrome.runtime.onStartup.addListener(() => {
 
 // Ensure backup service is initialized immediately when service worker starts
 initializeOptionsBackupService();
-
-// Initialize Automerge sync system
-void initializeAutomergeSync().catch((error) => {
-  console.error('[automerge] Initialization failed:', error);
-});
 
 void initializeAutoReloadFeature().catch((error) => {
   console.error('[auto-reload] Initialization failed:', error);
@@ -2370,7 +2345,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // Load existing rules
         const STORAGE_KEY = 'blockElementRules';
-        const stored = await chrome.storage.sync.get(STORAGE_KEY);
+        const stored = await chrome.storage.local.get(STORAGE_KEY);
         const rules = Array.isArray(stored?.[STORAGE_KEY])
           ? stored[STORAGE_KEY]
           : [];
@@ -2406,7 +2381,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         }
 
         // Save rules
-        await chrome.storage.sync.set({
+        await chrome.storage.local.set({
           [STORAGE_KEY]: rules,
         });
 

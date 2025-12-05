@@ -181,13 +181,13 @@ function refreshCompiledRules() {
  * @returns {Promise<void>}
  */
 async function persistRules(nextRules) {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
 
   synchronizingRules = true;
   try {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [AUTO_RELOAD_RULES_KEY]: nextRules,
     });
   } catch (error) {
@@ -202,14 +202,14 @@ async function persistRules(nextRules) {
  * @returns {Promise<void>}
  */
 async function loadRulesFromStorage() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     rules = [];
     compiledRules = [];
     return;
   }
 
   try {
-    const stored = await chrome.storage.sync.get(AUTO_RELOAD_RULES_KEY);
+    const stored = await chrome.storage.local.get(AUTO_RELOAD_RULES_KEY);
     const { rules: sanitized, mutated } = normalizeStoredRules(
       stored?.[AUTO_RELOAD_RULES_KEY],
     );
@@ -886,7 +886,7 @@ export async function initializeAutoReloadFeature() {
   }
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'sync') {
+      if (areaName !== 'local') {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(changes, AUTO_RELOAD_RULES_KEY)) {

@@ -1090,7 +1090,7 @@
     }
 
     try {
-      const result = await chrome.storage.sync.get(STORAGE_KEY);
+      const result = await chrome.storage.local.get(STORAGE_KEY);
       const rules = result?.[STORAGE_KEY];
 
       if (Array.isArray(rules)) {

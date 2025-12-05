@@ -4,53 +4,13 @@
 Document how the Raindrop-based options backup and restore system behaves today so UI and background workflows stay aligned with the existing functionality.
 ## Requirements
 ### Requirement: Options UI MUST expose manual Raindrop backup controls with live status
-The options page MUST remain the only user-facing surface for the Raindrop backup system, so it must reflect the current state and provide guarded actions.
+The options page SHALL present Backup/Restore alongside Import/Export via a floating bar and reflect the latest manual backup/restore status; the popup MAY trigger the same flow while the options page stays in sync.
 
-#### Scenario: Status snapshot and connection gating
-- **GIVEN** the options page loads, **WHEN** `src/options/backup.js` initializes, **THEN** it MUST call `OPTIONS_BACKUP_MESSAGES.STATUS`, aggregate the latest `lastBackupAt`/`lastRestoreAt` timestamps across every category, and render those times (or `Never`) along with the freshest error message in the status area.
-- **AND** the background response MUST include `loggedIn`, allowing the UI to disable the Backup/Restore buttons plus show “Connect your Raindrop account…” whenever no valid tokens exist.
-- **AND** all buttons MUST flip to `aria-disabled="true"` while any backup/reset/restore action is running so the user cannot queue concurrent work.
-
-#### Scenario: Manual backups, restores, and resets
-- **GIVEN** the user clicks Backup/Restore, **WHEN** the page sends `optionsBackup:backupNow` or `optionsBackup:restoreNow`, **THEN** the background MUST execute `runManualBackup`/`runManualRestore`, refresh cached state, and reply with `{ ok, errors?, state }`.
-- **AND** the UI MUST show a Toastify toast (“Options backup completed successfully.” / “Options restored from backup.”) on success or surface the first `errors` entry on failure before re-fetching status.
-- **WHEN** “Reset to defaults” is clicked, the UI MUST prompt for confirmation, send `optionsBackup:resetDefaults`, and on success report “Options reset to defaults.” while the background clears all option buckets to their defaults, resets `optionsBackupState`, and performs a full backup with trigger `reset` so Raindrop mirrors the new defaults immediately.
-
-### Requirement: Local option edits MUST automatically sync to Raindrop in near real time
-
-Settings often change piecemeal, so the background worker MUST incrementally sync categories to the provider without user involvement. The sync MUST use Automerge CRDT to ensure conflict-free merging when multiple browsers modify settings concurrently.
-
-#### Scenario: Storage change detection triggers Automerge document update
-
-- **GIVEN** any watched key in `chrome.storage.sync` (`mirrorRootFolderSettings`, `notificationPreferences`, `autoReloadRules`, `darkModeRules`, `brightModeWhitelist`, `highlightTextRules`, `blockElementRules`, `llmPrompts`, `urlProcessRules`, `autoGoogleLoginRules`, `pinnedShortcuts`) or `chrome.storage.local` (`customCodeRules`) changes, **THEN** `handleStorageChanges` MUST apply the change to the local Automerge document using `Automerge.change()` with the browser's unique actor ID.
-- **AND** the change MUST be queued for sync to Raindrop with trigger `storage`, coalescing multiple rapid changes within a 1.5 s suppression window set by `suppressBackup` to avoid echo loops when the extension itself writes to storage (e.g., after a sync applies remote changes).
-
-#### Scenario: Automerge sync manages conflict-free merging with unified document storage
-
-- **WHEN** a sync operation runs, **THEN** the background MUST ensure the `Nenya options backup` collection exists (creating it if missing), fetch the remote Automerge document by searching for items with title matching `automerge-options-sync*`, reconstruct the full Base64-encoded binary (concatenating chunks if multiple items found), decode and deserialize it, merge it with the local Automerge document using `Automerge.merge(localDoc, remoteDoc)`, apply the merged document to `chrome.storage` (with `suppressBackup` enabled), serialize and encode the merged document, split it into chunks if the Base64 string exceeds 10,000 characters (with each chunk ≤10,000 characters), and save chunk(s) back to Raindrop (deleting obsolete chunks if chunk count changed).
-- **AND** the merge MUST automatically resolve all conflicts according to Automerge CRDT semantics (concurrent array insertions are preserved, object property updates use LWW per-property, deletions are tombstoned), ensuring no data loss from concurrent edits across browsers.
-- **AND** `optionsBackupState` MUST record the trigger, timestamp, last merge timestamp, count of changes applied, document size, chunk count, and any errors, using the latest Raindrop item's `lastUpdate` timestamp as `lastRemoteModifiedAt`.
-
-#### Scenario: Failure visibility without spam
-
-- **GIVEN** an automatic sync fails (e.g., lost auth, API errors, Automerge document corruption), **WHEN** `notifyOnError` is true, **THEN** the service MUST store the error message/timestamp globally (not per-category since Automerge uses single document) and push a `pushNotification('options-backup', 'Options sync failed', …)` only if no notification has been emitted in the last 15 minutes (`AUTO_NOTIFICATION_COOLDOWN_MS`).
-
-### Requirement: Remote backups MUST be restored automatically whenever the extension wakes or the user logs in
-
-Raindrop is treated as the source of truth, so the extension MUST continuously sync from it. With Automerge, "restore" becomes a merge operation that combines local and remote changes rather than overwriting local state.
-
-#### Scenario: Lifecycle, alarm, and focus syncs
-
-- **GIVEN** the service worker wakes because of `onInstalled`, `onStartup`, the dedicated alarm (`nenya-options-backup-sync` every 5 minutes), or a window regains focus (no more than once per minute), **THEN** `handleOptionsBackupLifecycle(trigger)` MUST initialize the Automerge sync service (loading actor ID and local document if not already in memory) and run `syncWithRemote(trigger, notifyOnError=true)`.
-- **AND** after a sync resolves, the background MUST invoke `evaluateAllTabs()` so the auto-reload subsystem recalculates schedules using the freshly merged rules.
-
-#### Scenario: Immediate sync after OAuth login
-
-- **GIVEN** the user completes OAuth, **WHEN** `processOAuthSuccess` receives the tokens, **THEN** it MUST call `setBackupConnectionState(true)`, trigger `optionsBackup:syncAfterLogin`, execute `syncWithRemote('login', false)` to merge remote changes into local state, and only after that refresh the visible sync status so the page reflects the post-login state.
-
-#### Scenario: Manual restore feedback and error reporting
-
-- **GIVEN** the user clicks the Restore button, **WHEN** the page sends `optionsBackup:restoreNow`, **THEN** `syncWithRemote('manual-restore', false)` MUST execute with `forceRestore: true` flag, which discards uncommitted local changes and applies only the remote Automerge document to `chrome.storage`, record any errors globally, return `ok: false` with an errors array if the sync fails, and the UI MUST toast the first message; background-triggered syncs still surface notifications through `pushNotification('Options sync failed', …)` respecting the cooldown logic.
+#### Scenario: Status snapshot and action gating
+- **WHEN** the options page or popup loads
+- **THEN** it SHALL fetch `{ lastBackupAt, lastRestoreAt, lastError }` and render timestamps or “Never”
+- **AND** Backup/Restore SHALL disable while a request is running or when the user is not connected
+- **AND** after any manual action completes, the UI SHALL refresh status and display a success or error toast.
 
 ### Requirement: Backup payloads MUST cover every configurable category with normalized data and metadata
 
@@ -89,51 +49,6 @@ Each payload MUST be versioned JSON that contains metadata plus a sanitized copy
 - **AND** queue a backup for the `'screenshot-settings'` category
 - **AND** respect the suppression window to avoid backup loops
 - **AND** use trigger `'storage'` for the incremental backup
-
-### Requirement: Each browser instance MUST have a unique Automerge actor ID
-
-Automerge requires unique actor IDs to attribute changes correctly and enable conflict-free merging. The actor ID MUST be stable across browser sessions but unique per browser installation.
-
-#### Scenario: Actor ID generation and persistence
-
-- **WHEN** the Automerge sync service initializes for the first time, **THEN** it MUST generate a unique actor ID in the format `nenya-<deviceId>-<randomHex8>` (e.g., `nenya-chrome-linux-a1b2c3d4`) using the existing `deviceId` from `optionsBackupState` plus 8 random hexadecimal characters, and store it in `chrome.storage.local.automergeActorId`.
-- **AND** on subsequent initializations, the service MUST load the existing `automergeActorId` from `chrome.storage.local` and use it for all Automerge operations, ensuring the same browser always uses the same actor ID.
-- **AND** the actor ID MUST be used when loading or initializing the Automerge document (via `Automerge.load` or `Automerge.init`), ensuring that `Automerge.change(doc, changeFunc)` uses this actor ID. The actor ID MUST be recorded in the `_meta.devices` object with the current timestamp whenever a sync completes.
-
-#### Scenario: Actor ID visibility for debugging
-
-- **WHEN** the options page loads the backup status, **THEN** the `OPTIONS_BACKUP_MESSAGES.STATUS` response MAY include the current `actorId` in the state object for debugging purposes, though it MUST NOT be exposed in the UI by default (only for technical troubleshooting).
-
-### Requirement: Automerge merge operations MUST preserve all concurrent changes from multiple browsers
-
-The core benefit of Automerge is conflict-free merging. The system MUST leverage Automerge's CRDT semantics to automatically resolve conflicts without data loss.
-
-#### Scenario: Concurrent edits to different categories
-
-- **GIVEN** Browser A changes `darkModeRules` at T1 and Browser B changes `autoReloadRules` at T2 (before either syncs), **WHEN** Browser A syncs at T3 (pushes its local document to Raindrop), and Browser B syncs at T4 (fetches Browser A's document, merges with its own, pushes the result), **THEN** the final merged document MUST contain both Browser A's `darkModeRules` changes AND Browser B's `autoReloadRules` changes, with no data loss.
-- **AND** when Browser A syncs again at T5, it MUST fetch the merged document from T4 and apply Browser B's `autoReloadRules` changes to its `chrome.storage`, resulting in both browsers converging to identical state.
-
-#### Scenario: Concurrent edits to the same array
-
-- **GIVEN** Browser A inserts a new rule into `autoReloadRules` array at index 0 at T1, and Browser B inserts a different rule into the same `autoReloadRules` array at index 0 at T2 (before either syncs), **WHEN** both browsers subsequently sync and merge their documents, **THEN** the final merged `autoReloadRules` array MUST contain both inserted rules (Automerge will order them deterministically based on actor IDs and Lamport timestamps), with no rule lost or overwritten.
-
-#### Scenario: Concurrent edits to the same object property
-
-- **GIVEN** Browser A sets `notificationPreferences.enabled = false` at T1, and Browser B sets `notificationPreferences.enabled = true` at T2 (before either syncs), **WHEN** both browsers sync and merge, **THEN** the final value of `notificationPreferences.enabled` MUST be the value from the browser whose change has the later Lamport timestamp in Automerge's logical clock (typically the last writer, but deterministic even if wall-clock times are identical), and both browsers MUST converge to this value.
-
-#### Scenario: Merge logging for observability
-
-- **WHEN** a merge operation completes, **THEN** the system MUST log (via `console.log` in debug mode or stored in `optionsBackupState`) the count of local changes applied to the merged document, the count of remote changes received, the actor IDs involved, and a flag indicating whether any conflicts were auto-resolved, to aid debugging and monitoring of multi-browser sync health.
-
-### Requirement: The system MUST support forced restore that overwrites local state with remote backup for recovery scenarios
-
-The extension MUST provide a manual restore operation that discards all local uncommitted changes and replaces the local Automerge document entirely with the remote state, allowing users to recover from corruption or undo unwanted local modifications.
-
-#### Scenario: Force restore discards local changes for recovery from corruption
-
-- **GIVEN** the user clicks the Restore button in the options page, **WHEN** the background receives `optionsBackup:restoreNow`, **THEN** `syncWithRemote('manual-restore', false)` MUST execute with a `forceRestore: true` flag.
-- **AND** when `forceRestore: true`, the sync operation MUST discard the current local Automerge document, fetch the remote document from Raindrop, apply it directly to `chrome.storage` (after validation), and replace the in-memory local document with the remote one, effectively losing any uncommitted local changes.
-- **AND** the UI MUST show a success toast "Options restored from remote backup. Local changes discarded." to inform the user of the data loss trade-off.
 
 ### Requirement: Screenshot Settings Category Registration
 
@@ -181,4 +96,67 @@ The JSON import/export functionality MUST include screenshot settings.
 - **THEN** the import MUST NOT modify existing screenshot settings
 - **AND** existing settings MUST be preserved unchanged
 - **AND** no error or warning MUST be shown
+
+### Requirement: Options data MUST be persisted in local storage only
+All option categories SHALL be stored in `chrome.storage.local` instead of `chrome.storage.sync`, including root folder settings, notification preferences, auto reload rules, dark mode rules, bright mode whitelist/settings, highlight text rules, video enhancement rules, block element rules, custom code rules, LLM prompts, URL process rules, auto Google login rules, screenshot settings, and pinned shortcuts.
+
+#### Scenario: Option writes use local storage
+- **WHEN** any option category is saved by the UI or background helpers
+- **THEN** the values SHALL be written to `chrome.storage.local` under their respective keys
+- **AND** no writes to `chrome.storage.sync` SHALL occur for these categories.
+
+#### Scenario: Manual backup reads from the local copy
+- **WHEN** a manual backup or restore runs
+- **THEN** it SHALL read from `chrome.storage.local` for every option category listed above to assemble or apply the payload.
+
+### Requirement: Manual Raindrop backup and restore MUST use chunked plain JSON with batch requests
+Manual backup/restore SHALL operate on a plain JSON payload, split into deterministic chunks of at most 1000 characters, and use Raindrop batch get/set APIs to save or fetch all chunks in a single request.
+
+#### Scenario: Manual backup stores chunked JSON via batch set
+- **WHEN** the user triggers Backup from the options floating bar or the popup
+- **THEN** the system SHALL build a JSON payload from local options, stringify it, split it into ordered chunks each ≤1000 characters, and issue one Raindrop batch set request to overwrite the remote copy (creating/updating all chunk items)
+- **AND** on success it SHALL record `lastBackupAt`; on failure it SHALL return an error without reporting success.
+
+#### Scenario: Manual restore fetches chunked JSON via batch get
+- **WHEN** the user triggers Restore from the options floating bar or the popup
+- **THEN** the system SHALL issue one Raindrop batch get request to fetch all backup chunks, sort them deterministically, concatenate and parse the JSON, and apply it to local options
+- **AND** if any chunk is missing, out-of-order, or the JSON fails to parse, the restore SHALL fail and surface an error instead of applying partial data.
+
+### Requirement: Automatic sync MUST be disabled in favor of explicit user triggers
+The system SHALL never initiate Raindrop backup/restore automatically; only explicit user actions may trigger network sync.
+
+#### Scenario: No background sync without explicit action
+- **WHEN** the extension starts, storage changes occur, alarms fire, or a window gains focus
+- **THEN** no Raindrop backup/restore SHALL be initiated automatically
+- **AND** no Automerge/CRDT merge paths or backup alarms SHALL run.
+
+### Requirement: Backup controls MUST be reachable from options floating bar and popup
+Users SHALL be able to access Backup/Restore (and import/export) from both the options page and the popup, sharing the same manual flow.
+
+#### Scenario: Options floating bar is visible across sections
+- **WHEN** a user views any options section
+- **THEN** a floating bottom-right bar SHALL stay visible containing Backup, Restore, Export JSON, and Import JSON actions
+- **AND** these controls SHALL disable while an action is running and when the user is not connected.
+
+#### Scenario: Popup backup/restore actions
+- **WHEN** the popup opens while the user is logged in
+- **THEN** Backup and Restore buttons SHALL be present, call the same manual background flow, and show success or error feedback
+- **AND** when logged out the buttons SHALL be disabled or prompt the user to connect.
+
+### Requirement: Backup payload MUST cover all configurable categories in plain JSON
+Manual backups SHALL serialize all configurable options into a plain JSON payload that can be restored without CRDT metadata.
+
+#### Scenario: Backup includes normalized categories without Automerge metadata
+- **WHEN** a manual backup builds its payload
+- **THEN** it SHALL include normalized values for `mirrorRootFolderSettings`, `notificationPreferences`, `autoReloadRules`, `darkModeRules`, `brightModeWhitelist`/`brightModeSettings`, `highlightTextRules`, `videoEnhancementRules`, `blockElementRules`, `customCodeRules`, `llmPrompts`, `urlProcessRules`, `autoGoogleLoginRules`, `screenshotSettings`, and `pinnedShortcuts`
+- **AND** the payload SHALL omit Automerge metadata and SHALL store only plain JSON fields
+- **AND** restore SHALL overwrite the corresponding local keys, applying defaults when fields are missing.
+
+### Requirement: Manual restore MUST overwrite local options with the remote backup
+Manual restores SHALL apply the remote backup as the single source of truth, replacing existing local values rather than merging.
+
+#### Scenario: Restore overwrites instead of merging
+- **WHEN** a manual restore succeeds
+- **THEN** the parsed backup values SHALL replace the existing local option values for each category, disregarding uncommitted local edits
+- **AND** if the chunk set is incomplete or invalid, the restore SHALL abort and leave local values unchanged.
 

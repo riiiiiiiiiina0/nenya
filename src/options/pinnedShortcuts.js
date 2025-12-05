@@ -94,11 +94,11 @@ function normalizeShortcuts(value) {
  * @returns {Promise<void>}
  */
 async function saveShortcuts(shortcuts) {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
   try {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [STORAGE_KEY]: shortcuts,
     });
   } catch (error) {
@@ -112,14 +112,14 @@ async function saveShortcuts(shortcuts) {
  * @returns {Promise<void>}
  */
 async function loadShortcuts() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     pinnedShortcuts = DEFAULT_PINNED_SHORTCUTS;
     render();
     return;
   }
 
   try {
-    const stored = await chrome.storage.sync.get(STORAGE_KEY);
+    const stored = await chrome.storage.local.get(STORAGE_KEY);
     const storedValue = stored?.[STORAGE_KEY];
 
     // If no value is stored, use defaults
@@ -350,7 +350,7 @@ if (document.readyState === 'loading') {
 // Listen for storage changes from other tabs/windows
 if (chrome?.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, namespace) => {
-    if (namespace === 'sync' && changes[STORAGE_KEY]) {
+    if (namespace === 'local' && changes[STORAGE_KEY]) {
       const { shortcuts: sanitized } = normalizeShortcuts(
         changes[STORAGE_KEY].newValue,
       );

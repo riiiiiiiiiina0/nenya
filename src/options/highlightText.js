@@ -376,7 +376,7 @@ function clearForm() {
  */
 async function loadRules() {
   try {
-    const result = await chrome.storage.sync.get(HIGHLIGHT_TEXT_RULES_KEY);
+    const result = await chrome.storage.local.get(HIGHLIGHT_TEXT_RULES_KEY);
     const storedRules = result[HIGHLIGHT_TEXT_RULES_KEY];
     
     if (!Array.isArray(storedRules)) {
@@ -417,7 +417,7 @@ async function loadRules() {
  */
 async function saveRules(rulesToSave) {
   try {
-    await chrome.storage.sync.set({
+    await chrome.storage.local.set({
       [HIGHLIGHT_TEXT_RULES_KEY]: rulesToSave
     });
   } catch (error) {
@@ -824,7 +824,7 @@ async function initHighlightText() {
   // Listen for storage changes to update UI when options are restored/imported
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (!Object.prototype.hasOwnProperty.call(changes, HIGHLIGHT_TEXT_RULES_KEY)) {

@@ -467,6 +467,33 @@
     .options-sidebar::-webkit-scrollbar-thumb:hover {
       background: color-mix(in oklch, var(--color-base-content) 20%, transparent);
     }
+
+    /* Floating backup bar */
+    .options-floating-bar {
+      position: fixed;
+      right: 1.5rem;
+      bottom: 1.5rem;
+      z-index: 50;
+      background: var(--color-base-100);
+      border: 1px solid var(--color-base-300);
+      box-shadow: 0 12px 30px rgb(0 0 0 / 0.12);
+      border-radius: 1.25rem;
+      padding: 1rem 1.25rem;
+      width: min(480px, calc(100vw - 2rem));
+    }
+
+    .options-floating-status {
+      font-size: 0.9rem;
+      color: color-mix(in oklch, var(--color-base-content) 70%, transparent);
+    }
+
+    .options-floating-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      margin-top: 0.5rem;
+    }
   </style>
 </head>
 
@@ -487,10 +514,6 @@
         <a href="#mirror-heading" class="nav-item nav-link" data-section="mirror-heading">
           <span class="nav-icon text-lg">☁️</span>
           <span>Cloud Bookmarks</span>
-        </a>
-        <a href="#backup-heading" class="nav-item nav-link" data-section="backup-heading">
-          <span class="nav-icon text-lg">💾</span>
-          <span>Options Backup</span>
         </a>
         <a href="#notifications-heading" class="nav-item nav-link" data-section="notifications-heading">
           <span class="nav-icon text-lg">🔔</span>
@@ -626,73 +649,6 @@
                   <button id="resetMirrorButton" class="nenya-btn nenya-btn-secondary" type="button" hidden>Reset
                     &amp; Re-pull</button>
                 </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- Options Backup Section -->
-        <section class="section-content" data-section="backup-heading" id="section-backup">
-          <div class="animate-in">
-            <div class="section-header">
-              <h1 id="backup-heading" class="section-title">Options Backup</h1>
-              <p class="section-description">Keep your configuration safe in the cloud.</p>
-            </div>
-
-            <div class="options-card">
-              <div class="flex items-center justify-between mb-6 pb-6 border-b border-base-300">
-                <div>
-                  <h3 class="text-lg font-bold">Cloud Backup</h3>
-                  <p class="text-sm text-base-content/60 mt-1">Automatically save settings to your Raindrop account.</p>
-                </div>
-              </div>
-
-              <div id="optionsBackupStatusMessage" class="text-sm text-base-content/60 mb-4" role="status"
-                aria-live="polite"></div>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="p-5 bg-base-200 rounded-2xl">
-                  <div class="flex items-center justify-between mb-3">
-                    <span class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Last Backup</span>
-                    <span class="nenya-badge nenya-badge-green">Success</span>
-                  </div>
-                  <div id="optionsBackupLastBackup" class="text-xl font-bold">Never</div>
-                  <button id="optionsBackupBackupButton" class="nenya-btn nenya-btn-secondary w-full mt-4"
-                    type="button">
-                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                      <path d="M17 21v-8H7v8" />
-                      <path d="M7 3v4h10" />
-                    </svg>
-                    Backup Now
-                  </button>
-                </div>
-                <div class="p-5 bg-base-200 rounded-2xl">
-                  <div class="flex items-center justify-between mb-3">
-                    <span class="text-xs font-bold text-base-content/40 uppercase tracking-wider">Last Restore</span>
-                  </div>
-                  <div id="optionsBackupLastRestore" class="text-xl font-bold">Never</div>
-                  <button id="optionsBackupRestoreButton" class="nenya-btn nenya-btn-secondary w-full mt-4"
-                    type="button">
-                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M23 4v6h-6" />
-                      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                    </svg>
-                    Restore
-                  </button>
-                </div>
-              </div>
-
-              <div class="flex flex-wrap gap-3 mt-6 pt-6 border-t border-base-300">
-                <input id="optionsImportFileInput" type="file" accept="application/json" class="hidden" />
-                <button id="optionsExportButton" class="nenya-btn nenya-btn-ghost" type="button">Export Options
-                  JSON</button>
-                <button id="optionsImportButton" class="nenya-btn nenya-btn-ghost" type="button">Import Options
-                  JSON</button>
-                <button id="optionsBackupResetButton" class="nenya-btn nenya-btn-ghost text-error ml-auto"
-                  type="button">Reset to Defaults</button>
               </div>
             </div>
           </div>
@@ -1634,6 +1590,19 @@
 
       </div>
     </main>
+  </div>
+
+  <div id="optionsBackupFloatingBar" class="options-floating-bar">
+    <div class="options-floating-status" id="optionsBackupFloatingStatus">
+      Manual backup keeps your settings safe in Raindrop. Connect your account to enable backup and restore.
+    </div>
+    <div class="options-floating-actions">
+      <button id="optionsFloatingBackupButton" class="nenya-btn nenya-btn-secondary" type="button">Backup</button>
+      <button id="optionsFloatingRestoreButton" class="nenya-btn nenya-btn-secondary" type="button">Restore</button>
+      <button id="optionsFloatingExportButton" class="nenya-btn nenya-btn-ghost" type="button">Export</button>
+      <button id="optionsFloatingImportButton" class="nenya-btn nenya-btn-ghost" type="button">Import</button>
+      <input id="optionsFloatingImportFileInput" type="file" accept="application/json" class="hidden" />
+    </div>
   </div>
 
   <script src="./options.js" type="module"></script>

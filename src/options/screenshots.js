@@ -40,11 +40,11 @@ function normalizeSettings(value) {
  * @returns {Promise<ScreenshotSettings>}
  */
 async function loadSettings() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return { ...DEFAULT_SCREENSHOT_SETTINGS };
   }
 
-  const result = await chrome.storage.sync.get(SCREENSHOT_SETTINGS_KEY);
+  const result = await chrome.storage.local.get(SCREENSHOT_SETTINGS_KEY);
   const stored = result?.[SCREENSHOT_SETTINGS_KEY];
   return normalizeSettings(stored);
 }
@@ -54,11 +54,11 @@ async function loadSettings() {
  * @returns {Promise<void>}
  */
 async function saveSettings() {
-  if (!chrome?.storage?.sync) {
+  if (!chrome?.storage?.local) {
     return;
   }
 
-  await chrome.storage.sync.set({
+  await chrome.storage.local.set({
     [SCREENSHOT_SETTINGS_KEY]: settings
   });
 }
@@ -97,7 +97,7 @@ function subscribeToStorageChanges() {
   }
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== 'sync') {
+    if (areaName !== 'local') {
       return;
     }
 

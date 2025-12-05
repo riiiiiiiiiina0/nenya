@@ -57,7 +57,7 @@ function normalizeScreenshotSettings(settings) {
  */
 async function getScreenshotSettings() {
   try {
-    const result = await chrome.storage.sync.get(SCREENSHOT_SETTINGS_KEY);
+    const result = await chrome.storage.local.get(SCREENSHOT_SETTINGS_KEY);
     return normalizeScreenshotSettings(result[SCREENSHOT_SETTINGS_KEY]);
   } catch (error) {
     console.warn('[clipboard] Failed to get screenshot settings:', error);

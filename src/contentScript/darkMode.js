@@ -36,7 +36,7 @@
    * @returns {Promise<Array<DarkModeRule>>}
    */
   const getdarkModeRules = async () => {
-    const { darkModeRules } = await chrome.storage.sync.get('darkModeRules');
+    const { darkModeRules } = await chrome.storage.local.get('darkModeRules');
     return darkModeRules || [];
   };
 

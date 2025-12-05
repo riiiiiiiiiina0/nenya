@@ -1,7 +1,7 @@
 /* global chrome */
 
 const getdarkModeRules = async () => {
-  const { darkModeRules } = await chrome.storage.sync.get('darkModeRules');
+  const { darkModeRules } = await chrome.storage.local.get('darkModeRules');
   return darkModeRules || [];
 };
 
@@ -9,7 +9,7 @@ const savedarkModeRules = async (rules, skipSync = false) => {
   if (!skipSync) {
     syncing = true;
   }
-  await chrome.storage.sync.set({ darkModeRules: rules });
+  await chrome.storage.local.set({ darkModeRules: rules });
   if (!skipSync) {
     syncing = false;
   }
@@ -160,7 +160,7 @@ const renderRules = async () => {
 
     // Listen for storage changes to update UI when options are restored from backup
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') {
+      if (area !== 'local') {
         return;
       }
       if (syncing) {
