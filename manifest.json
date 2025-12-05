@@ -43,7 +43,8 @@
   },
   "externally_connectable": {
     "matches": [
-      "https://ohauth.vercel.app/*"
+      "http://localhost:3000/*",
+      "https://oh-auth.vercel.app/*"
     ]
   },
   "host_permissions": [

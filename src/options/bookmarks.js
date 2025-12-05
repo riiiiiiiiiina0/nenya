@@ -5,10 +5,7 @@ import { clearAllProjectData } from '../background/projects.js';
 import { updateNotificationSectionsVisibility } from './notifications.js';
 import { setBackupConnectionState, refreshBackupStatus } from './backup.js';
 import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
-import {
-  getValidTokens,
-  areTokensExpired,
-} from '../shared/tokenRefresh.js';
+import { getValidTokens, areTokensExpired } from '../shared/tokenRefresh.js';
 
 /**
  * @typedef {Object} ToastifyOptions
@@ -1264,7 +1261,7 @@ function handleConnectClick() {
   };
 
   const oauthUrl =
-    'https://ohauth.vercel.app/oauth/' +
+    'https://oh-auth.vercel.app/auth/' +
     currentProvider.oauthProviderId +
     '?state=' +
     encodeURIComponent(JSON.stringify(statePayload));
@@ -1437,7 +1434,9 @@ async function init() {
 
   // Attempt to refresh tokens if they are expired
   // This runs in the background and will update the UI if successful
-  const storedTokens = currentProvider ? tokenCache[currentProvider.id] : undefined;
+  const storedTokens = currentProvider
+    ? tokenCache[currentProvider.id]
+    : undefined;
   if (storedTokens && areTokensExpired(storedTokens)) {
     void attemptTokenRefresh();
   }
