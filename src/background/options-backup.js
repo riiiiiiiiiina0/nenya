@@ -13,7 +13,8 @@ import {
 import { OPTIONS_BACKUP_MESSAGES } from '../shared/optionsBackupMessages.js';
 
 const PROVIDER_ID = 'raindrop';
-const BACKUP_COLLECTION_TITLE = 'Options backup';
+const BACKUP_COLLECTION_TITLE = 'nenya / options backup';
+const LEGACY_BACKUP_COLLECTION_TITLE = 'Options backup';
 const BACKUP_ITEM_PREFIX = 'options-backup-chunk-';
 const BACKUP_TAGS = ['nenya', 'options-backup'];
 const BACKUP_CHUNK_SIZE = 10000;
@@ -350,29 +351,62 @@ function chunkString(input, size) {
 }
 
 /**
+ * Extract a numeric Raindrop collection id.
+ * @param {any} collection
+ * @returns {number | null}
+ */
+function getCollectionId(collection) {
+  const rawId = collection?._id ?? collection?.id;
+  const id = typeof rawId === 'string' ? Number(rawId) : rawId;
+  return Number.isFinite(id) ? Number(id) : null;
+}
+
+/**
+ * Fetch all Raindrop collections.
+ * @param {StoredProviderTokens} tokens
+ * @returns {Promise<any[]>}
+ */
+async function fetchBackupCollections(tokens) {
+  const collectionsResponse = await raindropRequest('/collections', tokens);
+  return Array.isArray(collectionsResponse?.items) ? collectionsResponse.items : [];
+}
+
+/**
+ * Find existing backup collection ids (current and legacy).
+ * @param {StoredProviderTokens} tokens
+ * @returns {Promise<{ primaryId: number | null, legacyId: number | null }>}
+ */
+async function findBackupCollectionIds(tokens) {
+  const items = await fetchBackupCollections(tokens);
+  const primary = items.find((item) => item.title === BACKUP_COLLECTION_TITLE);
+  const legacy = items.find((item) => item.title === LEGACY_BACKUP_COLLECTION_TITLE);
+  return {
+    primaryId: getCollectionId(primary),
+    legacyId: getCollectionId(legacy),
+  };
+}
+
+/**
  * Ensure the backup collection exists and return its ID.
  * @param {StoredProviderTokens} tokens
  * @returns {Promise<number>}
  */
 async function ensureBackupCollection(tokens) {
-  const collectionsResponse = await raindropRequest('/collections', tokens);
-  const items = Array.isArray(collectionsResponse?.items)
-    ? collectionsResponse.items
-    : [];
-  let collection = items.find((item) => item.title === BACKUP_COLLECTION_TITLE);
-  if (!collection) {
-    const createResponse = await raindropRequest('/collection', tokens, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: BACKUP_COLLECTION_TITLE }),
-    });
-    collection = createResponse?.item;
+  const { primaryId } = await findBackupCollectionIds(tokens);
+  if (primaryId) {
+    return primaryId;
   }
-  const collectionId = collection?._id ?? collection?.id;
-  if (!Number.isFinite(collectionId)) {
+
+  const createResponse = await raindropRequest('/collection', tokens, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title: BACKUP_COLLECTION_TITLE }),
+  });
+  const collectionId = getCollectionId(createResponse?.item);
+  if (collectionId === null) {
     throw new Error('Unable to prepare Raindrop collection for backups.');
   }
-  return Number(collectionId);
+  return collectionId;
 }
 
 /**
@@ -559,8 +593,29 @@ export async function runManualRestore() {
   }
 
   try {
-    const collectionId = await ensureBackupCollection(tokens);
-    const { payload, lastModified } = await loadChunks(tokens, collectionId);
+    const { primaryId, legacyId } = await findBackupCollectionIds(tokens);
+    const targetCollectionId = primaryId ?? legacyId;
+
+    if (!targetCollectionId) {
+      const state = await updateState((draft) => {
+        draft.lastError = 'No backup found in Raindrop.';
+        draft.lastErrorAt = Date.now();
+      });
+      return {
+        ok: false,
+        errors: ['No backup found in Raindrop.'],
+        state,
+      };
+    }
+
+    let { payload, lastModified } = await loadChunks(tokens, targetCollectionId);
+
+    if (!payload && primaryId && legacyId && legacyId !== targetCollectionId) {
+      const legacyResult = await loadChunks(tokens, legacyId);
+      payload = legacyResult.payload;
+      lastModified = legacyResult.lastModified;
+    }
+
     if (!payload) {
       const state = await updateState((draft) => {
         draft.lastError = 'No backup found in Raindrop.';
