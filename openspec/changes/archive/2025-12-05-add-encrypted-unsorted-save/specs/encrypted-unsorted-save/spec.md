@@ -2,11 +2,11 @@
 
 ### Requirement: Encrypt & Save entrypoints
 
-The extension SHALL expose a single encrypt-and-save flow for the active tab or a right-click target via the popup pinned shortcut, the `bookmarks-encrypt-save-unsorted` command, and a context menu item covering page and link contexts.
+The extension SHALL expose a single encrypt-and-save flow for the active tab or a right-click target via the popup pinned shortcut, the `bookmarks-save-to-unsorted-encrypted` command, and a context menu item covering page and link contexts.
 
 #### Scenario: Trigger encrypt save from popup shortcut or command
 
-- **GIVEN** the user clicks the pinned "Encrypt & save" shortcut in the popup or presses the `bookmarks-encrypt-save-unsorted` keyboard command,
+- **GIVEN** the user clicks the pinned "Encrypt & save" shortcut in the popup or presses the `bookmarks-save-to-unsorted-encrypted` keyboard command,
 - **THEN** the extension SHALL target only the active tab in the current window,
 - **AND** it SHALL convert split-page URLs to `https://nenya.local/split`, normalize to `http`/`https`, and apply `save-to-raindrop` URL processing before continuing.
 

@@ -128,7 +128,7 @@ chrome.commands.onCommand.addListener((command) => {
     return;
   }
 
-  if (command === 'bookmarks-encrypt-save-unsorted') {
+  if (command === 'bookmarks-save-to-unsorted-encrypted') {
     void (async () => {
       try {
         const tabs = await chrome.tabs.query({
