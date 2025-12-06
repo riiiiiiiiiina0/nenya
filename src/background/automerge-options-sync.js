@@ -1184,6 +1184,8 @@ export async function syncWithRemote(options = {}) {
 // MIGRATION FROM OLD FORMAT
 // ============================================================================
 
+const JSON_BACKUP_COLLECTION_TITLES = ['nenya / options backup', 'Options backup'];
+
 /**
  * Detect if old JSON-based backup exists.
  * @returns {Promise<boolean>}
@@ -1201,14 +1203,17 @@ async function detectOldBackupFormat() {
     const collections = Array.isArray(collectionsResponse?.items)
       ? collectionsResponse.items
       : [];
-    const oldCollection = collections.find((c) => c.title === 'Options backup');
+    const oldCollection = collections.find((c) =>
+      JSON_BACKUP_COLLECTION_TITLES.includes(c.title),
+    );
+    const oldCollectionId = Number(oldCollection?._id ?? oldCollection?.id);
 
-    if (!oldCollection) {
+    if (!oldCollection || !Number.isFinite(oldCollectionId)) {
       return false;
     }
 
     // Check if collection has items
-    const items = await fetchRaindropItems(tokens, oldCollection._id, 0);
+    const items = await fetchRaindropItems(tokens, oldCollectionId, 0);
     return items.length > 0;
   } catch (error) {
     console.warn('[automerge] Failed to detect old backup format:', error);
